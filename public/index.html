@@ -156,8 +156,9 @@
             <button id="saveWatchlistButton" type="button" class="secondary">Save To Profile</button>
             <div id="watchlistStatus" class="muted"></div>
           </div>
-          <div class="table-wrap">
-            <table>
+          <div id="watchlistSummary" class="watchlist-summary-grid"></div>
+          <div class="table-wrap terminal-table-wrap">
+            <table class="terminal-table watchlist-table">
               <thead>
                 <tr>
                   <th>Symbol</th>
@@ -258,6 +259,7 @@
             </article>
             <article class="subpanel">
               <div id="intelOwnershipFacts" class="metric-strip"></div>
+              <div id="intelSignalGrid" class="intel-signal-grid"></div>
             </article>
           </div>
           <div class="intel-graph-grid">
@@ -267,8 +269,8 @@
             </article>
             <article class="subpanel">
               <h3>Top Holders</h3>
-              <div class="table-wrap compact">
-                <table>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
                   <thead>
                     <tr>
                       <th>Holder</th>
@@ -310,8 +312,8 @@
           <div class="panel-header compare-header">
             <h3>Competitor Network</h3>
           </div>
-          <div class="table-wrap compact">
-            <table>
+          <div class="table-wrap compact terminal-table-wrap">
+            <table class="terminal-table intel-table">
               <thead>
                 <tr>
                   <th>Symbol</th>

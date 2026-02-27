@@ -650,6 +650,73 @@ svg {
     linear-gradient(90deg, rgba(124, 247, 212, 0.03), transparent 45%);
 }
 
+.terminal-table-wrap {
+  position: relative;
+}
+
+.terminal-table-wrap::before {
+  content: "";
+  position: sticky;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(124, 247, 212, 0.24), rgba(92, 200, 255, 0.1), transparent 84%);
+}
+
+.terminal-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(6, 12, 20, 0.96);
+}
+
+.terminal-table tbody tr {
+  transition: background 140ms ease;
+}
+
+.terminal-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.024);
+}
+
+.watchlist-summary-grid,
+.intel-signal-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.terminal-stat-card {
+  position: relative;
+  display: grid;
+  gap: 0.24rem;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(108, 138, 171, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.016));
+}
+
+.terminal-stat-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 1rem 0.65rem 1rem;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(124, 247, 212, 0.22), transparent);
+}
+
+.terminal-stat-card span,
+.terminal-stat-card small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.terminal-stat-card strong {
+  font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-size: 1.12rem;
+}
+
 .compact {
   max-height: 340px;
 }
@@ -777,6 +844,202 @@ svg {
 .list-item strong {
   display: block;
   margin-bottom: 0.16rem;
+}
+
+.terminal-list-item,
+.intel-list-item,
+.intel-note-item,
+.intel-empty {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.034), rgba(255, 255, 255, 0.016)),
+    linear-gradient(90deg, rgba(124, 247, 212, 0.02), transparent 40%);
+}
+
+.terminal-list-main,
+.intel-list-main,
+.watchlist-symbol-cell,
+.holder-cell,
+.terminal-symbol-line,
+.terminal-price-stack {
+  display: flex;
+  gap: 0.7rem;
+}
+
+.terminal-list-main,
+.intel-list-main,
+.watchlist-symbol-cell,
+.holder-cell {
+  align-items: center;
+}
+
+.terminal-symbol-line,
+.terminal-price-stack {
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.terminal-symbol-line {
+  flex-direction: row;
+  align-items: center;
+}
+
+.terminal-chip,
+.intel-tag,
+.intel-domain,
+.table-rank,
+.intel-note-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0.12rem 0.48rem;
+  border-radius: 999px;
+  border: 1px solid rgba(108, 138, 171, 0.2);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.terminal-chip {
+  color: #d7e5f5;
+}
+
+.terminal-chip.positive {
+  color: var(--good);
+  border-color: rgba(118, 255, 178, 0.25);
+}
+
+.terminal-chip.negative {
+  color: var(--bad);
+  border-color: rgba(255, 108, 134, 0.25);
+}
+
+.intel-tag,
+.intel-domain,
+.intel-note-index,
+.table-rank {
+  color: var(--accent);
+}
+
+.intel-domain {
+  color: var(--accent-2);
+  border-color: rgba(92, 200, 255, 0.2);
+}
+
+.table-rank {
+  min-width: 34px;
+}
+
+.watchlist-row td,
+.intel-row td {
+  padding-top: 0.92rem;
+  padding-bottom: 0.92rem;
+}
+
+.watchlist-row.positive {
+  background: linear-gradient(90deg, rgba(118, 255, 178, 0.035), transparent 18%);
+}
+
+.watchlist-row.negative {
+  background: linear-gradient(90deg, rgba(255, 108, 134, 0.035), transparent 18%);
+}
+
+.intel-row.positive {
+  background: linear-gradient(90deg, rgba(118, 255, 178, 0.03), transparent 18%);
+}
+
+.intel-row.negative {
+  background: linear-gradient(90deg, rgba(255, 108, 134, 0.03), transparent 18%);
+}
+
+.watchlist-symbol-cell {
+  align-items: flex-start;
+}
+
+.watchlist-table td strong,
+.intel-table td strong,
+.terminal-list-item strong,
+.intel-list-item strong {
+  font-size: 0.96rem;
+}
+
+.terminal-price-stack {
+  align-items: flex-start;
+}
+
+.holder-cell {
+  align-items: center;
+}
+
+.intel-list-item {
+  align-items: flex-start;
+}
+
+.intel-list-main {
+  align-items: flex-start;
+}
+
+.intel-note-item {
+  justify-content: flex-start;
+}
+
+.intel-sequence {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.chain-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.chain-step {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.58rem;
+  border-radius: 999px;
+  border: 1px solid rgba(108, 138, 171, 0.18);
+  background: rgba(255, 255, 255, 0.028);
+  color: #d9e4f2;
+  font-size: 0.8rem;
+}
+
+.chain-step::after {
+  content: ">";
+  margin-left: 0.5rem;
+  color: var(--muted);
+}
+
+.chain-step:last-child::after {
+  content: "";
+  margin: 0;
+}
+
+.intel-empty {
+  justify-content: flex-start;
+}
+
+.intel-supply .intel-tag,
+.intel-customer .intel-tag {
+  color: var(--warn);
+}
+
+.intel-corporate .intel-tag,
+.intel-ownership .intel-tag {
+  color: var(--accent-2);
+}
+
+.intel-people .intel-tag,
+.intel-competition .intel-tag {
+  color: var(--accent-3);
+}
+
+.watchlist-table .meta,
+.intel-table .muted {
+  font-size: 0.78rem;
 }
 
 .intel-sequence {
@@ -996,6 +1259,8 @@ svg {
 
   .dashboard,
   .telemetry-strip,
+  .watchlist-summary-grid,
+  .intel-signal-grid,
   .detail-grid,
   .metric-strip,
   .facts-grid,

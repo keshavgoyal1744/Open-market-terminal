@@ -531,19 +531,9 @@ async function loadWatchlist(symbols) {
       state.latestQuotes.set(quote.symbol, quote);
     });
 
+    document.querySelector("#watchlistSummary").innerHTML = renderWatchlistSummary(payload.quotes);
     document.querySelector("#watchlistBody").innerHTML = payload.quotes
-      .map(
-        (quote) => `
-          <tr>
-            <td><strong>${escapeHtml(quote.symbol)}</strong><div class="muted">${escapeHtml(quote.shortName ?? "")}</div></td>
-            <td>${formatMoney(quote.price)}</td>
-            <td class="${tone(quote.changePercent)}">${formatPercent(quote.changePercent)}</td>
-            <td>${formatMoney(quote.bid)} / ${formatMoney(quote.ask)}</td>
-            <td>${formatCompact(quote.volume)}</td>
-            <td>${formatCompact(quote.marketCap)}</td>
-          </tr>
-        `,
-      )
+      .map((quote, index) => renderWatchlistRow(quote, index))
       .join("");
 
     document.querySelector("#watchlistStatus").textContent = `Tracking ${payload.quotes.length} symbols.`;
@@ -1393,7 +1383,7 @@ async function loadIntelligence(symbol) {
     `;
 
     document.querySelector("#intelCoverageNotes").innerHTML = payload.coverage.notes
-      .map((note) => `<div class="list-item"><div class="meta">${escapeHtml(note)}</div></div>`)
+      .map((note, index) => renderIntelNote(note, index))
       .join("");
 
     document.querySelector("#intelOwnershipFacts").innerHTML = [
@@ -1407,11 +1397,20 @@ async function loadIntelligence(symbol) {
       .filter((holder, index, all) => holder.holder && all.findIndex((entry) => entry.holder === holder.holder) === index)
       .slice(0, 12);
 
+    document.querySelector("#intelSignalGrid").innerHTML = renderIntelSignals(payload, holders);
     document.querySelector("#intelHoldersBody").innerHTML = holders
       .map(
-        (holder) => `
-          <tr>
-            <td>${escapeHtml(holder.holder ?? "n/a")}</td>
+        (holder, index) => `
+          <tr class="intel-row">
+            <td>
+              <div class="holder-cell">
+                <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
+                <div>
+                  <strong>${escapeHtml(holder.holder ?? "n/a")}</strong>
+                  <div class="muted">ownership filing</div>
+                </div>
+              </div>
+            </td>
             <td>${formatPercentScaled(holder.pctHeld)}</td>
             <td>${formatCompact(holder.shares)}</td>
           </tr>
@@ -1419,26 +1418,26 @@ async function loadIntelligence(symbol) {
       )
       .join("");
 
-    document.querySelector("#intelSupplyList").innerHTML = [
+    document.querySelector("#intelSupplyList").innerHTML = renderIntelList(
       ...payload.supplyChain.suppliers.map((item) => renderIntelListItem(item.relation, item.target, item.label)),
       ...payload.supplyChain.ecosystem.map((item) => renderIntelListItem(item.relation, item.target, item.label)),
-    ].join("");
+    );
 
-    document.querySelector("#intelCustomerList").innerHTML = [
+    document.querySelector("#intelCustomerList").innerHTML = renderIntelList(
       ...(payload.customerConcentration ?? []).map((item) =>
         renderIntelListItem(item.level, item.name, item.commentary),
       ),
       ...(payload.supplyChain.customers ?? []).map((item) =>
         renderIntelListItem(item.relation, item.target, item.label),
       ),
-    ].join("");
+    );
 
-    document.querySelector("#intelCorporateList").innerHTML = [
+    document.querySelector("#intelCorporateList").innerHTML = renderIntelList(
       ...(payload.corporate.tree ?? []).map((item) => renderIntelListItem(item.type, item.name, item.description)),
       ...(payload.corporate.relations ?? []).map((item) =>
         renderIntelListItem(item.relation, item.target, item.label),
       ),
-    ].join("");
+    );
 
     document.querySelector("#intelExecList").innerHTML = (payload.executives ?? [])
       .map((item) =>
@@ -1448,24 +1447,25 @@ async function loadIntelligence(symbol) {
           item.background?.length ? item.background.join(" -> ") : item.compensation ? `Comp ${formatMoney(item.compensation)}` : "Public-company officer listing",
         ),
       )
-      .join("");
+      .join("") || renderIntelEmpty("No executive network data mapped.");
 
     document.querySelector("#intelImpactList").innerHTML = (payload.eventChains ?? [])
-      .map(
-        (chain) => `
-          <div class="intel-sequence">
-            <strong>${escapeHtml(chain.title)}</strong>
-            <div class="meta">${chain.steps.map(escapeHtml).join(" -> ")}</div>
-          </div>
-        `,
-      )
-      .join("");
+      .map((chain, index) => renderImpactChain(chain, index))
+      .join("") || renderIntelEmpty("No impact chains mapped.");
 
     document.querySelector("#intelCompetitorBody").innerHTML = (payload.competitors ?? [])
       .map(
-        (item) => `
-          <tr>
-            <td>${escapeHtml(item.symbol)}</td>
+        (item, index) => `
+          <tr class="intel-row ${tone(item.changePercent)}">
+            <td>
+              <div class="holder-cell">
+                <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
+                <div>
+                  <strong>${escapeHtml(item.symbol)}</strong>
+                  <div class="muted">${escapeHtml(item.companyName ?? "n/a")}</div>
+                </div>
+              </div>
+            </td>
             <td>${escapeHtml(item.companyName ?? "n/a")}</td>
             <td>${formatMoney(item.price)}</td>
             <td class="${tone(item.changePercent)}">${formatPercent(item.changePercent)}</td>
@@ -1596,26 +1596,154 @@ function renderCryptoCard(quote) {
 
 function renderQuoteListItem(quote) {
   return `
-    <div class="list-item">
-      <div>
-        <strong>${escapeHtml(quote.symbol)}</strong>
+    <div class="list-item terminal-list-item">
+      <div class="terminal-list-main">
+        <div class="terminal-symbol-line">
+          <strong>${escapeHtml(quote.symbol)}</strong>
+          <span class="terminal-chip ${tone(quote.changePercent)}">${formatPercent(quote.changePercent)}</span>
+        </div>
         <div class="meta">${escapeHtml(quote.shortName ?? "")}</div>
       </div>
-      <div class="${tone(quote.changePercent)}">${formatPercent(quote.changePercent)}</div>
+      <div class="terminal-price-stack">
+        <strong>${formatMoney(quote.price)}</strong>
+        <div class="meta">${escapeHtml(quote.exchange ?? "")}</div>
+      </div>
     </div>
   `;
 }
 
 function renderIntelListItem(label, title, description) {
+  const domain = intelDomain(label, description);
   return `
-    <div class="list-item">
-      <div>
-        <strong>${escapeHtml(title ?? "n/a")}</strong>
-        <div class="meta">${escapeHtml(label ?? "")}</div>
+    <div class="list-item intel-list-item intel-${escapeHtml(domain)}">
+      <div class="intel-list-main">
+        <span class="intel-tag">${escapeHtml(compactLabel(label ?? "intel"))}</span>
+        <div>
+          <strong>${escapeHtml(title ?? "n/a")}</strong>
+          <div class="meta">${escapeHtml(description ?? "")}</div>
+        </div>
       </div>
-      <div class="muted">${escapeHtml(description ?? "")}</div>
+      <div class="intel-domain">${escapeHtml(domain.toUpperCase())}</div>
     </div>
   `;
+}
+
+function renderWatchlistSummary(quotes) {
+  const advancers = quotes.filter((quote) => Number.isFinite(quote.changePercent) && quote.changePercent >= 0).length;
+  const decliners = quotes.filter((quote) => Number.isFinite(quote.changePercent) && quote.changePercent < 0).length;
+  const averageMove = average(quotes.map((quote) => quote.changePercent));
+  const aggregateCap = sum(quotes.map((quote) => quote.marketCap));
+  const averageSpreadBps = average(quotes.map((quote) => spreadBps(quote)));
+
+  return [
+    renderTerminalStat("Breadth", `${advancers} up / ${decliners} down`, "tracked movers"),
+    renderTerminalStat("Average Move", formatPercent(averageMove), "watchlist mean"),
+    renderTerminalStat("Spread", formatBasisPoints(averageSpreadBps), "avg quoted width"),
+    renderTerminalStat("Aggregate Cap", formatCompact(aggregateCap), "market footprint"),
+  ].join("");
+}
+
+function renderWatchlistRow(quote, index) {
+  const spread = computeSpread(quote);
+  const spreadWidth = spreadBps(quote);
+  const dayRange = quote.dayHigh != null && quote.dayLow != null ? quote.dayHigh - quote.dayLow : null;
+  return `
+    <tr class="watchlist-row ${tone(quote.changePercent)}">
+      <td>
+        <div class="watchlist-symbol-cell">
+          <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
+          <div>
+            <div class="terminal-symbol-line">
+              <strong>${escapeHtml(quote.symbol)}</strong>
+              <span class="terminal-chip">${escapeHtml(quote.exchange ?? quote.type ?? "market")}</span>
+            </div>
+            <div class="meta">${escapeHtml(quote.shortName ?? "")}</div>
+          </div>
+        </div>
+      </td>
+      <td>
+        <div class="terminal-price-stack">
+          <strong>${formatMoney(quote.price)}</strong>
+          <div class="meta">range ${formatMoney(dayRange)}</div>
+        </div>
+      </td>
+      <td>
+        <div class="terminal-price-stack">
+          <strong class="${tone(quote.changePercent)}">${formatPercent(quote.changePercent)}</strong>
+          <div class="meta">${formatSignedMoney(quote.change)}</div>
+        </div>
+      </td>
+      <td>
+        <div class="terminal-price-stack">
+          <strong>${formatMoney(quote.bid)} / ${formatMoney(quote.ask)}</strong>
+          <div class="meta">width ${formatMoney(spread)} · ${formatBasisPoints(spreadWidth)}</div>
+        </div>
+      </td>
+      <td>
+        <div class="terminal-price-stack">
+          <strong>${formatCompact(quote.volume)}</strong>
+          <div class="meta">avg ${formatCompact(quote.averageVolume)}</div>
+        </div>
+      </td>
+      <td>
+        <div class="terminal-price-stack">
+          <strong>${formatCompact(quote.marketCap)}</strong>
+          <div class="meta">${escapeHtml(quote.currency ?? "USD")} settlement</div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderIntelSignals(payload, holders) {
+  return [
+    renderTerminalStat("Coverage", payload.coverage.curated ? "Curated" : "Fallback", "source mode"),
+    renderTerminalStat("Peers", String(payload.competitors?.length ?? 0), "tracked rivals"),
+    renderTerminalStat("Impact Chains", String(payload.eventChains?.length ?? 0), "mapped catalysts"),
+    renderTerminalStat("Holders", String(holders.length), "unique top owners"),
+  ].join("");
+}
+
+function renderTerminalStat(label, value, meta) {
+  return `
+    <article class="terminal-stat-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <small>${escapeHtml(meta)}</small>
+    </article>
+  `;
+}
+
+function renderIntelNote(note, index) {
+  return `
+    <div class="list-item intel-note-item">
+      <div class="intel-note-index">${String(index + 1).padStart(2, "0")}</div>
+      <div class="meta">${escapeHtml(note)}</div>
+    </div>
+  `;
+}
+
+function renderImpactChain(chain, index) {
+  return `
+    <div class="intel-sequence">
+      <div class="terminal-symbol-line">
+        <strong>${escapeHtml(chain.title)}</strong>
+        <span class="terminal-chip">${String(index + 1).padStart(2, "0")}</span>
+      </div>
+      <div class="chain-steps">
+        ${chain.steps.map((step) => `<span class="chain-step">${escapeHtml(step)}</span>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderIntelList(...items) {
+  const rows = items.filter(Boolean);
+  return rows.join("") || renderIntelEmpty("No mapped relationships in this pane.");
+}
+
+function renderIntelEmpty(message) {
+  return `<div class="list-item intel-empty"><div class="meta">${escapeHtml(message)}</div></div>`;
 }
 
 function metric(label, value, toneClass = "") {
@@ -1805,6 +1933,14 @@ function formatMoney(value) {
   return Number.isFinite(value) ? currencyFormatter.format(value) : "n/a";
 }
 
+function formatSignedMoney(value) {
+  if (!Number.isFinite(value)) {
+    return "n/a";
+  }
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${formatMoney(value)}`;
+}
+
 function formatPercent(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)}%` : "n/a";
 }
@@ -1820,6 +1956,10 @@ function formatCompact(value) {
   return Number.isFinite(value)
     ? new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(value)
     : "n/a";
+}
+
+function formatBasisPoints(value) {
+  return Number.isFinite(value) ? `${value.toFixed(1)} bps` : "n/a";
 }
 
 function formatNumber(value, maximumFractionDigits = 2) {
@@ -1845,6 +1985,67 @@ function tone(value) {
 
 function trimPreview(value) {
   return String(value ?? "").trim().slice(0, 120) || "No content yet.";
+}
+
+function computeSpread(quote) {
+  if (!Number.isFinite(quote?.bid) || !Number.isFinite(quote?.ask)) {
+    return null;
+  }
+  return quote.ask - quote.bid;
+}
+
+function spreadBps(quote) {
+  const spread = computeSpread(quote);
+  if (!Number.isFinite(spread) || !Number.isFinite(quote?.price) || quote.price === 0) {
+    return null;
+  }
+  return (spread / quote.price) * 10000;
+}
+
+function average(values) {
+  const valid = values.filter(Number.isFinite);
+  if (!valid.length) {
+    return null;
+  }
+  return valid.reduce((total, value) => total + value, 0) / valid.length;
+}
+
+function sum(values) {
+  const valid = values.filter(Number.isFinite);
+  if (!valid.length) {
+    return null;
+  }
+  return valid.reduce((total, value) => total + value, 0);
+}
+
+function compactLabel(value) {
+  return String(value ?? "")
+    .replaceAll(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((entry) => entry.slice(0, 4))
+    .join(" ");
+}
+
+function intelDomain(label, description = "") {
+  const haystack = `${label ?? ""} ${description ?? ""}`.toLowerCase();
+  if (haystack.includes("supplier") || haystack.includes("customer") || haystack.includes("ecosystem")) {
+    return "supply";
+  }
+  if (haystack.includes("acquisition") || haystack.includes("subsidiary") || haystack.includes("parent") || haystack.includes("investment")) {
+    return "corporate";
+  }
+  if (haystack.includes("executive") || haystack.includes("comp ") || haystack.includes("officer")) {
+    return "people";
+  }
+  if (haystack.includes("competitor") || haystack.includes("peer")) {
+    return "competition";
+  }
+  if (haystack.includes("ownership") || haystack.includes("held")) {
+    return "ownership";
+  }
+  return "signal";
 }
 
 function loadStore(key, fallback) {
