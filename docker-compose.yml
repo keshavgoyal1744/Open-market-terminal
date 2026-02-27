@@ -1,0 +1,11 @@
+services:
+  open-market-terminal:
+    build: .
+    container_name: open-market-terminal
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

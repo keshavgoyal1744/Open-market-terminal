@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Open Market Terminal</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="topbar-brand">
+          <p class="eyebrow">Open Market Terminal</p>
+          <h1>Global market operations console</h1>
+        </div>
+        <div class="topbar-strip">
+          <div class="topbar-chip">
+            <span>Mode</span>
+            <strong id="hudMode">Guest</strong>
+          </div>
+          <div class="topbar-chip">
+            <span>Feed</span>
+            <strong id="hudFeedStatus">Syncing</strong>
+          </div>
+          <div class="topbar-chip">
+            <span>UTC</span>
+            <strong id="hudClock">--:--:--</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="section-label">Tactical Overview</p>
+          <h2>Public market data, relationship intelligence, and automation in one dark-screen workflow.</h2>
+          <p>
+            Built for traders and researchers who need a dense console instead of a generic dashboard. The stack stays
+            self-hosted, API-light, and focused on usable public data.
+          </p>
+          <div class="hero-tags">
+            <span>Cross-Asset Pulse</span>
+            <span>Relationship Graphs</span>
+            <span>Server Alerts</span>
+            <span>Digest Automation</span>
+          </div>
+          <p class="warning">
+            Licensed tick-by-tick equities, premium research, and proprietary institutional graph depth are still
+            outside the scope of a free public-data build.
+          </p>
+        </div>
+        <div class="hero-visual">
+          <div class="radar-stage">
+            <div class="radar-ring ring-a"></div>
+            <div class="radar-ring ring-b"></div>
+            <div class="radar-ring ring-c"></div>
+            <div class="radar-sweep"></div>
+            <div class="radar-grid"></div>
+            <div class="signal-node node-na">NYC</div>
+            <div class="signal-node node-eu">LDN</div>
+            <div class="signal-node node-as">TYO</div>
+            <div class="signal-node node-me">DXB</div>
+            <div class="signal-node node-hq">OMT</div>
+          </div>
+          <div class="signal-log">
+            <div class="signal-row"><span>NETWORK</span><strong>129+ public regions mapped</strong></div>
+            <div class="signal-row"><span>INTEL</span><strong id="hudIntelSymbol">AAPL relationship focus</strong></div>
+            <div class="signal-row"><span>ROUTING</span><strong>Webhook and digest operations active</strong></div>
+          </div>
+        </div>
+        <aside class="auth-card control-card">
+          <div id="authSummary" class="auth-summary"></div>
+          <div class="auth-forms">
+            <form id="registerForm" class="auth-form">
+              <h2>Create Account</h2>
+              <input id="registerName" type="text" placeholder="Name" />
+              <input id="registerEmail" type="email" placeholder="Email" />
+              <input id="registerPassword" type="password" placeholder="Password (8+ chars)" />
+              <button type="submit">Register</button>
+            </form>
+            <form id="loginForm" class="auth-form">
+              <h2>Sign In</h2>
+              <input id="loginEmail" type="email" placeholder="Email" />
+              <input id="loginPassword" type="password" placeholder="Password" />
+              <button type="submit">Log In</button>
+            </form>
+          </div>
+          <div class="auth-actions">
+            <button id="logoutButton" type="button" class="secondary" hidden>Log Out</button>
+            <button id="syncProfileButton" type="button">Save Profile</button>
+          </div>
+        </aside>
+      </section>
+
+      <section class="telemetry-strip">
+        <article class="telemetry-card">
+          <span>Tracked Symbols</span>
+          <strong id="hudTrackedCount">0</strong>
+          <small>watchlist universe</small>
+        </article>
+        <article class="telemetry-card">
+          <span>Pulse Cards</span>
+          <strong id="hudPulseCount">0</strong>
+          <small>cross-asset board</small>
+        </article>
+        <article class="telemetry-card">
+          <span>Automations</span>
+          <strong id="hudAutomationCount">0</strong>
+          <small>alerts + digests</small>
+        </article>
+        <article class="telemetry-card">
+          <span>Workspaces</span>
+          <strong id="hudWorkspaceCount">0</strong>
+          <small>saved desk states</small>
+        </article>
+        <article class="telemetry-card">
+          <span>Last Sync</span>
+          <strong id="hudLastSync">Pending</strong>
+          <small>market telemetry</small>
+        </article>
+      </section>
+
+      <main class="dashboard">
+        <section class="panel panel-wide">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Market Pulse</p>
+              <h2>Cross-asset monitor</h2>
+            </div>
+            <button id="refreshPulseButton" type="button" class="secondary">Refresh</button>
+          </div>
+          <div id="marketPulseBoard" class="pulse-board"></div>
+          <div class="two-column">
+            <div class="subpanel">
+              <h3>Leaders</h3>
+              <div id="leadersList" class="list-stack"></div>
+            </div>
+            <div class="subpanel">
+              <h3>Laggards</h3>
+              <div id="laggardsList" class="list-stack"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Watchlist</p>
+              <h2>Quotes, events, and profile sync</h2>
+            </div>
+            <form id="watchlistForm" class="inline-form">
+              <input id="watchlistInput" type="text" />
+              <button type="submit">Refresh</button>
+            </form>
+          </div>
+          <div class="action-row">
+            <button id="saveWatchlistButton" type="button" class="secondary">Save To Profile</button>
+            <div id="watchlistStatus" class="muted"></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Last</th>
+                  <th>Change</th>
+                  <th>Bid / Ask</th>
+                  <th>Volume</th>
+                  <th>Market Cap</th>
+                </tr>
+              </thead>
+              <tbody id="watchlistBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Security Workbench</p>
+              <h2>Price history, filings, fundamentals, and options</h2>
+            </div>
+            <form id="detailForm" class="inline-form">
+              <input id="detailSymbol" type="text" />
+              <select id="historyRange">
+                <option value="1mo">1 month</option>
+                <option value="3mo">3 months</option>
+                <option value="6mo">6 months</option>
+                <option value="1y">1 year</option>
+              </select>
+              <button type="submit">Load</button>
+            </form>
+          </div>
+          <div class="detail-grid">
+            <article class="subpanel">
+              <div id="detailMetrics" class="metric-strip"></div>
+              <div id="priceChart" class="chart-card"></div>
+            </article>
+            <article class="subpanel">
+              <div id="companyOverview" class="overview"></div>
+              <div id="companyFacts" class="facts-grid"></div>
+            </article>
+            <article class="subpanel">
+              <h3>Recent SEC Filings</h3>
+              <div id="filingsList" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <h3>Options Chain</h3>
+              <div class="options-grid">
+                <div>
+                  <h4>Calls</h4>
+                  <div class="table-wrap compact">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Strike</th>
+                          <th>Last</th>
+                          <th>Bid / Ask</th>
+                          <th>IV</th>
+                        </tr>
+                      </thead>
+                      <tbody id="callsBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div>
+                  <h4>Puts</h4>
+                  <div class="table-wrap compact">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Strike</th>
+                          <th>Last</th>
+                          <th>Bid / Ask</th>
+                          <th>IV</th>
+                        </tr>
+                      </thead>
+                      <tbody id="putsBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel panel-wide intelligence-panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Relationship Console</p>
+              <h2>Supply chain, ownership, corporate graph, geography, and impact chains</h2>
+            </div>
+            <div id="intelCommandBar" class="command-bar"></div>
+          </div>
+          <div class="intel-top-grid">
+            <article class="subpanel">
+              <div id="intelHeadline" class="intel-headline"></div>
+              <div id="intelCoverageNotes" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <div id="intelOwnershipFacts" class="metric-strip"></div>
+            </article>
+          </div>
+          <div class="intel-graph-grid">
+            <article class="subpanel">
+              <h3>Graph View</h3>
+              <div id="intelGraph" class="chart-card intel-graph-card"></div>
+            </article>
+            <article class="subpanel">
+              <h3>Top Holders</h3>
+              <div class="table-wrap compact">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Holder</th>
+                      <th>% Held</th>
+                      <th>Shares</th>
+                    </tr>
+                  </thead>
+                  <tbody id="intelHoldersBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+          <div class="intel-grid">
+            <article class="subpanel">
+              <h3>Supply Chain</h3>
+              <div id="intelSupplyList" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <h3>Customer Concentration</h3>
+              <div id="intelCustomerList" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <h3>Corporate Tree & M&A</h3>
+              <div id="intelCorporateList" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <h3>Executive Network</h3>
+              <div id="intelExecList" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <h3>Geographic Exposure</h3>
+              <div id="intelGeoChart" class="chart-card small"></div>
+            </article>
+            <article class="subpanel">
+              <h3>Impact Chains</h3>
+              <div id="intelImpactList" class="list-stack"></div>
+            </article>
+          </div>
+          <div class="panel-header compare-header">
+            <h3>Competitor Network</h3>
+          </div>
+          <div class="table-wrap compact">
+            <table>
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Company</th>
+                  <th>Last</th>
+                  <th>% Change</th>
+                </tr>
+              </thead>
+              <tbody id="intelCompetitorBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Workspace Vault</p>
+              <h2>Saved layouts</h2>
+            </div>
+          </div>
+          <div id="workspaceGuard" class="guard-text"></div>
+          <form id="workspaceForm" class="stacked-form">
+            <input id="workspaceName" type="text" placeholder="Workspace name" />
+            <label class="toggle">
+              <input id="workspaceDefault" type="checkbox" />
+              <span>Set as default</span>
+            </label>
+            <button type="submit">Save Snapshot</button>
+            <button id="workspaceNewButton" type="button" class="secondary">New Snapshot</button>
+          </form>
+          <div id="workspaceSelection" class="muted"></div>
+          <div id="workspacesList" class="list-stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Desk Journal</p>
+              <h2>Notes tied to your workspace</h2>
+            </div>
+          </div>
+          <div id="notesGuard" class="guard-text"></div>
+          <form id="noteForm" class="note-form">
+            <input id="noteTitle" type="text" placeholder="Note title" />
+            <textarea id="noteContent" placeholder="Write research notes, catalysts, or thesis updates."></textarea>
+            <button type="submit">Save Note</button>
+            <button id="noteNewButton" type="button" class="secondary">New Note</button>
+          </form>
+          <div id="notesList" class="list-stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Activity</p>
+              <h2>Server event stream</h2>
+            </div>
+          </div>
+          <div id="activityGuard" class="guard-text"></div>
+          <div id="activityList" class="list-stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Crypto Tape</p>
+              <h2>Live public feed</h2>
+            </div>
+            <form id="cryptoForm" class="inline-form">
+              <input id="cryptoProductsInput" type="text" />
+              <button type="submit">Reconnect</button>
+            </form>
+          </div>
+          <div id="cryptoBoard" class="crypto-board"></div>
+          <div class="panel-header compact-header">
+            <h3>Order Book</h3>
+            <select id="orderBookProduct"></select>
+          </div>
+          <div class="orderbook-grid">
+            <div>
+              <h4>Bids</h4>
+              <div class="table-wrap compact">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Price</th>
+                      <th>Size</th>
+                      <th>Orders</th>
+                    </tr>
+                  </thead>
+                  <tbody id="bidsBody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <h4>Asks</h4>
+              <div class="table-wrap compact">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Price</th>
+                      <th>Size</th>
+                      <th>Orders</th>
+                    </tr>
+                  </thead>
+                  <tbody id="asksBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Rates & Macro</p>
+              <h2>Policy snapshot</h2>
+            </div>
+          </div>
+          <div class="macro-grid">
+            <div class="subpanel">
+              <h3>Treasury Yield Curve</h3>
+              <div id="yieldCurveChart" class="chart-card small"></div>
+            </div>
+            <div class="subpanel">
+              <h3>Macro Snapshot</h3>
+              <div id="macroFacts" class="facts-grid"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Portfolio</p>
+              <h2>Server-syncable positions</h2>
+            </div>
+          </div>
+          <form id="portfolioForm" class="stacked-form">
+            <input id="portfolioSymbol" type="text" placeholder="Symbol" />
+            <input id="portfolioQuantity" type="number" step="any" placeholder="Quantity" />
+            <input id="portfolioCost" type="number" step="any" placeholder="Cost basis" />
+            <button type="submit">Add Position</button>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Qty</th>
+                  <th>Cost</th>
+                  <th>Last</th>
+                  <th>Market Value</th>
+                  <th>P/L</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="portfolioBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Alerts</p>
+              <h2>Server-side trigger monitoring</h2>
+            </div>
+          </div>
+          <div id="alertsGuard" class="guard-text"></div>
+          <form id="alertForm" class="stacked-form">
+            <input id="alertSymbol" type="text" placeholder="Symbol or crypto product" />
+            <select id="alertDirection">
+              <option value="above">Above</option>
+              <option value="below">Below</option>
+            </select>
+            <input id="alertPrice" type="number" step="any" placeholder="Trigger price" />
+            <button type="submit">Create Alert</button>
+          </form>
+          <div id="alertsList" class="list-stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Intel Ops</p>
+              <h2>Webhook, email, and digest automation</h2>
+            </div>
+          </div>
+          <div id="opsGuard" class="guard-text"></div>
+          <article class="subpanel">
+            <h3>Destinations</h3>
+            <form id="destinationForm" class="note-form">
+              <input id="destinationLabel" type="text" placeholder="Destination label" />
+              <div class="two-column">
+                <select id="destinationKind">
+                  <option value="webhook">Webhook</option>
+                  <option value="email">Email</option>
+                </select>
+                <input id="destinationTarget" type="text" placeholder="https://example.com/webhook or analyst@example.com" />
+              </div>
+              <div class="action-row checkbox-row">
+                <label class="toggle"><input id="destinationPurposeAlert" type="checkbox" checked /><span>Use for alerts</span></label>
+                <label class="toggle"><input id="destinationPurposeDigest" type="checkbox" checked /><span>Use for digests</span></label>
+              </div>
+              <button type="submit">Save Destination</button>
+            </form>
+            <div id="destinationsList" class="list-stack"></div>
+          </article>
+          <article class="subpanel">
+            <div class="panel-header compact-header">
+              <h3>Relationship Digests</h3>
+              <button id="digestNewButton" type="button" class="secondary">New Digest</button>
+            </div>
+            <form id="digestForm" class="note-form">
+              <input id="digestName" type="text" placeholder="Digest name" />
+              <textarea id="digestSymbols" placeholder="AAPL,NVDA,TSM"></textarea>
+              <div class="two-column">
+                <select id="digestFrequency">
+                  <option value="hourly">Hourly</option>
+                  <option value="daily" selected>Daily</option>
+                  <option value="weekly">Weekly</option>
+                </select>
+                <label class="toggle"><input id="digestActive" type="checkbox" checked /><span>Digest active</span></label>
+              </div>
+              <select id="digestDestinations" multiple size="4"></select>
+              <button type="submit">Save Digest</button>
+            </form>
+            <div id="digestsList" class="list-stack"></div>
+          </article>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Screening & Compare</p>
+              <h2>Custom universes and peer tables</h2>
+            </div>
+          </div>
+          <form id="screenForm" class="screen-form">
+            <textarea id="screenSymbols"></textarea>
+            <input id="screenMaxPe" type="number" step="any" placeholder="Max P/E" />
+            <input id="screenMinCap" type="number" step="any" placeholder="Min Market Cap" />
+            <input id="screenMinVolume" type="number" step="any" placeholder="Min Volume" />
+            <input id="screenMinChange" type="number" step="any" placeholder="Min % Change" />
+            <button type="submit">Run Screen</button>
+          </form>
+          <div class="table-wrap compact">
+            <table>
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Last</th>
+                  <th>% Change</th>
+                  <th>P/E</th>
+                  <th>Volume</th>
+                  <th>Market Cap</th>
+                </tr>
+              </thead>
+              <tbody id="screenBody"></tbody>
+            </table>
+          </div>
+          <div class="panel-header compare-header">
+            <h3>Compare Symbols</h3>
+            <form id="compareForm" class="inline-form">
+              <input id="compareSymbolsInput" type="text" />
+              <button type="submit">Compare</button>
+            </form>
+          </div>
+          <div class="table-wrap compact">
+            <table>
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Last</th>
+                  <th>% Change</th>
+                  <th>P/E</th>
+                  <th>Fwd P/E</th>
+                  <th>Sector</th>
+                  <th>Rating</th>
+                </tr>
+              </thead>
+              <tbody id="compareBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Watchlist Events</p>
+              <h2>Latest SEC filings across tracked names</h2>
+            </div>
+          </div>
+          <div id="watchlistEvents" class="list-stack"></div>
+        </section>
+
+        <section class="panel panel-wide limitations">
+          <p class="section-label">Reality Check</p>
+          <h2>What this app now covers</h2>
+          <div class="limits-grid">
+            <div>
+              <h3>Added in this version</h3>
+              <p>Accounts, sessions, server alerts, saved workspaces, notes, activity streaming, background jobs, cache warming, Docker, and a curated relationship console for supply-chain and corporate maps.</p>
+            </div>
+            <div>
+              <h3>Still outside scope</h3>
+              <p>Licensed low-latency market data, premium research, broker workflows, and Bloomberg’s proprietary graph depth across every listed company.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="statusToast" class="status-toast" hidden></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

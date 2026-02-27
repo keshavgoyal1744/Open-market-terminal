@@ -1,0 +1,59 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const appRoot = path.resolve(__dirname, "..");
+
+export const config = {
+  appRoot,
+  dataDir: process.env.DATA_DIR
+    ? path.resolve(process.env.DATA_DIR)
+    : path.join(appRoot, "data"),
+  dataFile: process.env.DATA_FILE
+    ? path.resolve(process.env.DATA_FILE)
+    : path.join(process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(appRoot, "data"), "state.json"),
+  port: Number(process.env.PORT ?? 3000),
+  host: process.env.HOST ?? "127.0.0.1",
+  sessionCookieName: process.env.SESSION_COOKIE_NAME ?? "omt_session",
+  sessionTtlMs: Number(process.env.SESSION_TTL_MS ?? 1000 * 60 * 60 * 24 * 30),
+  sessionSecret: process.env.SESSION_SECRET ?? "change-me-in-production",
+  secureCookies: (process.env.SECURE_COOKIES ?? "false").toLowerCase() === "true",
+  quoteTtlMs: Number(process.env.QUOTE_TTL_MS ?? 15000),
+  historyTtlMs: Number(process.env.HISTORY_TTL_MS ?? 300000),
+  companyTtlMs: Number(process.env.COMPANY_TTL_MS ?? 900000),
+  macroTtlMs: Number(process.env.MACRO_TTL_MS ?? 1800000),
+  yieldCurveTtlMs: Number(process.env.YIELD_CURVE_TTL_MS ?? 1800000),
+  cryptoOrderBookTtlMs: Number(process.env.CRYPTO_ORDERBOOK_TTL_MS ?? 5000),
+  digestCheckMs: Number(process.env.DIGEST_CHECK_MS ?? 300000),
+  notificationTimeoutMs: Number(process.env.NOTIFICATION_TIMEOUT_MS ?? 10000),
+  authWindowMs: Number(process.env.AUTH_WINDOW_MS ?? 15 * 60 * 1000),
+  authMaxRequests: Number(process.env.AUTH_MAX_REQUESTS ?? 20),
+  appUrl: process.env.APP_URL ?? `http://${process.env.HOST ?? "127.0.0.1"}:${process.env.PORT ?? 3000}`,
+  emailFrom: process.env.EMAIL_FROM ?? "Open Market Terminal <no-reply@example.com>",
+  smtpHost: process.env.SMTP_HOST ?? "",
+  smtpPort: Number(process.env.SMTP_PORT ?? 465),
+  smtpSecure: (process.env.SMTP_SECURE ?? "true").toLowerCase() === "true",
+  smtpStartTls: (process.env.SMTP_STARTTLS ?? "false").toLowerCase() === "true",
+  smtpUser: process.env.SMTP_USER ?? "",
+  smtpPass: process.env.SMTP_PASS ?? "",
+  sendmailPath: process.env.SENDMAIL_PATH ?? "",
+  defaultWatchlist: ["AAPL", "MSFT", "NVDA", "SPY", "TLT", "GLD", "EURUSD=X", "^GSPC"],
+  defaultCryptoProducts: ["BTC-USD", "ETH-USD", "SOL-USD"],
+  marketPulseSymbols: ["SPY", "QQQ", "DIA", "IWM", "TLT", "GLD", "USO", "EURUSD=X", "^VIX", "^GSPC"],
+};
+
+export function defaultUserPreferences() {
+  return {
+    watchlistSymbols: [...config.defaultWatchlist],
+    detailSymbol: "AAPL",
+    cryptoProducts: [...config.defaultCryptoProducts],
+    screenConfig: {
+      symbols: "AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,JPM,XOM,UNH,AVGO,AMD,QQQ,SPY,TLT,GLD",
+      maxPe: "",
+      minMarketCap: "",
+      minVolume: "",
+      minChangePct: "",
+    },
+    portfolio: [],
+  };
+}
