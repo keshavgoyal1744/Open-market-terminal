@@ -1690,6 +1690,7 @@ button:hover {
 }
 
 .panel-market-pulse,
+.panel-heatmap,
 .panel-market-events,
 .intelligence-panel,
 #section-screening,
@@ -1712,6 +1713,139 @@ button:hover {
 
 .panel-news {
   grid-column: span 7;
+}
+
+.heatmap-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+  gap: 8px;
+  padding: 10px;
+}
+
+.subpanel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.heatmap-canvas-panel,
+.heatmap-detail-panel {
+  min-height: 640px;
+}
+
+.sp500-heatmap {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  grid-auto-rows: 28px;
+  gap: 6px;
+  align-content: start;
+}
+
+.heatmap-tile {
+  position: relative;
+  display: grid;
+  align-content: space-between;
+  gap: 4px;
+  min-height: 100%;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.02);
+  text-align: left;
+  overflow: hidden;
+}
+
+.heatmap-tile::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(40, 168, 107, var(--heat-opacity, 0.16));
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.heatmap-tile.negative::before {
+  background: rgba(200, 62, 62, var(--heat-opacity, 0.16));
+}
+
+.heatmap-tile.active,
+.heatmap-tile:hover,
+.heatmap-tile:focus-visible {
+  border-color: #d0d0d0;
+  z-index: 1;
+}
+
+.heatmap-tile > * {
+  position: relative;
+  z-index: 1;
+}
+
+.heatmap-tile-top,
+.heatmap-catalyst-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.heatmap-sector-label,
+.heatmap-weight {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #d7d7d7;
+}
+
+.heatmap-tile strong {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.heatmap-name,
+.heatmap-price,
+.heatmap-move {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.heatmap-name {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.heatmap-move.positive {
+  color: #e8fff0;
+}
+
+.heatmap-move.negative {
+  color: #ffe8e8;
+}
+
+.heatmap-tile[data-size="1"] .heatmap-name,
+.heatmap-tile[data-size="1"] .heatmap-price,
+.heatmap-tile[data-size="1"] .heatmap-sector-label {
+  display: none;
+}
+
+.heatmap-tile[data-size="1"] {
+  padding: 6px;
+}
+
+.heatmap-tile[data-size="1"] strong {
+  font-size: 10px;
+}
+
+.heatmap-detail-panel .terminal-table a {
+  color: #d7e6ff;
+  text-decoration: none;
+}
+
+.heatmap-detail-panel .terminal-table a:hover {
+  color: #ffffff;
+}
+
+.heatmap-catalyst {
+  gap: 6px;
 }
 
 .panel-header {
@@ -2255,6 +2389,7 @@ th {
   .panel-calendar,
   .panel-news,
   .panel,
+  .panel-heatmap,
   .panel-market-pulse,
   .panel-market-events,
   .intelligence-panel,
@@ -2276,6 +2411,10 @@ th {
     border-left: 0;
     border-top: 1px solid var(--line);
     box-shadow: none;
+  }
+
+  .heatmap-shell {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2322,5 +2461,10 @@ th {
 
   .panel-resize-handle {
     display: none;
+  }
+
+  .sp500-heatmap {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-auto-rows: 34px;
   }
 }

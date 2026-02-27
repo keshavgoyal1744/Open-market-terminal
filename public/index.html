@@ -161,6 +161,49 @@
           </div>
         </section>
 
+        <section id="section-heatmap" class="panel panel-wide panel-heatmap">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">S&amp;P 500 Heatmap</p>
+              <h2>Live breadth, sector weight, and hover intelligence</h2>
+            </div>
+            <button id="refreshHeatmapButton" type="button" class="secondary">Refresh</button>
+          </div>
+          <div id="heatmapSummary" class="watchlist-summary-grid"></div>
+          <div id="heatmapWarnings" class="panel-status-strip"></div>
+          <div class="heatmap-shell">
+            <div class="subpanel heatmap-canvas-panel">
+              <div class="subpanel-header">
+                <h3>Index Mosaic</h3>
+                <div id="heatmapSource" class="muted"></div>
+              </div>
+              <div id="sp500Heatmap" class="sp500-heatmap"></div>
+            </div>
+            <div class="subpanel heatmap-detail-panel">
+              <div class="subpanel-header">
+                <h3 id="heatmapDetailTitle">Hover a tile</h3>
+                <div id="heatmapDetailMeta" class="muted">Live context rail</div>
+              </div>
+              <div id="heatmapDetailSummary" class="intel-empty list-item">
+                <div class="meta">Hover or click a tile to load multi-source scenario context.</div>
+              </div>
+              <div id="heatmapCatalysts" class="list-stack"></div>
+              <div class="table-wrap terminal-table-wrap">
+                <table class="terminal-table">
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Source</th>
+                      <th>Time</th>
+                    </tr>
+                  </thead>
+                  <tbody id="heatmapReferencesBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section id="section-market-events" class="panel panel-wide panel-market-events">
           <div class="panel-header">
             <div>

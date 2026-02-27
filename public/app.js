@@ -17,6 +17,7 @@ const DEFAULT_PREFERENCES = {
 const GUEST_PREFERENCES_KEY = "omt-guest-preferences";
 const DEFAULT_PANEL_SIZES = {
   "section-market-pulse": 12,
+  "section-heatmap": 12,
   "section-market-events": 12,
   "section-watchlist": 5,
   "section-workbench": 7,
@@ -37,6 +38,7 @@ const DEFAULT_PANEL_SIZES = {
 };
 const DEFAULT_PANEL_LAYOUT = [
   "section-market-pulse",
+  "section-heatmap",
   "section-market-events",
   "section-watchlist",
   "section-workbench",
@@ -70,13 +72,19 @@ const state = {
   workspaces: [],
   activity: [],
   intelligence: null,
+  heatmap: null,
+  heatmapFocusSymbol: null,
+  heatmapContextCache: new Map(),
+  heatmapContextToken: 0,
   selectedWorkspaceId: null,
   selectedNoteId: null,
   selectedDigestId: null,
   currentHistoryRange: "1mo",
   profileSyncTimer: null,
   cryptoSource: null,
+  cryptoPollTimer: null,
   activitySource: null,
+  activityPollTimer: null,
   latestPulseCount: 0,
   lastSyncAt: null,
   feedStatus: "Booting",
@@ -97,6 +105,7 @@ const state = {
 
 const SECTION_COMMANDS = [
   { id: "section-market-pulse", label: "Jump to Market Pulse", meta: "cross-asset pulse board" },
+  { id: "section-heatmap", label: "Jump to S&P 500 Heatmap", meta: "live breadth and hover reasons" },
   { id: "section-watchlist", label: "Jump to Watchlist", meta: "tracked market quotes" },
   { id: "section-workbench", label: "Jump to Security Workbench", meta: "detail, filings, and options" },
   { id: "section-market-events", label: "Jump to Market Events", meta: "ranked event timeline" },
@@ -136,6 +145,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   connectCrypto();
   await Promise.all([
     loadMarketPulse(),
+    loadHeatmap(),
     loadMarketEvents(),
     loadWatchlist(state.preferences.watchlistSymbols),
     loadDetail(state.preferences.detailSymbol),
@@ -213,6 +223,10 @@ function bindForms() {
 
   document.querySelector("#refreshPulseButton").addEventListener("click", async () => {
     await loadMarketPulse();
+  });
+
+  document.querySelector("#refreshHeatmapButton")?.addEventListener("click", async () => {
+    await loadHeatmap(true);
   });
 
   document.querySelector("#refreshEventsButton").addEventListener("click", async () => {
@@ -482,6 +496,30 @@ function bindGlobalActions() {
       return;
     }
     await selectDetailSymbol(trigger.dataset.symbol, { jump: true });
+  });
+
+  document.querySelector("#sp500Heatmap")?.addEventListener("mouseover", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-heatmap-symbol]") : null;
+    if (!trigger || trigger.dataset.heatmapSymbol === state.heatmapFocusSymbol) {
+      return;
+    }
+    void focusHeatmapSymbol(trigger.dataset.heatmapSymbol);
+  });
+
+  document.querySelector("#sp500Heatmap")?.addEventListener("focusin", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-heatmap-symbol]") : null;
+    if (!trigger || trigger.dataset.heatmapSymbol === state.heatmapFocusSymbol) {
+      return;
+    }
+    void focusHeatmapSymbol(trigger.dataset.heatmapSymbol);
+  });
+
+  document.querySelector("#sp500Heatmap")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-heatmap-symbol]") : null;
+    if (!trigger) {
+      return;
+    }
+    await selectDetailSymbol(trigger.dataset.heatmapSymbol, { jump: true });
   });
 
   document.querySelector("#commandPaletteInput")?.addEventListener("input", (event) => {
@@ -825,7 +863,7 @@ function teardownAuthenticatedState() {
   toggleEarningsDrawer(false);
   applyPanelLayout();
   applyPreferencesToInputs();
-  disconnectActivityStream();
+  disconnectActivity();
   renderHud();
 }
 
@@ -912,6 +950,71 @@ async function loadMarketPulse() {
   } catch (error) {
     setFeedStatus("Degraded");
     showStatus(error.message, true);
+  }
+}
+
+async function loadHeatmap(force = false) {
+  try {
+    const payload = await api(`/api/heatmap${force ? "?force=1" : ""}`);
+    state.heatmap = payload;
+    document.querySelector("#heatmapSummary").innerHTML = renderHeatmapSummary(payload);
+    document.querySelector("#heatmapWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
+    document.querySelector("#heatmapSource").innerHTML = payload.source?.url
+      ? `<a href="${safeUrl(payload.source.url)}" target="_blank" rel="noreferrer">${escapeHtml(payload.source.label ?? "Source")}</a>`
+      : escapeHtml(payload.source?.label ?? "Public universe");
+    document.querySelector("#sp500Heatmap").innerHTML = renderHeatmapTiles(payload.tiles ?? []);
+    markFeedHeartbeat("Live");
+
+    const preferredSymbol = (payload.tiles ?? []).some((tile) => tile.symbol === state.preferences.detailSymbol)
+      ? state.preferences.detailSymbol
+      : payload.tiles?.[0]?.symbol ?? null;
+    if (preferredSymbol) {
+      await focusHeatmapSymbol(preferredSymbol);
+    }
+  } catch (error) {
+    setFeedStatus("Degraded");
+    document.querySelector("#heatmapWarnings").innerHTML =
+      `<div class="panel-status-chip warn">${escapeHtml(error.message)}</div>`;
+    showStatus(error.message, true);
+  }
+}
+
+async function focusHeatmapSymbol(symbol, force = false) {
+  const clean = String(symbol ?? "").trim().toUpperCase();
+  if (!clean) {
+    return;
+  }
+
+  state.heatmapFocusSymbol = clean;
+  highlightHeatmapFocus();
+  const cached = state.heatmapContextCache.get(clean);
+  if (cached && !force) {
+    renderHeatmapContext(cached);
+    return;
+  }
+
+  const token = ++state.heatmapContextToken;
+  document.querySelector("#heatmapDetailTitle").textContent = `${clean} context`;
+  document.querySelector("#heatmapDetailMeta").textContent = "Loading live multi-source context...";
+  document.querySelector("#heatmapDetailSummary").innerHTML =
+    `<div class="meta">Collecting live headlines, filings, earnings context, and relationship signals for ${escapeHtml(clean)}.</div>`;
+
+  try {
+    const payload = await api(`/api/heatmap-context?symbol=${encodeURIComponent(clean)}`);
+    state.heatmapContextCache.set(clean, payload);
+    if (token !== state.heatmapContextToken || state.heatmapFocusSymbol !== clean) {
+      return;
+    }
+    renderHeatmapContext(payload);
+  } catch (error) {
+    if (token !== state.heatmapContextToken || state.heatmapFocusSymbol !== clean) {
+      return;
+    }
+    document.querySelector("#heatmapDetailSummary").innerHTML =
+      `<div class="meta">Context unavailable for ${escapeHtml(clean)}: ${escapeHtml(error.message)}</div>`;
+    document.querySelector("#heatmapCatalysts").innerHTML = "";
+    document.querySelector("#heatmapReferencesBody").innerHTML =
+      `<tr><td colspan="3" class="muted">No live references are available right now.</td></tr>`;
   }
 }
 
@@ -1217,39 +1320,61 @@ async function runCompare() {
 }
 
 function connectCrypto() {
-  if (state.cryptoSource) {
-    state.cryptoSource.close();
-  }
-
+  disconnectCrypto();
   const products = state.preferences.cryptoProducts;
   const board = document.querySelector("#cryptoBoard");
-  state.cryptoSource = new EventSource(`/api/stream/crypto?products=${encodeURIComponent(products.join(","))}`);
+  let polling = false;
 
-  state.cryptoSource.onmessage = (event) => {
-    const payload = JSON.parse(event.data);
-    state.cryptoQuotes.set(payload.productId, payload);
-    markFeedHeartbeat("Streaming");
-    maybeShowAlertNotification(payload.productId, payload.price);
+  const renderBoard = (status = "Streaming") => {
+    markFeedHeartbeat(status);
     board.innerHTML = products
       .map((product) => renderCryptoCard(state.cryptoQuotes.get(product) ?? { productId: product }))
       .join("");
   };
 
-  state.cryptoSource.onerror = () => {
-    setFeedStatus("Retrying");
-    showStatus("Crypto stream disconnected. Retrying automatically.", true);
+  const startPolling = () => {
+    if (polling) {
+      return;
+    }
+    polling = true;
+    disconnectCryptoStreamOnly();
+    void pollCrypto(products, renderBoard);
+    state.cryptoPollTimer = window.setInterval(() => {
+      void pollCrypto(products, renderBoard);
+    }, 5000);
   };
+
+  if (preferPollingStreams()) {
+    startPolling();
+    return;
+  }
+
+  try {
+    state.cryptoSource = new EventSource(`/api/stream/crypto?products=${encodeURIComponent(products.join(","))}`);
+    state.cryptoSource.onmessage = (event) => {
+      const payload = JSON.parse(event.data);
+      state.cryptoQuotes.set(payload.productId, payload);
+      maybeShowAlertNotification(payload.productId, payload.price);
+      renderBoard("Streaming");
+    };
+
+    state.cryptoSource.onerror = () => {
+      setFeedStatus("Polling");
+      showStatus("Crypto stream unavailable. Falling back to polling.", true);
+      startPolling();
+    };
+  } catch {
+    startPolling();
+  }
 }
 
 function connectActivityStream() {
-  disconnectActivityStream();
+  disconnectActivity();
   if (!state.authenticated) {
     return;
   }
 
-  state.activitySource = new EventSource("/api/stream/activity");
-  state.activitySource.onmessage = async (event) => {
-    const payload = JSON.parse(event.data);
+  const handlePayload = async (payload) => {
     if (payload.type === "session.ready") {
       return;
     }
@@ -1300,6 +1425,33 @@ function connectActivityStream() {
       }
     }
   };
+
+  const startPolling = () => {
+    if (state.activityPollTimer) {
+      return;
+    }
+    void loadActivity().then(renderActivity).catch(() => {});
+    state.activityPollTimer = window.setInterval(() => {
+      void loadActivity().then(renderActivity).catch(() => {});
+    }, 15000);
+  };
+
+  if (preferPollingStreams()) {
+    startPolling();
+    return;
+  }
+
+  try {
+    state.activitySource = new EventSource("/api/stream/activity");
+    state.activitySource.onmessage = async (event) => {
+      await handlePayload(JSON.parse(event.data));
+    };
+    state.activitySource.onerror = () => {
+      startPolling();
+    };
+  } catch {
+    startPolling();
+  };
 }
 
 function disconnectActivityStream() {
@@ -1307,6 +1459,47 @@ function disconnectActivityStream() {
     state.activitySource.close();
     state.activitySource = null;
   }
+}
+
+function disconnectCryptoStreamOnly() {
+  if (state.cryptoSource) {
+    state.cryptoSource.close();
+    state.cryptoSource = null;
+  }
+}
+
+function disconnectCrypto() {
+  disconnectCryptoStreamOnly();
+  if (state.cryptoPollTimer) {
+    window.clearInterval(state.cryptoPollTimer);
+    state.cryptoPollTimer = null;
+  }
+}
+
+function disconnectActivity() {
+  disconnectActivityStream();
+  if (state.activityPollTimer) {
+    window.clearInterval(state.activityPollTimer);
+    state.activityPollTimer = null;
+  }
+}
+
+async function pollCrypto(products, renderBoard) {
+  try {
+    const payload = await api(`/api/crypto/ticker?products=${encodeURIComponent(products.join(","))}`);
+    for (const item of payload.products ?? []) {
+      state.cryptoQuotes.set(item.productId, item);
+      maybeShowAlertNotification(item.productId, item.price);
+    }
+    renderBoard("Polling");
+  } catch (error) {
+    setFeedStatus("Degraded");
+    showStatus(error.message, true);
+  }
+}
+
+function preferPollingStreams() {
+  return window.location.hostname.endsWith("vercel.app");
 }
 
 function renderAuth() {
@@ -1377,6 +1570,12 @@ function renderSymbolRibbon() {
       `;
     })
     .join("");
+}
+
+function highlightHeatmapFocus() {
+  document.querySelectorAll("[data-heatmap-symbol]").forEach((node) => {
+    node.classList.toggle("active", node.dataset.heatmapSymbol === state.heatmapFocusSymbol);
+  });
 }
 
 function startHudClock() {
@@ -1761,6 +1960,7 @@ function applyWorkspaceSnapshot(snapshot) {
   applyPreferencesToInputs();
   connectCrypto();
   void Promise.all([
+    loadHeatmap(false),
     loadMarketEvents(),
     loadWatchlist(state.preferences.watchlistSymbols),
     loadWatchlistEvents(),
@@ -1824,6 +2024,7 @@ function persistGuestPreferencesIfNeeded() {
 
 function scheduleRefresh() {
   setInterval(() => void loadMarketPulse(), 45000);
+  setInterval(() => void loadHeatmap(false), 180000);
   setInterval(() => void loadMarketEvents(false), 120000);
   setInterval(() => void loadWatchlist(state.preferences.watchlistSymbols), 30000);
   setInterval(() => void loadWatchlistEvents(), 120000);
@@ -1845,6 +2046,9 @@ async function selectDetailSymbol(symbol, options = {}) {
   renderHud();
   if (options.jump) {
     jumpToSection("section-workbench");
+  }
+  if (state.heatmap && state.heatmap.tiles?.some((tile) => tile.symbol === clean)) {
+    void focusHeatmapSymbol(clean);
   }
   await Promise.all([loadDetail(clean), loadDeskNews(false), loadMarketEvents(false)]);
 }
@@ -1964,6 +2168,12 @@ function buildPaletteCommands(query = "") {
       label: "Refresh market pulse",
       meta: "reload the cross-asset board",
       run: () => loadMarketPulse(),
+    },
+    {
+      kind: "action",
+      label: "Refresh S&P 500 heatmap",
+      meta: "reload breadth, weights, and hover context",
+      run: () => loadHeatmap(true),
     },
     {
       kind: "action",
@@ -2479,6 +2689,107 @@ function renderMarketEvents(events) {
       `,
     )
     .join("");
+}
+
+function renderHeatmapSummary(payload) {
+  const dominantSector = payload.sectors?.[0] ?? null;
+  return [
+    renderTerminalStat("Universe", String(payload.coverage?.constituents ?? payload.tiles?.length ?? 0), "tracked names"),
+    renderTerminalStat("Quoted", String(payload.coverage?.quoted ?? 0), "live tiles"),
+    renderTerminalStat("Sectors", String(payload.coverage?.sectors ?? payload.sectors?.length ?? 0), "mapped groups"),
+    renderTerminalStat(
+      "Largest Sector",
+      dominantSector ? compactLabel(dominantSector.sector) : "n/a",
+      dominantSector ? formatPercent(dominantSector.weight) : "weight share",
+    ),
+    renderTerminalStat(
+      "Leader",
+      payload.leaders?.[0]?.symbol ?? "n/a",
+      payload.leaders?.[0] ? formatPercent(payload.leaders[0].changePercent) : "top mover",
+    ),
+  ].join("");
+}
+
+function renderHeatmapWarnings(warnings) {
+  if (!warnings.length) {
+    return `<div class="panel-status-chip">Heatmap universe and context feeds are live.</div>`;
+  }
+  return warnings
+    .slice(0, 3)
+    .map((warning) => `<div class="panel-status-chip warn">${escapeHtml(warning)}</div>`)
+    .join("");
+}
+
+function renderHeatmapTiles(tiles) {
+  if (!tiles.length) {
+    return renderIntelEmpty("No heatmap tiles are available right now.");
+  }
+
+  return tiles
+    .map((tile) => {
+      const intensity = Math.min(Math.abs(tile.changePercent ?? 0) / 4, 1);
+      return `
+        <button
+          type="button"
+          class="heatmap-tile ${tone(tile.changePercent)}${tile.symbol === state.heatmapFocusSymbol ? " active" : ""}"
+          data-heatmap-symbol="${escapeHtml(tile.symbol)}"
+          data-size="${tile.columnSpan}"
+          style="grid-column: span ${tile.columnSpan}; grid-row: span ${tile.rowSpan}; --heat-opacity: ${0.16 + intensity * 0.42};"
+        >
+          <div class="heatmap-tile-top">
+            <span class="heatmap-sector-label">${escapeHtml(compactLabel(tile.sector ?? "sector"))}</span>
+            <span class="heatmap-weight">${formatPercent(tile.weight)}</span>
+          </div>
+          <strong>${escapeHtml(tile.symbol)}</strong>
+          <div class="heatmap-name">${escapeHtml(compactLabel(tile.name ?? tile.symbol, 4))}</div>
+          <div class="heatmap-price">${formatMoney(tile.price)}</div>
+          <div class="heatmap-move ${tone(tile.changePercent)}">${formatPercent(tile.changePercent)}</div>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function renderHeatmapContext(payload) {
+  document.querySelector("#heatmapDetailTitle").textContent = `${payload.symbol} · ${payload.companyName ?? payload.symbol}`;
+  document.querySelector("#heatmapDetailMeta").textContent =
+    `${payload.company?.sector ?? "Sector n/a"}${payload.company?.industry ? ` / ${payload.company.industry}` : ""}`;
+  document.querySelector("#heatmapDetailSummary").innerHTML = `
+    <div>
+      <strong>${escapeHtml(payload.scenario?.headline ?? `${payload.symbol} live context`)}</strong>
+      <div class="meta">${escapeHtml(payload.scenario?.summary ?? "No summary available.")}</div>
+    </div>
+  `;
+
+  document.querySelector("#heatmapCatalysts").innerHTML = (payload.scenario?.bullets ?? [])
+    .map(
+      (item) => `
+        <div class="list-item heatmap-catalyst">
+          <div class="heatmap-catalyst-head">
+            <strong>${escapeHtml(item.title ?? "Catalyst")}</strong>
+            <span class="signal-chip">${escapeHtml((item.kind ?? "signal").toUpperCase())}</span>
+          </div>
+          <div class="meta">${escapeHtml(item.detail ?? "")}</div>
+        </div>
+      `,
+    )
+    .join("") || renderIntelEmpty("No catalyst summary is available right now.");
+
+  document.querySelector("#heatmapReferencesBody").innerHTML = (payload.references ?? [])
+    .map(
+      (reference) => `
+        <tr class="intel-row">
+          <td>
+            <a href="${safeUrl(reference.url)}" target="_blank" rel="noreferrer">${escapeHtml(compactLabel(reference.label, 10))}</a>
+          </td>
+          <td>${escapeHtml(reference.source ?? reference.kind ?? "Source")}</td>
+          <td>${escapeHtml(reference.publishedAt ? formatTimeAgo(reference.publishedAt) : "live")}</td>
+        </tr>
+      `,
+    )
+    .join("") || `<tr><td colspan="3" class="muted">No live references are available right now.</td></tr>`;
+
+  highlightHeatmapFocus();
 }
 
 function filterCalendarEvents(events, { filter = "all", windowDays = 30 } = {}) {
@@ -3010,6 +3321,10 @@ function computeSpread(quote) {
   return quote.ask - quote.bid;
 }
 
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
 function spreadBps(quote) {
   const spread = computeSpread(quote);
   if (!Number.isFinite(spread) || !Number.isFinite(quote?.price) || quote.price === 0) {
@@ -3034,12 +3349,12 @@ function sum(values) {
   return valid.reduce((total, value) => total + value, 0);
 }
 
-function compactLabel(value) {
+function compactLabel(value, maxWords = 2) {
   return String(value ?? "")
     .replaceAll(/[_-]+/g, " ")
     .split(/\s+/)
     .filter(Boolean)
-    .slice(0, 2)
+    .slice(0, maxWords)
     .map((entry) => entry.slice(0, 4))
     .join(" ");
 }

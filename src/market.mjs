@@ -5,6 +5,7 @@ import { getMacroCalendar } from "./providers/calendar.mjs";
 import { getOrderBook, getTicker } from "./providers/coinbase.mjs";
 import { getMarketNews } from "./providers/news.mjs";
 import { getCompanySnapshot } from "./providers/sec.mjs";
+import { getSp500Universe } from "./providers/sp500.mjs";
 import { getYieldCurve } from "./providers/treasury.mjs";
 import { getCompanyOverview, getEarningsDetails, getHistory, getOptions, getQuotes } from "./providers/yahoo.mjs";
 
@@ -149,6 +150,35 @@ export class MarketDataService {
     );
   }
 
+  async getCryptoTickers(products) {
+    const cleanProducts = [...new Set(products.map((product) => product?.trim().toUpperCase()).filter(Boolean))];
+    if (!cleanProducts.length) {
+      return [];
+    }
+
+    const snapshots = await Promise.all(
+      cleanProducts.map(async (productId) => {
+        try {
+          return await this.getCryptoTicker(productId);
+        } catch (error) {
+          return {
+            productId,
+            price: null,
+            size: null,
+            bid: null,
+            ask: null,
+            volume: null,
+            time: null,
+            changePercent24h: null,
+            warning: error.message,
+          };
+        }
+      }),
+    );
+
+    return snapshots.filter(Boolean);
+  }
+
   async getMarketPulse(symbols = config.marketPulseSymbols) {
     const quotes = await this.getQuotes(symbols);
     const sorted = [...quotes].sort((left, right) => (right.changePercent ?? 0) - (left.changePercent ?? 0));
@@ -221,12 +251,20 @@ export class MarketDataService {
     return this.cache.getOrSet(
       `intel:${upper}`,
       async () => {
-        const [company, curated] = await Promise.all([this.getCompany(upper), Promise.resolve(getCuratedIntelligence(upper))]);
+        const [company, curated] = await Promise.all([
+          this.getCompany(upper).catch((error) => ({
+            symbol: upper,
+            sec: emptySecSnapshot(upper, error),
+            market: emptyMarketOverview(upper, upper, error),
+            warnings: [error.message],
+          })),
+          Promise.resolve(getCuratedIntelligence(upper)),
+        ]);
 
         const competitorUniverse = [...new Set([...(curated.peerSymbols ?? []), ...(curated.competitorSymbols ?? [])])]
           .filter((entry) => entry && entry !== upper)
           .slice(0, 8);
-        const competitorQuotes = competitorUniverse.length ? await this.getQuotes(competitorUniverse) : [];
+        const competitorQuotes = competitorUniverse.length ? await this.getQuotes(competitorUniverse).catch(() => []) : [];
         const competitorMap = new Map(competitorQuotes.map((quote) => [quote.symbol, quote]));
 
         return {
@@ -235,7 +273,7 @@ export class MarketDataService {
           summary: company.market.businessSummary ?? curated.headline,
           coverage: {
             curated: curated.curated,
-            notes: curated.coverageNotes,
+            notes: [...(curated.coverageNotes ?? []), ...(company.warnings ?? [])].slice(0, 8),
             supportedSymbols: listSupportedIntelligenceSymbols(),
           },
           commands: [
@@ -486,6 +524,179 @@ export class MarketDataService {
       { ttlMs: config.newsTtlMs, staleMs: config.newsTtlMs * 2 },
     );
   }
+
+  async getSp500Heatmap() {
+    return this.cache.getOrSet(
+      "heatmap:sp500",
+      async () => {
+        const universe = await getSp500Universe();
+        const quoteMap = await this.getQuoteMap(universe.constituents.map((item) => item.symbol), 40);
+        const populated = universe.constituents
+          .map((item) => {
+            const quote = quoteMap.get(item.symbol) ?? null;
+            const sizeBasis = numeric(item.sourceWeight) ?? numeric(quote?.marketCap);
+            return {
+              symbol: item.symbol,
+              name: item.name,
+              sector: item.sector ?? quote?.sector ?? "Unclassified",
+              price: quote?.price ?? null,
+              change: quote?.change ?? null,
+              changePercent: quote?.changePercent ?? null,
+              marketCap: quote?.marketCap ?? null,
+              dayHigh: quote?.dayHigh ?? null,
+              dayLow: quote?.dayLow ?? null,
+              volume: quote?.volume ?? null,
+              sourceWeight: item.sourceWeight ?? null,
+              sizeBasis,
+            };
+          })
+          .filter((item) => Number.isFinite(item.sizeBasis) || Number.isFinite(item.marketCap) || Number.isFinite(item.price));
+
+        const totalSize = sum(populated.map((item) => numeric(item.sizeBasis))) || 1;
+        const tiles = populated
+          .map((item) => {
+            const weight = Number.isFinite(item.sizeBasis) ? (item.sizeBasis / totalSize) * 100 : null;
+            return {
+              ...item,
+              weight,
+              columnSpan: heatmapColumnSpan(weight),
+              rowSpan: heatmapRowSpan(weight),
+            };
+          })
+          .sort((left, right) => {
+            const sectorCompare = String(left.sector).localeCompare(String(right.sector));
+            if (sectorCompare !== 0) {
+              return sectorCompare;
+            }
+            return (numeric(right.weight) ?? 0) - (numeric(left.weight) ?? 0);
+          })
+          .map((item, index) => ({ ...item, rank: index + 1 }));
+
+        const sectors = [...groupBySector(tiles).entries()]
+          .map(([sector, items]) => ({
+            sector,
+            count: items.length,
+            averageMove: average(items.map((item) => item.changePercent)),
+            weight: sum(items.map((item) => item.weight)),
+          }))
+          .sort((left, right) => (numeric(right.weight) ?? 0) - (numeric(left.weight) ?? 0));
+
+        return {
+          index: "S&P 500",
+          asOf: new Date().toISOString(),
+          source: universe.source,
+          warnings: universe.warnings ?? [],
+          coverage: {
+            constituents: universe.constituents.length,
+            quoted: tiles.filter((item) => Number.isFinite(item.price)).length,
+            sectors: sectors.length,
+          },
+          sectors,
+          leaders: [...tiles]
+            .filter((item) => Number.isFinite(item.changePercent))
+            .sort((left, right) => right.changePercent - left.changePercent)
+            .slice(0, 8),
+          laggards: [...tiles]
+            .filter((item) => Number.isFinite(item.changePercent))
+            .sort((left, right) => left.changePercent - right.changePercent)
+            .slice(0, 8),
+          tiles,
+        };
+      },
+      { ttlMs: config.quoteTtlMs * 4, staleMs: config.quoteTtlMs * 12 },
+    );
+  }
+
+  async getHeatmapContext(symbol) {
+    const upper = symbol.trim().toUpperCase();
+    return this.cache.getOrSet(
+      `heatmap-context:${upper}`,
+      async () => {
+        const [quotes, company, earnings, intel, news] = await Promise.all([
+          this.getQuotes([upper]).catch(() => []),
+          this.getCompany(upper).catch((error) => ({
+            symbol: upper,
+            sec: emptySecSnapshot(upper, error),
+            market: emptyMarketOverview(upper, upper, error),
+            warnings: [error.message],
+          })),
+          this.getEarningsIntel(upper, []).catch(() => null),
+          this.getRelationshipIntel(upper).catch(() => null),
+          this.getDeskNews([upper], upper).catch(() => ({ items: [] })),
+        ]);
+
+        const quote = quotes[0] ?? null;
+        const focusNews = (news.items ?? []).filter((item) => item.category === "focus").slice(0, 3);
+        const macroNews = (news.items ?? []).filter((item) => item.category !== "focus").slice(0, 2);
+        const filings = (company.sec?.filings ?? []).slice(0, 4);
+        const catalysts = buildHeatmapCatalysts({
+          symbol: upper,
+          quote,
+          company,
+          earnings,
+          intel,
+          focusNews,
+          macroNews,
+          filings,
+        });
+        const references = buildHeatmapReferences({
+          upper,
+          company,
+          focusNews,
+          macroNews,
+          filings,
+        });
+
+        return {
+          symbol: upper,
+          companyName: company.market.shortName ?? company.sec.title ?? upper,
+          quote,
+          company: {
+            sector: company.market.sector,
+            industry: company.market.industry,
+            marketCap: company.market.marketCap ?? quote?.marketCap ?? null,
+            website: company.market.website ?? null,
+            analystRating: company.market.analystRating ?? null,
+          },
+          scenario: {
+            headline: catalysts[0]?.title ?? `${upper} live context`,
+            summary: summarizeHeatmapContext(upper, quote, focusNews, macroNews, earnings, filings),
+            bullets: catalysts,
+          },
+          earnings: earnings
+            ? {
+                window: earnings.earningsWindow,
+                recommendation: earnings.estimates?.recommendation ?? null,
+                surpriseHistory: earnings.history?.slice(0, 4) ?? [],
+              }
+            : null,
+          relationships: {
+            suppliers: intel?.supplyChain?.suppliers?.slice(0, 3) ?? [],
+            customers: intel?.customerConcentration?.slice(0, 3) ?? [],
+            competitors: intel?.competitors?.slice(0, 4) ?? [],
+            eventChains: intel?.eventChains?.slice(0, 2) ?? [],
+          },
+          references,
+          warnings: [...new Set([...(company.warnings ?? []), ...(intel?.coverage?.notes ?? []).filter(Boolean)])].slice(0, 6),
+        };
+      },
+      { ttlMs: config.newsTtlMs, staleMs: config.newsTtlMs * 3 },
+    );
+  }
+
+  async getQuoteMap(symbols, chunkSize = 48) {
+    const clean = [...new Set(symbols.map((symbol) => symbol?.trim().toUpperCase()).filter(Boolean))];
+    const map = new Map();
+    const batches = await Promise.all(
+      chunkList(clean, chunkSize).map((chunk) => this.getQuotes(chunk).catch(() => [])),
+    );
+    for (const quotes of batches) {
+      for (const quote of quotes) {
+        map.set(quote.symbol, quote);
+      }
+    }
+    return map;
+  }
 }
 
 function mergeExecutives(curatedExecutives = [], officers = []) {
@@ -521,6 +732,7 @@ function emptySecSnapshot(symbol, error) {
   return {
     ticker: symbol,
     cik: null,
+    submissionsUrl: null,
     title: symbol,
     filings: [],
     relationshipSignals: null,
@@ -655,4 +867,238 @@ function buildEarningsEvent(company) {
     note: company.market.shortName ?? company.sec.title ?? company.symbol,
     symbol: company.symbol,
   };
+}
+
+function buildHeatmapCatalysts({ symbol, quote, company, earnings, intel, focusNews, macroNews, filings }) {
+  const bullets = [];
+
+  if (Number.isFinite(quote?.changePercent)) {
+    bullets.push({
+      kind: "price",
+      title: `${symbol} is ${quote.changePercent >= 0 ? "up" : "down"} ${Math.abs(quote.changePercent).toFixed(2)}% today`,
+      detail: `Last ${quote.price != null ? quote.price.toFixed(2) : "n/a"} with ${quote.volume != null ? `${Math.round(quote.volume).toLocaleString()} shares` : "live price context"}.`,
+      source: "Market quote",
+    });
+  }
+
+  if (focusNews[0]) {
+    bullets.push({
+      kind: "news",
+      title: focusNews[0].title,
+      detail: `${focusNews[0].source ?? "News"} · ${focusNews[0].publishedAt ?? ""}`.trim(),
+      source: focusNews[0].source ?? "News",
+    });
+  }
+
+  if (earnings?.earningsWindow?.start) {
+    bullets.push({
+      kind: "earnings",
+      title: `${symbol} earnings window is ${formatShortDate(earnings.earningsWindow.start)}`,
+      detail: earnings.estimates?.recommendation
+        ? `Street view: ${earnings.estimates.recommendation}.`
+        : "Next earnings window is on the tape.",
+      source: "Yahoo Finance",
+    });
+  }
+
+  if (filings[0]) {
+    bullets.push({
+      kind: "filing",
+      title: `${symbol} filed ${filings[0].form ?? "a recent SEC form"}`,
+      detail: `${filings[0].primaryDocument ?? "Recent disclosure"} · ${filings[0].filingDate ?? "recent"}`,
+      source: "SEC",
+    });
+  }
+
+  if (macroNews[0]) {
+    bullets.push({
+      kind: "macro",
+      title: macroNews[0].title,
+      detail: `${macroNews[0].source ?? "Macro news"} · broader market context`,
+      source: macroNews[0].source ?? "News",
+    });
+  }
+
+  const firstChain = intel?.eventChains?.[0];
+  if (firstChain?.steps?.length) {
+    bullets.push({
+      kind: "chain",
+      title: firstChain.title ?? `${symbol} mapped impact chain`,
+      detail: firstChain.steps.slice(0, 3).join(" -> "),
+      source: "Relationship console",
+    });
+  }
+
+  const firstCustomer = intel?.customerConcentration?.[0];
+  if (firstCustomer?.name) {
+    bullets.push({
+      kind: "customer",
+      title: `${symbol} customer exposure: ${firstCustomer.name}`,
+      detail: firstCustomer.commentary ?? firstCustomer.level ?? "Concentration signal",
+      source: "Relationship console",
+    });
+  }
+
+  if (company.market?.sector || company.market?.industry) {
+    bullets.push({
+      kind: "profile",
+      title: `${company.market.sector ?? "Sector"} / ${company.market.industry ?? "Industry"}`,
+      detail: company.market.analystRating ? `Analyst stance: ${company.market.analystRating}.` : "Public company profile.",
+      source: "Company profile",
+    });
+  }
+
+  return bullets.slice(0, 6);
+}
+
+function summarizeHeatmapContext(symbol, quote, focusNews, macroNews, earnings, filings) {
+  const fragments = [];
+  if (Number.isFinite(quote?.price) && Number.isFinite(quote?.changePercent)) {
+    fragments.push(`${symbol} is trading at ${quote.price.toFixed(2)}, ${quote.changePercent >= 0 ? "up" : "down"} ${Math.abs(quote.changePercent).toFixed(2)}% on the session.`);
+  }
+  if (focusNews[0]?.title) {
+    fragments.push(`The most recent company-specific headline is "${focusNews[0].title}".`);
+  }
+  if (earnings?.earningsWindow?.start) {
+    fragments.push(`Its next earnings window starts ${formatShortDate(earnings.earningsWindow.start)}.`);
+  }
+  if (filings[0]?.form) {
+    fragments.push(`The latest SEC filing on this tape is ${filings[0].form} from ${formatShortDate(filings[0].filingDate)}.`);
+  }
+  if (macroNews[0]?.title) {
+    fragments.push(`Broader market context is being influenced by "${macroNews[0].title}".`);
+  }
+  return fragments.join(" ");
+}
+
+function buildHeatmapReferences({ upper, company, focusNews, macroNews, filings }) {
+  const references = [];
+
+  for (const item of [...focusNews, ...macroNews].slice(0, 5)) {
+    if (!item.link) {
+      continue;
+    }
+    references.push({
+      kind: "news",
+      label: item.title,
+      source: item.source ?? "News",
+      publishedAt: item.publishedAt ?? null,
+      url: item.link,
+    });
+  }
+
+  for (const filing of filings) {
+    if (!filing.filingUrl && !filing.filingIndexUrl) {
+      continue;
+    }
+    references.push({
+      kind: "filing",
+      label: `${upper} ${filing.form ?? "SEC filing"} · ${filing.primaryDocument ?? "document"}`,
+      source: "SEC",
+      publishedAt: filing.filingDate ?? null,
+      url: filing.filingUrl ?? filing.filingIndexUrl,
+    });
+  }
+
+  if (company.sec?.submissionsUrl) {
+    references.push({
+      kind: "sec",
+      label: `${upper} SEC submissions feed`,
+      source: "SEC",
+      publishedAt: null,
+      url: company.sec.submissionsUrl,
+    });
+  }
+
+  if (company.market?.website) {
+    references.push({
+      kind: "company",
+      label: `${upper} investor website`,
+      source: "Company",
+      publishedAt: null,
+      url: company.market.website,
+    });
+  }
+
+  const seen = new Set();
+  return references.filter((reference) => {
+    if (!reference.url || seen.has(reference.url)) {
+      return false;
+    }
+    seen.add(reference.url);
+    return true;
+  }).slice(0, 8);
+}
+
+function chunkList(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function numeric(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+function sum(values) {
+  const valid = values.filter(Number.isFinite);
+  if (!valid.length) {
+    return null;
+  }
+  return valid.reduce((total, value) => total + value, 0);
+}
+
+function average(values) {
+  const total = sum(values);
+  const count = values.filter(Number.isFinite).length;
+  return count ? total / count : null;
+}
+
+function groupBySector(items) {
+  return items.reduce((map, item) => {
+    const key = item.sector ?? "Unclassified";
+    const bucket = map.get(key) ?? [];
+    bucket.push(item);
+    map.set(key, bucket);
+    return map;
+  }, new Map());
+}
+
+function heatmapColumnSpan(weight) {
+  if (!Number.isFinite(weight)) {
+    return 1;
+  }
+  if (weight >= 6) {
+    return 4;
+  }
+  if (weight >= 3) {
+    return 3;
+  }
+  if (weight >= 1) {
+    return 2;
+  }
+  return 1;
+}
+
+function heatmapRowSpan(weight) {
+  if (!Number.isFinite(weight)) {
+    return 1;
+  }
+  if (weight >= 6) {
+    return 3;
+  }
+  if (weight >= 2) {
+    return 2;
+  }
+  return 1;
+}
+
+function formatShortDate(value) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return "n/a";
+  }
+  return new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

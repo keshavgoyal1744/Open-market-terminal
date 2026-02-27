@@ -425,6 +425,15 @@ async function handleApi(request, response, url, context) {
     return sendJson(response, 200, await market.getMarketEvents(symbols, cleanSymbol(focusSymbol)));
   }
 
+  if (request.method === "GET" && url.pathname === "/api/heatmap") {
+    return sendJson(response, 200, await market.getSp500Heatmap());
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/heatmap-context") {
+    const symbol = required(url, "symbol");
+    return sendJson(response, 200, await market.getHeatmapContext(symbol));
+  }
+
   if (request.method === "GET" && url.pathname === "/api/quote") {
     const symbols = splitList(url.searchParams.get("symbols"));
     return sendJson(response, 200, { quotes: await market.getQuotes(symbols) });
@@ -434,25 +443,47 @@ async function handleApi(request, response, url, context) {
     const symbol = required(url, "symbol");
     const range = url.searchParams.get("range") ?? "1mo";
     const interval = url.searchParams.get("interval") ?? "1d";
+    let points = [];
+    let warning = null;
+    try {
+      points = await market.getHistory(symbol, range, interval);
+    } catch (error) {
+      warning = error.message;
+    }
     return sendJson(response, 200, {
       symbol: symbol.toUpperCase(),
       range,
       interval,
-      points: await market.getHistory(symbol, range, interval),
+      points,
+      warning,
     });
   }
 
   if (request.method === "GET" && url.pathname === "/api/options") {
     const symbol = required(url, "symbol");
-    return sendJson(response, 200, await market.getOptions(symbol, url.searchParams.get("expiration")));
+    try {
+      return sendJson(response, 200, await market.getOptions(symbol, url.searchParams.get("expiration")));
+    } catch (error) {
+      return sendJson(response, 200, emptyOptionsPayload(symbol, error));
+    }
   }
 
   if (request.method === "GET" && url.pathname === "/api/company") {
-    return sendJson(response, 200, await market.getCompany(required(url, "symbol")));
+    const symbol = required(url, "symbol");
+    try {
+      return sendJson(response, 200, await market.getCompany(symbol));
+    } catch (error) {
+      return sendJson(response, 200, emptyCompanyPayload(symbol, error));
+    }
   }
 
   if (request.method === "GET" && url.pathname === "/api/intelligence") {
-    return sendJson(response, 200, await market.getRelationshipIntel(required(url, "symbol")));
+    const symbol = required(url, "symbol");
+    try {
+      return sendJson(response, 200, await market.getRelationshipIntel(symbol));
+    } catch (error) {
+      return sendJson(response, 200, emptyIntelligencePayload(symbol, error));
+    }
   }
 
   if (request.method === "GET" && url.pathname === "/api/filings") {
@@ -482,7 +513,23 @@ async function handleApi(request, response, url, context) {
 
   if (request.method === "GET" && url.pathname === "/api/crypto/orderbook") {
     const product = url.searchParams.get("product") ?? "BTC-USD";
-    return sendJson(response, 200, await market.getOrderBook(product));
+    try {
+      return sendJson(response, 200, await market.getOrderBook(product));
+    } catch (error) {
+      return sendJson(response, 200, {
+        productId: product.toUpperCase(),
+        bids: [],
+        asks: [],
+        warning: error.message,
+      });
+    }
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/crypto/ticker") {
+    const products = splitList(url.searchParams.get("products"));
+    return sendJson(response, 200, {
+      products: await market.getCryptoTickers(products.length ? products : config.defaultCryptoProducts),
+    });
   }
 
   if (request.method === "GET" && url.pathname === "/api/stream/crypto") {
@@ -790,6 +837,122 @@ function guardRateLimit(request) {
       retryAt: new Date(result.resetAt).toISOString(),
     });
   }
+}
+
+function emptyOptionsPayload(symbol, error) {
+  return {
+    symbol: cleanSymbol(symbol),
+    expirations: [],
+    quote: null,
+    calls: [],
+    puts: [],
+    warning: error?.message ?? "Options data unavailable.",
+  };
+}
+
+function emptyCompanyPayload(symbol, error) {
+  const upper = cleanSymbol(symbol);
+  return {
+    symbol: upper,
+    warnings: [error?.message ?? "Company data unavailable."],
+    sec: {
+      ticker: upper,
+      cik: null,
+      title: upper,
+      filings: [],
+      relationshipSignals: null,
+      facts: {
+        revenue: null,
+        netIncome: null,
+        assets: null,
+        liabilities: null,
+        cash: null,
+        sharesOutstanding: null,
+      },
+    },
+    market: {
+      symbol: upper,
+      shortName: upper,
+      exchange: null,
+      sector: null,
+      industry: null,
+      website: null,
+      businessSummary: null,
+      marketCap: null,
+      trailingPe: null,
+      forwardPe: null,
+      dividendYield: null,
+      beta: null,
+      fiftyTwoWeekHigh: null,
+      fiftyTwoWeekLow: null,
+      totalRevenue: null,
+      grossMargins: null,
+      operatingMargins: null,
+      profitMargins: null,
+      freeCashflow: null,
+      debtToEquity: null,
+      returnOnEquity: null,
+      currentRatio: null,
+      analystRating: null,
+      earningsStart: null,
+      earningsEnd: null,
+      institutionPercentHeld: null,
+      insiderPercentHeld: null,
+      floatShares: null,
+      sharesShort: null,
+      sharesShortPriorMonth: null,
+      shortRatio: null,
+      companyOfficers: [],
+      topInstitutionalHolders: [],
+      topFundHolders: [],
+      insiderHolders: [],
+      insiderTransactions: [],
+    },
+  };
+}
+
+function emptyIntelligencePayload(symbol, error) {
+  const upper = cleanSymbol(symbol);
+  return {
+    symbol: upper,
+    companyName: upper,
+    summary: null,
+    coverage: {
+      curated: false,
+      notes: [error?.message ?? "Relationship intelligence unavailable."],
+      supportedSymbols: [],
+    },
+    commands: [
+      { code: "SPLC", label: "Supply Chain" },
+      { code: "REL", label: "Relationships" },
+      { code: "OWN", label: "Ownership" },
+      { code: "BMAP", label: "Geography" },
+      { code: "RV", label: "Peers" },
+      { code: "FA", label: "Financial Analysis" },
+      { code: "DES", label: "Description" },
+    ],
+    ownership: {
+      institutionPercentHeld: null,
+      insiderPercentHeld: null,
+      floatShares: null,
+      sharesShort: null,
+      shortRatio: null,
+      topInstitutionalHolders: [],
+      topFundHolders: [],
+      insiderHolders: [],
+      insiderTransactions: [],
+      filingSignals: null,
+    },
+    executives: [],
+    supplyChain: { suppliers: [], customers: [], ecosystem: [] },
+    corporate: { relations: [], tree: [] },
+    customerConcentration: [],
+    geography: [],
+    ecosystems: [],
+    eventChains: [],
+    graph: { nodes: [{ id: upper, label: upper, kind: "issuer" }], edges: [] },
+    competitors: [],
+  };
 }
 
 function httpError(statusCode, message, details = null) {

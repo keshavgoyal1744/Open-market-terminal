@@ -29,9 +29,10 @@ export async function getCompanySnapshot(ticker) {
   return {
     ticker: entry.ticker,
     cik,
+    submissionsUrl: `${SEC_BASE_URL}/submissions/CIK${cik}.json`,
     title: entry.title,
-    filings: recentFilings(submissions?.filings?.recent),
-    relationshipSignals: summarizeRelationshipSignals(submissions?.filings?.recent),
+    filings: recentFilings(submissions?.filings?.recent, cik),
+    relationshipSignals: summarizeRelationshipSignals(submissions?.filings?.recent, cik),
     facts: {
       revenue: pickFact(companyFacts, "us-gaap", ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax"]),
       netIncome: pickFact(companyFacts, "us-gaap", ["NetIncomeLoss"]),
@@ -60,19 +61,29 @@ async function loadTickerMap() {
   return tickerMapPromise;
 }
 
-function recentFilings(recent) {
+function recentFilings(recent, cik = null) {
   if (!recent?.accessionNumber?.length) {
     return [];
   }
 
-  return recent.accessionNumber.slice(0, 8).map((accessionNumber, index) => ({
-    accessionNumber,
-    form: recent.form?.[index] ?? null,
-    filingDate: recent.filingDate?.[index] ?? null,
-    reportDate: recent.reportDate?.[index] ?? null,
-    primaryDocument: recent.primaryDocument?.[index] ?? null,
-    primaryDocDescription: recent.primaryDocDescription?.[index] ?? null,
-  }));
+  return recent.accessionNumber.slice(0, 8).map((accessionNumber, index) => {
+    const primaryDocument = recent.primaryDocument?.[index] ?? null;
+    const accessionSlug = String(accessionNumber ?? "").replace(/-/g, "");
+    const baseUrl = cik && accessionSlug
+      ? `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accessionSlug}`
+      : null;
+
+    return {
+      accessionNumber,
+      form: recent.form?.[index] ?? null,
+      filingDate: recent.filingDate?.[index] ?? null,
+      reportDate: recent.reportDate?.[index] ?? null,
+      primaryDocument,
+      primaryDocDescription: recent.primaryDocDescription?.[index] ?? null,
+      filingUrl: baseUrl && primaryDocument ? `${baseUrl}/${primaryDocument}` : null,
+      filingIndexUrl: baseUrl ? `${baseUrl}/${accessionNumber}-index.html` : null,
+    };
+  });
 }
 
 function pickFact(companyFacts, taxonomy, concepts) {
@@ -105,8 +116,8 @@ function pickFact(companyFacts, taxonomy, concepts) {
   return null;
 }
 
-function summarizeRelationshipSignals(recent) {
-  const filings = recentFilings(recent);
+function summarizeRelationshipSignals(recent, cik = null) {
+  const filings = recentFilings(recent, cik);
   const insiderForms = filings.filter((filing) => ["3", "4", "5"].includes(filing.form));
   const ownershipForms = filings.filter((filing) =>
     ["SC 13D", "SC 13D/A", "SC 13G", "SC 13G/A", "13D", "13G"].includes(filing.form),
