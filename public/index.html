@@ -13,7 +13,17 @@
           <p class="eyebrow">Open Market Terminal</p>
           <h1>Global market operations console</h1>
         </div>
+        <nav class="topbar-nav">
+          <button type="button" class="topbar-nav-btn" data-jump-section="section-watchlist">Quotes</button>
+          <button type="button" class="topbar-nav-btn" data-jump-section="section-workbench">Workbench</button>
+          <button type="button" class="topbar-nav-btn" data-jump-section="section-intelligence">Intel</button>
+          <button type="button" class="topbar-nav-btn" data-jump-section="section-portfolio">Portfolio</button>
+        </nav>
         <div class="topbar-strip">
+          <button id="commandPaletteButton" type="button" class="topbar-chip topbar-chip-action">
+            <span>Command</span>
+            <strong>Ctrl/⌘ K</strong>
+          </button>
           <div class="topbar-chip">
             <span>Mode</span>
             <strong id="hudMode">Guest</strong>
@@ -32,16 +42,16 @@
       <section class="hero">
         <div class="hero-copy">
           <p class="section-label">Tactical Overview</p>
-          <h2>Public market data, relationship intelligence, and automation in one dark-screen workflow.</h2>
+          <h2>Market command workspace built on public feeds.</h2>
           <p>
-            Built for traders and researchers who need a dense console instead of a generic dashboard. The stack stays
-            self-hosted, API-light, and focused on usable public data.
+            This desk now follows the same black-screen language as your `worldmonitor` app: compact chrome, hard
+            borders, keyboard-first workflows, and denser panel rhythm.
           </p>
           <div class="hero-tags">
-            <span>Cross-Asset Pulse</span>
-            <span>Relationship Graphs</span>
-            <span>Server Alerts</span>
-            <span>Digest Automation</span>
+            <span>Mono Terminal UI</span>
+            <span>Keyboard Routing</span>
+            <span>Cross-Asset Watchlists</span>
+            <span>Relationship Intelligence</span>
           </div>
           <p class="warning">
             Licensed tick-by-tick equities, premium research, and proprietary institutional graph depth are still
@@ -49,22 +59,27 @@
           </p>
         </div>
         <div class="hero-visual">
-          <div class="radar-stage">
-            <div class="radar-ring ring-a"></div>
-            <div class="radar-ring ring-b"></div>
-            <div class="radar-ring ring-c"></div>
-            <div class="radar-sweep"></div>
-            <div class="radar-grid"></div>
-            <div class="signal-node node-na">NYC</div>
-            <div class="signal-node node-eu">LDN</div>
-            <div class="signal-node node-as">TYO</div>
-            <div class="signal-node node-me">DXB</div>
-            <div class="signal-node node-hq">OMT</div>
+          <div class="desk-terminal">
+            <div class="desk-line">
+              <span class="desk-label">Desk</span>
+              <strong id="deskPrimarySymbol">AAPL</strong>
+              <span class="desk-separator">/</span>
+              <span id="deskPrimaryStatus">Awaiting route</span>
+            </div>
+            <div class="desk-line muted">
+              <span class="desk-label">Focus</span>
+              <span id="hudIntelSymbol">AAPL relationship focus</span>
+            </div>
+            <div class="desk-line muted">
+              <span class="desk-label">Palette</span>
+              <span>Commands, symbols, and panel jumps</span>
+            </div>
+            <div id="symbolRibbon" class="symbol-ribbon"></div>
           </div>
           <div class="signal-log">
-            <div class="signal-row"><span>NETWORK</span><strong>129+ public regions mapped</strong></div>
-            <div class="signal-row"><span>INTEL</span><strong id="hudIntelSymbol">AAPL relationship focus</strong></div>
-            <div class="signal-row"><span>ROUTING</span><strong>Webhook and digest operations active</strong></div>
+            <div class="signal-row"><span>ROUTING</span><strong>Ctrl/⌘ + K opens the terminal palette</strong></div>
+            <div class="signal-row"><span>SYMBOLS</span><strong>[ and ] cycle through watchlist names</strong></div>
+            <div class="signal-row"><span>PANELS</span><strong>Jump from palette or top rail without scrolling</strong></div>
           </div>
         </div>
         <aside class="auth-card control-card">
@@ -120,7 +135,7 @@
       </section>
 
       <main class="dashboard">
-        <section class="panel panel-wide">
+        <section id="section-market-pulse" class="panel panel-wide panel-market-pulse">
           <div class="panel-header">
             <div>
               <p class="section-label">Market Pulse</p>
@@ -141,7 +156,7 @@
           </div>
         </section>
 
-        <section class="panel panel-wide">
+        <section id="section-watchlist" class="panel panel-wide panel-watchlist">
           <div class="panel-header">
             <div>
               <p class="section-label">Watchlist</p>
@@ -174,7 +189,7 @@
           </div>
         </section>
 
-        <section class="panel panel-wide">
+        <section id="section-workbench" class="panel panel-wide panel-workbench">
           <div class="panel-header">
             <div>
               <p class="section-label">Security Workbench</p>
@@ -191,6 +206,7 @@
               <button type="submit">Load</button>
             </form>
           </div>
+          <div id="workbenchSummary" class="watchlist-summary-grid"></div>
           <div class="detail-grid">
             <article class="subpanel">
               <div id="detailMetrics" class="metric-strip"></div>
@@ -206,11 +222,12 @@
             </article>
             <article class="subpanel">
               <h3>Options Chain</h3>
+              <div id="optionsSummary" class="watchlist-summary-grid"></div>
               <div class="options-grid">
                 <div>
                   <h4>Calls</h4>
-                  <div class="table-wrap compact">
-                    <table>
+                  <div class="table-wrap compact terminal-table-wrap">
+                    <table class="terminal-table options-table">
                       <thead>
                         <tr>
                           <th>Strike</th>
@@ -225,8 +242,8 @@
                 </div>
                 <div>
                   <h4>Puts</h4>
-                  <div class="table-wrap compact">
-                    <table>
+                  <div class="table-wrap compact terminal-table-wrap">
+                    <table class="terminal-table options-table">
                       <thead>
                         <tr>
                           <th>Strike</th>
@@ -244,7 +261,7 @@
           </div>
         </section>
 
-        <section class="panel panel-wide intelligence-panel">
+        <section id="section-intelligence" class="panel panel-wide intelligence-panel">
           <div class="panel-header">
             <div>
               <p class="section-label">Relationship Console</p>
@@ -327,7 +344,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section id="section-workspaces" class="panel">
           <div class="panel-header">
             <div>
               <p class="section-label">Workspace Vault</p>
@@ -348,7 +365,7 @@
           <div id="workspacesList" class="list-stack"></div>
         </section>
 
-        <section class="panel">
+        <section id="section-notes" class="panel">
           <div class="panel-header">
             <div>
               <p class="section-label">Desk Journal</p>
@@ -365,7 +382,7 @@
           <div id="notesList" class="list-stack"></div>
         </section>
 
-        <section class="panel">
+        <section id="section-activity" class="panel">
           <div class="panel-header">
             <div>
               <p class="section-label">Activity</p>
@@ -376,7 +393,7 @@
           <div id="activityList" class="list-stack"></div>
         </section>
 
-        <section class="panel">
+        <section id="section-crypto" class="panel">
           <div class="panel-header">
             <div>
               <p class="section-label">Crypto Tape</p>
@@ -426,7 +443,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section id="section-macro" class="panel">
           <div class="panel-header">
             <div>
               <p class="section-label">Rates & Macro</p>
@@ -445,7 +462,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section id="section-portfolio" class="panel">
           <div class="panel-header">
             <div>
               <p class="section-label">Portfolio</p>
@@ -476,7 +493,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section id="section-alerts" class="panel">
           <div class="panel-header">
             <div>
               <p class="section-label">Alerts</p>
@@ -496,7 +513,7 @@
           <div id="alertsList" class="list-stack"></div>
         </section>
 
-        <section class="panel">
+        <section id="section-intel-ops" class="panel">
           <div class="panel-header">
             <div>
               <p class="section-label">Intel Ops</p>
@@ -546,7 +563,7 @@
           </article>
         </section>
 
-        <section class="panel panel-wide">
+        <section id="section-screening" class="panel panel-wide">
           <div class="panel-header">
             <div>
               <p class="section-label">Screening & Compare</p>
@@ -601,7 +618,7 @@
           </div>
         </section>
 
-        <section class="panel panel-wide">
+        <section id="section-events" class="panel panel-wide">
           <div class="panel-header">
             <div>
               <p class="section-label">Watchlist Events</p>
@@ -611,7 +628,7 @@
           <div id="watchlistEvents" class="list-stack"></div>
         </section>
 
-        <section class="panel panel-wide limitations">
+        <section id="section-limitations" class="panel panel-wide limitations">
           <p class="section-label">Reality Check</p>
           <h2>What this app now covers</h2>
           <div class="limits-grid">
@@ -626,6 +643,18 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <div id="commandPalette" class="command-palette" hidden>
+      <div class="command-palette-backdrop" data-close-palette="true"></div>
+      <div class="command-palette-dialog" role="dialog" aria-modal="true" aria-label="Command palette">
+        <div class="command-palette-header">
+          <span>Command Palette</span>
+          <span class="muted">Symbols, panel jumps, refresh actions</span>
+        </div>
+        <input id="commandPaletteInput" type="text" placeholder="Type a symbol, panel, or action..." autocomplete="off" />
+        <div id="commandPaletteResults" class="command-palette-results"></div>
+      </div>
     </div>
 
     <div id="statusToast" class="status-toast" hidden></div>

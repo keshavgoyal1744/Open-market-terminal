@@ -38,7 +38,24 @@ const state = {
   latestPulseCount: 0,
   lastSyncAt: null,
   feedStatus: "Booting",
+  currentDetailQuote: null,
+  currentCompany: null,
+  currentOptions: null,
+  paletteCommands: [],
+  commandPaletteOpen: false,
+  paletteIndex: 0,
 };
+
+const SECTION_COMMANDS = [
+  { id: "section-market-pulse", label: "Jump to Market Pulse", meta: "cross-asset pulse board" },
+  { id: "section-watchlist", label: "Jump to Watchlist", meta: "tracked market quotes" },
+  { id: "section-workbench", label: "Jump to Security Workbench", meta: "detail, filings, and options" },
+  { id: "section-intelligence", label: "Jump to Relationship Console", meta: "ownership and supply chains" },
+  { id: "section-portfolio", label: "Jump to Portfolio", meta: "positions and P/L" },
+  { id: "section-alerts", label: "Jump to Alerts", meta: "server-side triggers" },
+  { id: "section-intel-ops", label: "Jump to Intel Ops", meta: "webhooks and digests" },
+  { id: "section-screening", label: "Jump to Screening", meta: "custom universes and peer tables" },
+];
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -48,6 +65,7 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindForms();
+  bindGlobalActions();
   startHudClock();
   await loadSession();
   applyPreferencesToInputs();
@@ -60,6 +78,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderNotes();
   renderWorkspaces();
   renderActivity();
+  renderSymbolRibbon();
   renderHud();
   connectCrypto();
   await Promise.all([
@@ -154,10 +173,8 @@ function bindForms() {
 
   document.querySelector("#detailForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    state.preferences.detailSymbol = document.querySelector("#detailSymbol").value.trim().toUpperCase();
     state.currentHistoryRange = document.querySelector("#historyRange").value;
-    schedulePreferenceSync();
-    await loadDetail(state.preferences.detailSymbol);
+    await selectDetailSymbol(document.querySelector("#detailSymbol").value.trim().toUpperCase());
   });
 
   document.querySelector("#workspaceForm").addEventListener("submit", async (event) => {
@@ -375,6 +392,97 @@ function bindForms() {
   });
 }
 
+function bindGlobalActions() {
+  document.querySelector("#commandPaletteButton")?.addEventListener("click", () => {
+    openCommandPalette("");
+  });
+
+  document.querySelectorAll("[data-jump-section]").forEach((button) => {
+    button.addEventListener("click", () => {
+      jumpToSection(button.dataset.jumpSection);
+    });
+  });
+
+  document.querySelector("#symbolRibbon")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-symbol]") : null;
+    if (!trigger) {
+      return;
+    }
+    await selectDetailSymbol(trigger.dataset.symbol, { jump: true });
+  });
+
+  document.querySelector("#commandPaletteInput")?.addEventListener("input", (event) => {
+    state.paletteIndex = 0;
+    renderCommandPaletteResults(event.target.value);
+  });
+
+  document.querySelector("#commandPaletteResults")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-command-index]") : null;
+    if (!trigger) {
+      return;
+    }
+    const command = state.paletteCommands[Number(trigger.dataset.commandIndex)];
+    if (command) {
+      await executePaletteCommand(command);
+    }
+  });
+
+  document.querySelector("[data-close-palette='true']")?.addEventListener("click", () => {
+    closeCommandPalette();
+  });
+
+  document.addEventListener("keydown", async (event) => {
+    const target = event.target;
+    const editable = target instanceof HTMLElement && (target.closest("input, textarea, select") || target.isContentEditable);
+
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      openCommandPalette("");
+      return;
+    }
+
+    if (state.commandPaletteOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCommandPalette();
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        state.paletteIndex = Math.min(state.paletteIndex + 1, Math.max(state.paletteCommands.length - 1, 0));
+        syncPaletteSelection();
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        state.paletteIndex = Math.max(state.paletteIndex - 1, 0);
+        syncPaletteSelection();
+        return;
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const command = state.paletteCommands[state.paletteIndex];
+        if (command) {
+          await executePaletteCommand(command);
+        }
+      }
+      return;
+    }
+
+    if (editable) {
+      return;
+    }
+
+    if (event.key === "[") {
+      event.preventDefault();
+      await cycleDetailSymbol(-1);
+    } else if (event.key === "]") {
+      event.preventDefault();
+      await cycleDetailSymbol(1);
+    }
+  });
+}
+
 async function loadSession(reloadUserData = false) {
   try {
     const session = await api("/api/auth/session");
@@ -537,6 +645,7 @@ async function loadWatchlist(symbols) {
       .join("");
 
     document.querySelector("#watchlistStatus").textContent = `Tracking ${payload.quotes.length} symbols.`;
+    renderSymbolRibbon();
     renderPortfolio();
     renderHud();
   } catch (error) {
@@ -588,13 +697,19 @@ async function loadDetail(symbol) {
     if (quote) {
       state.latestQuotes.set(quote.symbol, quote);
     }
+    state.currentDetailQuote = quote ?? null;
+    state.currentCompany = company;
+    state.currentOptions = options;
 
     renderDetailMetrics(quote, company.market);
+    document.querySelector("#workbenchSummary").innerHTML = renderWorkbenchSummary(quote, company, history.points);
     renderPriceChart(history.points, symbol);
     renderOverview(company);
     renderCompanyFacts(company);
     renderFilings(company.sec.filings);
     renderOptions(options.calls, options.puts);
+    document.querySelector("#optionsSummary").innerHTML = renderOptionsSummary(options.calls, options.puts);
+    renderSymbolRibbon();
     renderPortfolio();
     await loadIntelligence(symbol);
     renderHud();
@@ -855,6 +970,32 @@ function renderHud() {
   setText("#hudWorkspaceCount", String(state.authenticated ? state.workspaces.length : 0));
   setText("#hudLastSync", state.lastSyncAt ? formatTime(state.lastSyncAt) : "Pending");
   setText("#hudIntelSymbol", `${state.preferences.detailSymbol} relationship focus`);
+  setText("#deskPrimarySymbol", state.preferences.detailSymbol);
+  setText("#deskPrimaryStatus", state.currentDetailQuote?.exchange ?? state.feedStatus);
+}
+
+function renderSymbolRibbon() {
+  const container = document.querySelector("#symbolRibbon");
+  if (!container) {
+    return;
+  }
+
+  const symbols = state.preferences.watchlistSymbols.slice(0, 12);
+  container.innerHTML = symbols
+    .map((symbol) => {
+      const quote = state.latestQuotes.get(symbol);
+      return `
+        <button
+          type="button"
+          class="symbol-ribbon-chip${symbol === state.preferences.detailSymbol ? " active" : ""} ${tone(quote?.changePercent)}"
+          data-symbol="${escapeHtml(symbol)}"
+        >
+          <span>${escapeHtml(symbol)}</span>
+          <strong>${formatMoney(quote?.price)}</strong>
+        </button>
+      `;
+    })
+    .join("");
 }
 
 function startHudClock() {
@@ -1212,6 +1353,7 @@ function applyPreferencesToInputs() {
   document.querySelector("#screenMinChange").value = state.preferences.screenConfig.minChangePct;
   document.querySelector("#compareSymbolsInput").value = state.preferences.watchlistSymbols.join(",");
   applyCryptoPreferences();
+  renderSymbolRibbon();
   renderHud();
 }
 
@@ -1299,6 +1441,162 @@ function scheduleRefresh() {
   setInterval(() => void loadWatchlistEvents(), 120000);
   setInterval(() => void loadIntelligence(state.preferences.detailSymbol), 180000);
   setInterval(() => void renderPortfolio(), 30000);
+}
+
+async function selectDetailSymbol(symbol, options = {}) {
+  const clean = String(symbol ?? "").trim().toUpperCase();
+  if (!clean) {
+    return;
+  }
+  state.preferences.detailSymbol = clean;
+  document.querySelector("#detailSymbol").value = clean;
+  schedulePreferenceSync();
+  renderSymbolRibbon();
+  renderHud();
+  if (options.jump) {
+    jumpToSection("section-workbench");
+  }
+  await loadDetail(clean);
+}
+
+async function cycleDetailSymbol(direction) {
+  const symbols = state.preferences.watchlistSymbols;
+  if (!symbols.length) {
+    return;
+  }
+  const currentIndex = Math.max(symbols.indexOf(state.preferences.detailSymbol), 0);
+  const nextIndex = (currentIndex + direction + symbols.length) % symbols.length;
+  await selectDetailSymbol(symbols[nextIndex], { jump: false });
+}
+
+function jumpToSection(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function openCommandPalette(query = "") {
+  state.commandPaletteOpen = true;
+  state.paletteIndex = 0;
+  const palette = document.querySelector("#commandPalette");
+  const input = document.querySelector("#commandPaletteInput");
+  palette.hidden = false;
+  input.value = query;
+  renderCommandPaletteResults(query);
+  window.setTimeout(() => input.focus(), 0);
+}
+
+function closeCommandPalette() {
+  state.commandPaletteOpen = false;
+  const palette = document.querySelector("#commandPalette");
+  palette.hidden = true;
+}
+
+function renderCommandPaletteResults(query = "") {
+  const results = document.querySelector("#commandPaletteResults");
+  const commands = buildPaletteCommands(query);
+  state.paletteIndex = Math.min(state.paletteIndex, Math.max(commands.length - 1, 0));
+  state.paletteCommands = commands;
+  results.innerHTML = commands
+    .map(
+      (command, index) => `
+        <button
+          type="button"
+          class="command-palette-item${index === state.paletteIndex ? " active" : ""}"
+          data-command-index="${index}"
+        >
+          <div>
+            <strong>${escapeHtml(command.label)}</strong>
+            <div class="meta">${escapeHtml(command.meta)}</div>
+          </div>
+          <span class="command-palette-kind">${escapeHtml(command.kind)}</span>
+        </button>
+      `,
+    )
+    .join("") || `<div class="command-palette-empty muted">No matching commands.</div>`;
+}
+
+function syncPaletteSelection() {
+  const results = document.querySelector("#commandPaletteResults");
+  results.querySelectorAll("[data-command-index]").forEach((node, index) => {
+    node.classList.toggle("active", index === state.paletteIndex);
+  });
+}
+
+async function executePaletteCommand(command) {
+  closeCommandPalette();
+  await command.run();
+}
+
+function buildPaletteCommands(query = "") {
+  const normalized = query.trim().toLowerCase();
+  const commands = [];
+
+  const symbolUniverse = [
+    ...new Set([
+      ...state.preferences.watchlistSymbols,
+      state.preferences.detailSymbol,
+      ...state.latestQuotes.keys(),
+    ]),
+  ].filter(Boolean);
+
+  if (normalized) {
+    commands.push({
+      kind: "symbol",
+      label: `Load symbol ${query.trim().toUpperCase()}`,
+      meta: "open symbol in security workbench",
+      run: () => selectDetailSymbol(query.trim().toUpperCase(), { jump: true }),
+    });
+  }
+
+  commands.push(
+    ...symbolUniverse.map((symbol) => {
+      const quote = state.latestQuotes.get(symbol);
+      return {
+        kind: "symbol",
+        label: `Open ${symbol}`,
+        meta: `${quote?.shortName ?? "watchlist symbol"}${quote?.price != null ? ` · ${formatMoney(quote.price)}` : ""}`,
+        run: () => selectDetailSymbol(symbol, { jump: true }),
+      };
+    }),
+  );
+
+  commands.push(
+    ...SECTION_COMMANDS.map((section) => ({
+      kind: "panel",
+      label: section.label,
+      meta: section.meta,
+      run: () => jumpToSection(section.id),
+    })),
+  );
+
+  commands.push(
+    {
+      kind: "action",
+      label: "Refresh market pulse",
+      meta: "reload the cross-asset board",
+      run: () => loadMarketPulse(),
+    },
+    {
+      kind: "action",
+      label: "Refresh watchlist",
+      meta: "reload tracked quote rows",
+      run: () => loadWatchlist(state.preferences.watchlistSymbols),
+    },
+    {
+      kind: "action",
+      label: "Refresh relationship console",
+      meta: `reload intelligence for ${state.preferences.detailSymbol}`,
+      run: () => loadIntelligence(state.preferences.detailSymbol),
+    },
+  );
+
+  return commands
+    .filter((command) => {
+      if (!normalized) {
+        return true;
+      }
+      return `${command.label} ${command.meta} ${command.kind}`.toLowerCase().includes(normalized);
+    })
+    .slice(0, 14);
 }
 
 function guardAuthenticated(label) {
@@ -1501,9 +1799,17 @@ function renderOptions(calls, puts) {
   document.querySelector("#callsBody").innerHTML = calls
     .slice(0, 12)
     .map(
-      (contract) => `
-        <tr>
-          <td>${formatMoney(contract.strike)}</td>
+      (contract, index) => `
+        <tr class="intel-row">
+          <td>
+            <div class="holder-cell">
+              <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
+              <div>
+                <strong>${formatMoney(contract.strike)}</strong>
+                <div class="muted">${escapeHtml(contract.contractSymbol ?? "")}</div>
+              </div>
+            </div>
+          </td>
           <td>${formatMoney(contract.lastPrice)}</td>
           <td>${formatMoney(contract.bid)} / ${formatMoney(contract.ask)}</td>
           <td>${formatPercent((contract.impliedVolatility ?? 0) * 100)}</td>
@@ -1514,9 +1820,17 @@ function renderOptions(calls, puts) {
   document.querySelector("#putsBody").innerHTML = puts
     .slice(0, 12)
     .map(
-      (contract) => `
-        <tr>
-          <td>${formatMoney(contract.strike)}</td>
+      (contract, index) => `
+        <tr class="intel-row">
+          <td>
+            <div class="holder-cell">
+              <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
+              <div>
+                <strong>${formatMoney(contract.strike)}</strong>
+                <div class="muted">${escapeHtml(contract.contractSymbol ?? "")}</div>
+              </div>
+            </div>
+          </td>
           <td>${formatMoney(contract.lastPrice)}</td>
           <td>${formatMoney(contract.bid)} / ${formatMoney(contract.ask)}</td>
           <td>${formatPercent((contract.impliedVolatility ?? 0) * 100)}</td>
@@ -1712,6 +2026,28 @@ function renderTerminalStat(label, value, meta) {
       <small>${escapeHtml(meta)}</small>
     </article>
   `;
+}
+
+function renderWorkbenchSummary(quote, company, points) {
+  const closes = (points ?? []).map((point) => point.close).filter(Number.isFinite);
+  const trend = closes.length >= 2 ? closes.at(-1) - closes[0] : null;
+  return [
+    renderTerminalStat("Last", formatMoney(quote?.price), "current print"),
+    renderTerminalStat("1M Trend", formatSignedMoney(trend), "window move"),
+    renderTerminalStat("52W Range", `${formatMoney(company?.market?.fiftyTwoWeekLow)} / ${formatMoney(company?.market?.fiftyTwoWeekHigh)}`, "low / high"),
+    renderTerminalStat("Rating", company?.market?.analystRating ?? "n/a", company?.market?.exchange ?? "market"),
+  ].join("");
+}
+
+function renderOptionsSummary(calls, puts) {
+  const frontCall = calls?.[0] ?? null;
+  const frontPut = puts?.[0] ?? null;
+  return [
+    renderTerminalStat("Calls", String(calls?.length ?? 0), "visible contracts"),
+    renderTerminalStat("Puts", String(puts?.length ?? 0), "visible contracts"),
+    renderTerminalStat("Front Call IV", formatPercent((frontCall?.impliedVolatility ?? NaN) * 100), "top-of-book"),
+    renderTerminalStat("Front Put IV", formatPercent((frontPut?.impliedVolatility ?? NaN) * 100), "top-of-book"),
+  ].join("");
 }
 
 function renderIntelNote(note, index) {
