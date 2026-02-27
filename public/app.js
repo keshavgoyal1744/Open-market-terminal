@@ -2,6 +2,7 @@ const DEFAULT_PREFERENCES = {
   watchlistSymbols: ["AAPL", "MSFT", "NVDA", "SPY", "TLT", "GLD", "EURUSD=X", "^GSPC"],
   detailSymbol: "AAPL",
   cryptoProducts: ["BTC-USD", "ETH-USD", "SOL-USD"],
+  activePage: "overview",
   screenConfig: {
     symbols: "AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,JPM,XOM,UNH,AVGO,AMD,QQQ,SPY,TLT,GLD",
     maxPe: "",
@@ -57,6 +58,62 @@ const DEFAULT_PANEL_LAYOUT = [
   "section-events",
   "section-limitations",
 ];
+
+const PAGE_DEFINITIONS = {
+  overview: {
+    label: "Overview",
+    sectionLabel: "Overview Desk",
+    title: "Live market overview with breadth, catalysts, and scheduled risk.",
+    description:
+      "Heatmap, pulse board, macro dates, ranked market events, watchlists, filings, and live headlines stay on the home page.",
+    tags: ["Heatmap", "Market Pulse", "Events", "Desk News"],
+    sections: [
+      "section-market-pulse",
+      "section-heatmap",
+      "section-market-events",
+      "section-watchlist",
+      "section-macro",
+      "section-calendar",
+      "section-news",
+      "section-events",
+    ],
+  },
+  research: {
+    label: "Research",
+    sectionLabel: "Research Desk",
+    title: "Deep security workbench, relationship intelligence, and peer tools.",
+    description:
+      "Use this page for single-name work, filings, price history, options, supply-chain links, competitor maps, and custom screens.",
+    tags: ["Workbench", "Intel", "Options", "Screening"],
+    sections: [
+      "section-workbench",
+      "section-intelligence",
+      "section-screening",
+    ],
+  },
+  ops: {
+    label: "Ops",
+    sectionLabel: "Ops Desk",
+    title: "Portfolio state, automation, notes, alerts, crypto, and saved workflows.",
+    description:
+      "Keep automations and persistence away from the market overview so the desk stays readable during the trading day.",
+    tags: ["Portfolio", "Alerts", "Digests", "Workspaces"],
+    sections: [
+      "section-portfolio",
+      "section-alerts",
+      "section-intel-ops",
+      "section-workspaces",
+      "section-notes",
+      "section-activity",
+      "section-crypto",
+      "section-limitations",
+    ],
+  },
+};
+
+const SECTION_TO_PAGE = Object.fromEntries(
+  Object.entries(PAGE_DEFINITIONS).flatMap(([pageId, page]) => page.sections.map((sectionId) => [sectionId, pageId])),
+);
 
 const state = {
   authenticated: false,
@@ -130,6 +187,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   startHudClock();
   await loadSession();
   initializePanelLayout();
+  applyPageState();
   applyPreferencesToInputs();
   renderAuth();
   renderProtectedGuards();
@@ -484,6 +542,12 @@ function bindGlobalActions() {
     openCommandPalette("");
   });
 
+  document.querySelectorAll("[data-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setActivePage(button.dataset.page, { scroll: true });
+    });
+  });
+
   document.querySelectorAll("[data-jump-section]").forEach((button) => {
     button.addEventListener("click", () => {
       jumpToSection(button.dataset.jumpSection);
@@ -725,6 +789,44 @@ function applyPanelLayout() {
     }
     panel.style.gridColumn = `span ${panelSpan(panel.id)}`;
   });
+  applyPageState();
+}
+
+function applyPageState() {
+  const pageId = normalizePage(state.preferences.activePage);
+  state.preferences.activePage = pageId;
+  const page = PAGE_DEFINITIONS[pageId];
+
+  document.querySelectorAll("#dashboardGrid > section.panel").forEach((panel) => {
+    panel.hidden = SECTION_TO_PAGE[panel.id] !== pageId;
+  });
+
+  document.querySelectorAll("[data-page]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.page === pageId);
+  });
+
+  setText("#pageSectionLabel", page.sectionLabel);
+  setText("#pageTitle", page.title);
+  setText("#pageDescription", page.description);
+  setText("#hudPageLabel", page.label);
+
+  const tags = document.querySelector("#pageTags");
+  if (tags) {
+    tags.innerHTML = page.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("");
+  }
+}
+
+function setActivePage(pageId, options = {}) {
+  state.preferences.activePage = normalizePage(pageId);
+  applyPageState();
+  schedulePreferenceSync();
+  if (options.scroll) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+}
+
+function normalizePage(pageId) {
+  return PAGE_DEFINITIONS[pageId] ? pageId : "overview";
 }
 
 function normalizePanelLayout(panelLayout) {
@@ -1957,6 +2059,7 @@ function applyWorkspaceSnapshot(snapshot) {
     ...snapshot,
   });
   applyPanelLayout();
+  applyPageState();
   applyPreferencesToInputs();
   connectCrypto();
   void Promise.all([
@@ -1978,6 +2081,7 @@ function snapshotCurrentWorkspace() {
     watchlistSymbols: state.preferences.watchlistSymbols,
     detailSymbol: state.preferences.detailSymbol,
     cryptoProducts: state.preferences.cryptoProducts,
+    activePage: state.preferences.activePage,
     screenConfig: state.preferences.screenConfig,
     portfolio: state.preferences.portfolio,
     panelLayout: state.preferences.panelLayout,
@@ -2064,6 +2168,10 @@ async function cycleDetailSymbol(direction) {
 }
 
 function jumpToSection(id) {
+  const pageId = SECTION_TO_PAGE[id];
+  if (pageId && pageId !== state.preferences.activePage) {
+    setActivePage(pageId, { scroll: false });
+  }
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -2151,6 +2259,15 @@ function buildPaletteCommands(query = "") {
         run: () => selectDetailSymbol(symbol, { jump: true }),
       };
     }),
+  );
+
+  commands.push(
+    ...Object.entries(PAGE_DEFINITIONS).map(([pageId, page]) => ({
+      kind: "page",
+      label: `Open ${page.label} page`,
+      meta: page.description,
+      run: () => setActivePage(pageId, { scroll: true }),
+    })),
   );
 
   commands.push(
@@ -3050,6 +3167,7 @@ function mergePreferences(preferences) {
       ? preferences.cryptoProducts
       : [...DEFAULT_PREFERENCES.cryptoProducts],
     portfolio: Array.isArray(preferences?.portfolio) ? preferences.portfolio : [],
+    activePage: normalizePage(preferences?.activePage),
     panelLayout: normalizePanelLayout(preferences?.panelLayout),
     panelSizes: normalizePanelSizes(preferences?.panelSizes),
     screenConfig: {

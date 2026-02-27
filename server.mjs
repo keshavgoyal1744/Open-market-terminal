@@ -414,7 +414,7 @@ async function handleApi(request, response, url, context) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/earnings") {
-    const symbol = required(url, "symbol");
+    const symbol = requireParam(url, "symbol");
     const peerSymbols = splitList(url.searchParams.get("peerSymbols"));
     return sendJson(response, 200, await market.getEarningsIntel(symbol, peerSymbols));
   }
@@ -430,7 +430,7 @@ async function handleApi(request, response, url, context) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/heatmap-context") {
-    const symbol = required(url, "symbol");
+    const symbol = requireParam(url, "symbol");
     return sendJson(response, 200, await market.getHeatmapContext(symbol));
   }
 
@@ -440,7 +440,7 @@ async function handleApi(request, response, url, context) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/history") {
-    const symbol = required(url, "symbol");
+    const symbol = requireParam(url, "symbol");
     const range = url.searchParams.get("range") ?? "1mo";
     const interval = url.searchParams.get("interval") ?? "1d";
     let points = [];
@@ -460,7 +460,7 @@ async function handleApi(request, response, url, context) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/options") {
-    const symbol = required(url, "symbol");
+    const symbol = requireParam(url, "symbol");
     try {
       return sendJson(response, 200, await market.getOptions(symbol, url.searchParams.get("expiration")));
     } catch (error) {
@@ -469,7 +469,7 @@ async function handleApi(request, response, url, context) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/company") {
-    const symbol = required(url, "symbol");
+    const symbol = requireParam(url, "symbol");
     try {
       return sendJson(response, 200, await market.getCompany(symbol));
     } catch (error) {
@@ -478,7 +478,7 @@ async function handleApi(request, response, url, context) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/intelligence") {
-    const symbol = required(url, "symbol");
+    const symbol = requireParam(url, "symbol");
     try {
       return sendJson(response, 200, await market.getRelationshipIntel(symbol));
     } catch (error) {
@@ -487,7 +487,7 @@ async function handleApi(request, response, url, context) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/filings") {
-    const company = await market.getCompany(required(url, "symbol"));
+    const company = await market.getCompany(requireParam(url, "symbol"));
     return sendJson(response, 200, { symbol: company.symbol, filings: company.sec.filings });
   }
 
@@ -622,7 +622,7 @@ function streamActivity(request, response, context) {
   });
 }
 
-function require(url, key) {
+function requireParam(url, key) {
   const value = url.searchParams.get(key);
   if (!value) {
     throw httpError(400, `Missing required parameter: ${key}`);
@@ -678,6 +678,7 @@ function sanitizePreferencePatch(body) {
     cryptoProducts: Array.isArray(body.cryptoProducts)
       ? body.cryptoProducts.map(cleanSymbol).filter(Boolean).slice(0, 12)
       : undefined,
+    activePage: typeof body.activePage === "string" ? normalizePage(body.activePage) : undefined,
     screenConfig:
       body.screenConfig && typeof body.screenConfig === "object"
         ? {
@@ -731,6 +732,7 @@ function sanitizeWorkspaceSnapshot(snapshot) {
     cryptoProducts: Array.isArray(snapshot.cryptoProducts)
       ? snapshot.cryptoProducts.map(cleanSymbol).filter(Boolean).slice(0, 12)
       : config.defaultCryptoProducts,
+    activePage: typeof snapshot.activePage === "string" ? normalizePage(snapshot.activePage) : "overview",
     screenConfig: snapshot.screenConfig && typeof snapshot.screenConfig === "object" ? snapshot.screenConfig : {},
     portfolio: Array.isArray(snapshot.portfolio) ? snapshot.portfolio.slice(0, 250) : [],
     panelLayout: Array.isArray(snapshot.panelLayout)
@@ -750,6 +752,12 @@ function sanitizeWorkspaceSnapshot(snapshot) {
 
 function cleanSymbol(value) {
   return String(value ?? "").trim().toUpperCase();
+}
+
+function normalizePage(value) {
+  return ["overview", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
+    ? String(value).trim().toLowerCase()
+    : "overview";
 }
 
 function sanitizeDestinationInput(body) {

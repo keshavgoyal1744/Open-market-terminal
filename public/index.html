@@ -14,11 +14,9 @@
           <h1>Global market operations console</h1>
         </div>
         <nav class="topbar-nav">
-          <button type="button" class="topbar-nav-btn" data-jump-section="section-watchlist">Quotes</button>
-          <button type="button" class="topbar-nav-btn" data-jump-section="section-workbench">Workbench</button>
-          <button type="button" class="topbar-nav-btn" data-jump-section="section-market-events">Events</button>
-          <button type="button" class="topbar-nav-btn" data-jump-section="section-intelligence">Intel</button>
-          <button type="button" class="topbar-nav-btn" data-jump-section="section-portfolio">Portfolio</button>
+          <button type="button" class="topbar-nav-btn" data-page="overview">Overview</button>
+          <button type="button" class="topbar-nav-btn" data-page="research">Research</button>
+          <button type="button" class="topbar-nav-btn" data-page="ops">Ops</button>
         </nav>
         <div class="topbar-strip">
           <button id="resetLayoutButton" type="button" class="topbar-chip topbar-chip-action">
@@ -46,17 +44,16 @@
 
       <section class="hero">
         <div class="hero-copy">
-          <p class="section-label">Tactical Overview</p>
-          <h2>Market command workspace built on public feeds.</h2>
-          <p>
-            This desk now follows the same black-screen language as your `worldmonitor` app: compact chrome, hard
-            borders, keyboard-first workflows, and denser panel rhythm.
+          <p id="pageSectionLabel" class="section-label">Overview Desk</p>
+          <h2 id="pageTitle">Live market command workspace built on public feeds.</h2>
+          <p id="pageDescription">
+            Heatmap, market pulse, ranked events, watchlists, macro dates, and live public headlines in one terminal page.
           </p>
-          <div class="hero-tags">
-            <span>Mono Terminal UI</span>
-            <span>Keyboard Routing</span>
-            <span>Cross-Asset Watchlists</span>
-            <span>Relationship Intelligence</span>
+          <div id="pageTags" class="hero-tags">
+            <span>Heatmap</span>
+            <span>Market Pulse</span>
+            <span>Events</span>
+            <span>Desk News</span>
           </div>
           <p class="warning">
             Licensed tick-by-tick equities, premium research, and proprietary institutional graph depth are still
@@ -79,12 +76,16 @@
               <span class="desk-label">Palette</span>
               <span>Commands, symbols, and panel jumps</span>
             </div>
+            <div class="desk-line muted">
+              <span class="desk-label">Page</span>
+              <span id="hudPageLabel">Overview</span>
+            </div>
             <div id="symbolRibbon" class="symbol-ribbon"></div>
           </div>
           <div class="signal-log">
             <div class="signal-row"><span>ROUTING</span><strong>Ctrl/⌘ + K opens the terminal palette</strong></div>
             <div class="signal-row"><span>SYMBOLS</span><strong>[ and ] cycle through watchlist names</strong></div>
-            <div class="signal-row"><span>PANELS</span><strong>Jump from palette or top rail without scrolling</strong></div>
+            <div class="signal-row"><span>PAGES</span><strong>Overview, Research, and Ops split the desk into cleaner views</strong></div>
           </div>
         </div>
         <aside class="auth-card control-card">

@@ -1472,6 +1472,12 @@ button:hover {
   box-shadow: none;
 }
 
+.topbar-nav-btn.active {
+  border-color: #8fb8ff;
+  background: #131b29;
+  color: #eef5ff;
+}
+
 .topbar-chip {
   min-width: 96px;
   display: grid;
@@ -1680,6 +1686,10 @@ button:hover {
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 8px;
   padding: 0 10px 14px;
+}
+
+#dashboardGrid > section[hidden] {
+  display: none !important;
 }
 
 .panel {

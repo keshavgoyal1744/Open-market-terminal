@@ -54,6 +54,7 @@ export function defaultUserPreferences() {
     watchlistSymbols: [...config.defaultWatchlist],
     detailSymbol: "AAPL",
     cryptoProducts: [...config.defaultCryptoProducts],
+    activePage: "overview",
     screenConfig: {
       symbols: "AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,JPM,XOM,UNH,AVGO,AMD,QQQ,SPY,TLT,GLD",
       maxPe: "",
