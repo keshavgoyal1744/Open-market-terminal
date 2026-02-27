@@ -35,6 +35,9 @@ const state = {
   profileSyncTimer: null,
   cryptoSource: null,
   activitySource: null,
+  latestPulseCount: 0,
+  lastSyncAt: null,
+  feedStatus: "Booting",
 };
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -45,6 +48,7 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindForms();
+  startHudClock();
   await loadSession();
   applyPreferencesToInputs();
   renderAuth();
@@ -56,6 +60,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderNotes();
   renderWorkspaces();
   renderActivity();
+  renderHud();
   connectCrypto();
   await Promise.all([
     loadMarketPulse(),
@@ -375,6 +380,7 @@ async function loadSession(reloadUserData = false) {
     const session = await api("/api/auth/session");
     if (!session.authenticated) {
       teardownAuthenticatedState();
+      renderHud();
       return;
     }
 
@@ -401,8 +407,10 @@ async function loadSession(reloadUserData = false) {
     renderNotes();
     renderWorkspaces();
     renderActivity();
+    renderHud();
   } catch (error) {
     teardownAuthenticatedState();
+    renderHud();
     showStatus(error.message, true);
   }
 }
@@ -422,24 +430,29 @@ function teardownAuthenticatedState() {
   state.preferences = mergePreferences(loadStore(GUEST_PREFERENCES_KEY, DEFAULT_PREFERENCES));
   applyPreferencesToInputs();
   disconnectActivityStream();
+  renderHud();
 }
 
 async function loadWorkspaces() {
   if (!state.authenticated) {
     state.workspaces = [];
+    renderHud();
     return;
   }
   const payload = await api("/api/workspaces");
   state.workspaces = payload.workspaces;
+  renderHud();
 }
 
 async function loadAlerts() {
   if (!state.authenticated) {
     state.alerts = [];
+    renderHud();
     return;
   }
   const payload = await api("/api/alerts");
   state.alerts = payload.alerts;
+  renderHud();
 }
 
 async function loadDestinations() {
@@ -454,10 +467,12 @@ async function loadDestinations() {
 async function loadDigests() {
   if (!state.authenticated) {
     state.digests = [];
+    renderHud();
     return;
   }
   const payload = await api("/api/digests");
   state.digests = payload.digests;
+  renderHud();
 }
 
 async function loadNotes() {
@@ -481,6 +496,8 @@ async function loadActivity() {
 async function loadMarketPulse() {
   try {
     const payload = await api("/api/market-pulse");
+    state.latestPulseCount = payload.cards.length;
+    markFeedHeartbeat("Live");
     document.querySelector("#marketPulseBoard").innerHTML = payload.cards
       .map(
         (quote) => `
@@ -497,6 +514,7 @@ async function loadMarketPulse() {
     document.querySelector("#leadersList").innerHTML = payload.leaders.map(renderQuoteListItem).join("");
     document.querySelector("#laggardsList").innerHTML = payload.laggards.map(renderQuoteListItem).join("");
   } catch (error) {
+    setFeedStatus("Degraded");
     showStatus(error.message, true);
   }
 }
@@ -508,6 +526,7 @@ async function loadWatchlist(symbols) {
 
   try {
     const payload = await api(`/api/quote?symbols=${encodeURIComponent(symbols.join(","))}`);
+    markFeedHeartbeat("Live");
     payload.quotes.forEach((quote) => {
       state.latestQuotes.set(quote.symbol, quote);
     });
@@ -529,7 +548,9 @@ async function loadWatchlist(symbols) {
 
     document.querySelector("#watchlistStatus").textContent = `Tracking ${payload.quotes.length} symbols.`;
     renderPortfolio();
+    renderHud();
   } catch (error) {
+    setFeedStatus("Degraded");
     showStatus(error.message, true);
   }
 }
@@ -555,6 +576,7 @@ async function loadWatchlistEvents() {
         `,
       )
       .join("");
+    renderHud();
   } catch (error) {
     showStatus(error.message, true);
   }
@@ -585,7 +607,9 @@ async function loadDetail(symbol) {
     renderOptions(options.calls, options.puts);
     renderPortfolio();
     await loadIntelligence(symbol);
+    renderHud();
   } catch (error) {
+    setFeedStatus("Degraded");
     showStatus(error.message, true);
   }
 }
@@ -593,12 +617,14 @@ async function loadDetail(symbol) {
 async function loadMacro() {
   try {
     const payload = await api("/api/macro");
+    markFeedHeartbeat("Live");
     document.querySelector("#macroFacts").innerHTML = [
       fact("Unemployment", payload.unemploymentRate?.display ?? "n/a", payload.unemploymentRate?.date),
       fact("Inflation YoY", payload.inflationYoY?.display ?? "n/a", payload.asOf),
       fact("Nonfarm Payrolls", payload.nonfarmPayrolls?.display ?? "n/a", payload.nonfarmPayrolls?.date),
     ].join("");
   } catch (error) {
+    setFeedStatus("Degraded");
     showStatus(error.message, true);
   }
 }
@@ -606,6 +632,7 @@ async function loadMacro() {
 async function loadYieldCurve() {
   try {
     const payload = await api("/api/yield-curve");
+    markFeedHeartbeat("Live");
     document.querySelector("#yieldCurveChart").innerHTML = renderBarChart(
       payload.points.map((point) => point.value),
       payload.points.map((point) => point.tenor),
@@ -613,6 +640,7 @@ async function loadYieldCurve() {
       "%",
     );
   } catch (error) {
+    setFeedStatus("Degraded");
     showStatus(error.message, true);
   }
 }
@@ -620,6 +648,7 @@ async function loadYieldCurve() {
 async function loadOrderBook(product) {
   try {
     const payload = await api(`/api/crypto/orderbook?product=${encodeURIComponent(product)}`);
+    markFeedHeartbeat("Live");
     document.querySelector("#bidsBody").innerHTML = payload.bids
       .map(
         (entry) => `
@@ -643,6 +672,7 @@ async function loadOrderBook(product) {
       )
       .join("");
   } catch (error) {
+    setFeedStatus("Degraded");
     showStatus(error.message, true);
   }
 }
@@ -712,6 +742,7 @@ function connectCrypto() {
   state.cryptoSource.onmessage = (event) => {
     const payload = JSON.parse(event.data);
     state.cryptoQuotes.set(payload.productId, payload);
+    markFeedHeartbeat("Streaming");
     maybeShowAlertNotification(payload.productId, payload.price);
     board.innerHTML = products
       .map((product) => renderCryptoCard(state.cryptoQuotes.get(product) ?? { productId: product }))
@@ -719,6 +750,7 @@ function connectCrypto() {
   };
 
   state.cryptoSource.onerror = () => {
+    setFeedStatus("Retrying");
     showStatus("Crypto stream disconnected. Retrying automatically.", true);
   };
 }
@@ -817,6 +849,44 @@ function renderAuth() {
     loginForm.hidden = false;
     logoutButton.hidden = true;
   }
+
+  renderHud();
+}
+
+function renderHud() {
+  setText("#hudMode", state.authenticated ? "Secure" : "Guest");
+  setText("#hudFeedStatus", state.feedStatus);
+  setText("#hudTrackedCount", String(state.preferences.watchlistSymbols.length));
+  setText("#hudPulseCount", String(state.latestPulseCount));
+  setText(
+    "#hudAutomationCount",
+    String((state.alerts?.length ?? 0) + (state.digests?.filter((digest) => digest.active).length ?? 0)),
+  );
+  setText("#hudWorkspaceCount", String(state.authenticated ? state.workspaces.length : 0));
+  setText("#hudLastSync", state.lastSyncAt ? formatTime(state.lastSyncAt) : "Pending");
+  setText("#hudIntelSymbol", `${state.preferences.detailSymbol} relationship focus`);
+}
+
+function startHudClock() {
+  const tick = () => {
+    const now = new Date();
+    const stamp = `${String(now.getUTCHours()).padStart(2, "0")}:${String(now.getUTCMinutes()).padStart(2, "0")}:${String(now.getUTCSeconds()).padStart(2, "0")}`;
+    setText("#hudClock", stamp);
+  };
+
+  tick();
+  window.setInterval(tick, 1000);
+}
+
+function markFeedHeartbeat(status = "Live") {
+  state.feedStatus = status;
+  state.lastSyncAt = Date.now();
+  renderHud();
+}
+
+function setFeedStatus(status) {
+  state.feedStatus = status;
+  renderHud();
 }
 
 function renderProtectedGuards() {
@@ -1152,6 +1222,7 @@ function applyPreferencesToInputs() {
   document.querySelector("#screenMinChange").value = state.preferences.screenConfig.minChangePct;
   document.querySelector("#compareSymbolsInput").value = state.preferences.watchlistSymbols.join(",");
   applyCryptoPreferences();
+  renderHud();
 }
 
 function applyCryptoPreferences() {
@@ -1761,6 +1832,10 @@ function formatDate(value) {
   return value ? new Date(value).toLocaleString() : "n/a";
 }
 
+function formatTime(value) {
+  return value ? new Date(value).toLocaleTimeString() : "n/a";
+}
+
 function tone(value) {
   if (!Number.isFinite(value)) {
     return "";
@@ -1803,4 +1878,11 @@ function safeUrl(value) {
     return "#";
   }
   return "#";
+}
+
+function setText(selector, value) {
+  const element = document.querySelector(selector);
+  if (element) {
+    element.textContent = value;
+  }
 }
