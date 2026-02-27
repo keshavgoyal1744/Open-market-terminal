@@ -63,5 +63,6 @@ export function defaultUserPreferences() {
     },
     portfolio: [],
     panelLayout: [],
+    panelSizes: {},
   };
 }

@@ -213,6 +213,61 @@ export async function getCompanyOverview(symbol) {
   };
 }
 
+export async function getEarningsDetails(symbol) {
+  const url = new URL(`/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`, BASE_URL);
+  url.searchParams.set(
+    "modules",
+    [
+      "price",
+      "calendarEvents",
+      "earningsHistory",
+      "earningsTrend",
+      "financialData",
+    ].join(","),
+  );
+
+  try {
+    const payload = await fetchYahooJson(url);
+    const result = payload?.quoteSummary?.result?.[0];
+    if (!result) {
+      throw new Error(`No earnings data found for ${symbol}.`);
+    }
+
+    return {
+      symbol: result.price?.symbol ?? symbol.toUpperCase(),
+      shortName: result.price?.shortName ?? null,
+      earningsStart: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.[0]),
+      earningsEnd: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.at(-1)),
+      history: normalizeEarningsHistory(result.earningsHistory?.history),
+      trend: normalizeEarningsTrend(result.earningsTrend?.trend),
+      earningsAverage: unwrapFormatted(result.financialData?.earningsAverage),
+      earningsLow: unwrapFormatted(result.financialData?.earningsLow),
+      earningsHigh: unwrapFormatted(result.financialData?.earningsHigh),
+      revenueEstimate: unwrapFormatted(result.financialData?.revenueEstimate),
+      recommendation: result.financialData?.recommendationKey ?? null,
+    };
+  } catch (error) {
+    if (!shouldUseChartFallback(error)) {
+      throw error;
+    }
+  }
+
+  const overview = await getCompanyOverview(symbol);
+  return {
+    symbol: overview.symbol ?? symbol.toUpperCase(),
+    shortName: overview.shortName ?? null,
+    earningsStart: overview.earningsStart ?? null,
+    earningsEnd: overview.earningsEnd ?? null,
+    history: [],
+    trend: [],
+    earningsAverage: null,
+    earningsLow: null,
+    earningsHigh: null,
+    revenueEstimate: null,
+    recommendation: overview.analystRating ?? null,
+  };
+}
+
 export async function screenSymbols(symbols, filters = {}) {
   const quotes = await getQuotes(symbols);
   return quotes.filter((quote) => {
@@ -398,6 +453,40 @@ function normalizeInsiderTransactions(node) {
     value: unwrapFormatted(entry.value),
     ownership: entry.ownership ?? null,
   }));
+}
+
+function normalizeEarningsHistory(history = []) {
+  return history.slice(0, 8).map((entry) => ({
+    quarter: normalizeCalendarDate(entry.quarter),
+    epsEstimate: unwrapFormatted(entry.epsEstimate),
+    epsActual: unwrapFormatted(entry.epsActual),
+    difference: unwrapFormatted(entry.epsDifference ?? entry.difference),
+    surprisePercent: unwrapFormatted(entry.surprisePercent),
+  }));
+}
+
+function normalizeEarningsTrend(trend = []) {
+  return trend.slice(0, 6).map((entry) => ({
+    period: entry.period ?? null,
+    endDate: normalizeCalendarDate(entry.endDate),
+    growth: unwrapFormatted(entry.growth),
+    earningsEstimate: normalizeEstimateBlock(entry.earningsEstimate),
+    revenueEstimate: normalizeEstimateBlock(entry.revenueEstimate),
+  }));
+}
+
+function normalizeEstimateBlock(block) {
+  if (!block) {
+    return null;
+  }
+  return {
+    avg: unwrapFormatted(block.avg),
+    low: unwrapFormatted(block.low),
+    high: unwrapFormatted(block.high),
+    yearAgoEps: unwrapFormatted(block.yearAgoEps),
+    numberOfAnalysts: unwrapFormatted(block.numberOfAnalysts),
+    growth: unwrapFormatted(block.growth),
+  };
 }
 
 function normalizeCalendarDate(value) {

@@ -413,6 +413,18 @@ async function handleApi(request, response, url, context) {
     return sendJson(response, 200, await market.getDeskNews(symbols, cleanSymbol(focusSymbol)));
   }
 
+  if (request.method === "GET" && url.pathname === "/api/earnings") {
+    const symbol = required(url, "symbol");
+    const peerSymbols = splitList(url.searchParams.get("peerSymbols"));
+    return sendJson(response, 200, await market.getEarningsIntel(symbol, peerSymbols));
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/market-events") {
+    const symbols = splitList(url.searchParams.get("symbols"));
+    const focusSymbol = url.searchParams.get("focusSymbol") ?? null;
+    return sendJson(response, 200, await market.getMarketEvents(symbols, cleanSymbol(focusSymbol)));
+  }
+
   if (request.method === "GET" && url.pathname === "/api/quote") {
     const symbols = splitList(url.searchParams.get("symbols"));
     return sendJson(response, 200, { quotes: await market.getQuotes(symbols) });
@@ -646,6 +658,14 @@ function sanitizePreferencePatch(body) {
           .filter(Boolean)
           .slice(0, 32)
       : undefined,
+    panelSizes:
+      body.panelSizes && typeof body.panelSizes === "object"
+        ? Object.fromEntries(
+            Object.entries(body.panelSizes)
+              .map(([panelId, span]) => [String(panelId).trim(), Number(span)])
+              .filter(([panelId, span]) => panelId && Number.isFinite(span)),
+          )
+        : undefined,
   };
 
   return Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
@@ -669,6 +689,14 @@ function sanitizeWorkspaceSnapshot(snapshot) {
     panelLayout: Array.isArray(snapshot.panelLayout)
       ? snapshot.panelLayout.map((panelId) => String(panelId ?? "").trim()).filter(Boolean).slice(0, 32)
       : [],
+    panelSizes:
+      snapshot.panelSizes && typeof snapshot.panelSizes === "object"
+        ? Object.fromEntries(
+            Object.entries(snapshot.panelSizes)
+              .map(([panelId, span]) => [String(panelId).trim(), Number(span)])
+              .filter(([panelId, span]) => panelId && Number.isFinite(span)),
+          )
+        : {},
     selectedWorkspaceId: typeof snapshot.selectedWorkspaceId === "string" ? snapshot.selectedWorkspaceId : null,
   };
 }

@@ -1,21 +1,25 @@
 import { fetchText } from "../http.mjs";
 
 const BLS_ICS_URL = "https://www.bls.gov/schedule/news_release/bls.ics";
-
-const FOMC_EVENTS = [
-  { date: "2026-01-28T19:00:00.000Z", title: "FOMC Rate Decision", source: "Federal Reserve", note: "Scheduled January 27-28 meeting." },
-  { date: "2026-03-18T18:00:00.000Z", title: "FOMC Rate Decision", source: "Federal Reserve", note: "Scheduled March 17-18 meeting." },
-  { date: "2026-04-29T18:00:00.000Z", title: "FOMC Rate Decision", source: "Federal Reserve", note: "Scheduled April 28-29 meeting." },
-  { date: "2026-06-17T18:00:00.000Z", title: "FOMC Rate Decision", source: "Federal Reserve", note: "Scheduled June 16-17 meeting." },
-  { date: "2026-07-29T18:00:00.000Z", title: "FOMC Rate Decision", source: "Federal Reserve", note: "Scheduled July 28-29 meeting." },
-  { date: "2026-09-16T18:00:00.000Z", title: "FOMC Rate Decision", source: "Federal Reserve", note: "Scheduled September 15-16 meeting." },
-  { date: "2026-10-28T18:00:00.000Z", title: "FOMC Rate Decision", source: "Federal Reserve", note: "Scheduled October 27-28 meeting." },
-  { date: "2026-12-09T19:00:00.000Z", title: "FOMC Rate Decision", source: "Federal Reserve", note: "Scheduled December 8-9 meeting." },
-];
+const FED_FOMC_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm";
+const MONTH_INDEX = new Map([
+  ["january", 0],
+  ["february", 1],
+  ["march", 2],
+  ["april", 3],
+  ["may", 4],
+  ["june", 5],
+  ["july", 6],
+  ["august", 7],
+  ["september", 8],
+  ["october", 9],
+  ["november", 10],
+  ["december", 11],
+]);
 
 export async function getMacroCalendar() {
-  const bls = await getBlsCalendar().catch(() => []);
-  const combined = [...FOMC_EVENTS.map(normalizeFomcEvent), ...bls]
+  const [bls, fed] = await Promise.all([getBlsCalendar().catch(() => []), getFedCalendar().catch(() => [])]);
+  const combined = [...fed, ...bls]
     .filter((event) => Number.isFinite(Date.parse(event.date)))
     .sort((left, right) => new Date(left.date) - new Date(right.date));
 
@@ -96,18 +100,6 @@ function parseIcsDate(value) {
   return zulu ? new Date(timestamp).toISOString() : new Date(timestamp).toISOString();
 }
 
-function normalizeFomcEvent(event, index) {
-  return {
-    id: `fomc-${index}-${event.date}`,
-    date: event.date,
-    title: event.title,
-    category: "policy",
-    importance: "critical",
-    source: event.source,
-    note: event.note,
-  };
-}
-
 function classifyMacroCategory(summary) {
   const text = summary.toLowerCase();
   if (text.includes("consumer price") || text.includes("inflation") || text.includes("ppi")) {
@@ -144,4 +136,94 @@ function inUpcomingWindow(event) {
   const earliest = now - 1000 * 60 * 60 * 24 * 3;
   const latest = now + 1000 * 60 * 60 * 24 * 120;
   return timestamp >= earliest && timestamp <= latest;
+}
+
+async function getFedCalendar() {
+  const html = await fetchText(FED_FOMC_URL, {
+    headers: {
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    },
+  });
+
+  const direct = parseFedHtmlByYear(html);
+  if (direct.length) {
+    return direct;
+  }
+
+  return parseFedTextFallback(html);
+}
+
+function parseFedHtmlByYear(html) {
+  const events = [];
+  const sectionPattern = /<h[1-6][^>]*>\s*(20\d{2})\s*FOMC Meetings?\s*<\/h[1-6]>([\s\S]*?)(?=<h[1-6][^>]*>\s*20\d{2}\s*FOMC Meetings?|$)/gi;
+  let sectionMatch;
+  while ((sectionMatch = sectionPattern.exec(html))) {
+    const year = Number(sectionMatch[1]);
+    const block = sectionMatch[2];
+    const datePattern = />(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:-(\d{1,2}))?\*?</gi;
+    let dateMatch;
+    while ((dateMatch = datePattern.exec(block))) {
+      const month = MONTH_INDEX.get(dateMatch[1].toLowerCase());
+      const day = Number(dateMatch[3] ?? dateMatch[2]);
+      const date = new Date(Date.UTC(year, month, day, 18, 0, 0)).toISOString();
+      events.push({
+        id: `fomc-${year}-${month + 1}-${day}`,
+        date,
+        title: "FOMC Rate Decision",
+        category: "policy",
+        importance: "critical",
+        source: "Federal Reserve",
+        note: `${dateMatch[1]} ${dateMatch[2]}${dateMatch[3] ? `-${dateMatch[3]}` : ""} meeting window.`,
+      });
+    }
+  }
+
+  return dedupeEvents(events);
+}
+
+function parseFedTextFallback(html) {
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ");
+
+  const events = [];
+  const sectionPattern = /(20\d{2})\s+FOMC Meetings?([\s\S]*?)(?=20\d{2}\s+FOMC Meetings?|$)/gi;
+  let sectionMatch;
+  while ((sectionMatch = sectionPattern.exec(text))) {
+    const year = Number(sectionMatch[1]);
+    const block = sectionMatch[2];
+    const datePattern = /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:-(\d{1,2}))?/gi;
+    let dateMatch;
+    while ((dateMatch = datePattern.exec(block))) {
+      const month = MONTH_INDEX.get(dateMatch[1].toLowerCase());
+      const day = Number(dateMatch[3] ?? dateMatch[2]);
+      const date = new Date(Date.UTC(year, month, day, 18, 0, 0)).toISOString();
+      events.push({
+        id: `fomc-fallback-${year}-${month + 1}-${day}`,
+        date,
+        title: "FOMC Rate Decision",
+        category: "policy",
+        importance: "critical",
+        source: "Federal Reserve",
+        note: `${dateMatch[1]} ${dateMatch[2]}${dateMatch[3] ? `-${dateMatch[3]}` : ""} meeting window.`,
+      });
+    }
+  }
+
+  return dedupeEvents(events);
+}
+
+function dedupeEvents(events) {
+  const seen = new Set();
+  return events.filter((event) => {
+    const key = `${event.title}:${event.date}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }

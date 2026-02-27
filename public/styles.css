@@ -1690,6 +1690,7 @@ button:hover {
 }
 
 .panel-market-pulse,
+.panel-market-events,
 .intelligence-panel,
 #section-screening,
 #section-events,
@@ -1720,6 +1721,12 @@ button:hover {
   border-bottom: 1px solid var(--line);
 }
 
+.workbench-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .panel-drag-handle {
   margin-left: auto;
   display: inline-flex;
@@ -1736,8 +1743,29 @@ button:hover {
   cursor: grabbing;
 }
 
+.panel-resize-handle {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: #0b0b0b;
+  color: #909090;
+  cursor: ew-resize;
+  z-index: 2;
+}
+
 .panel-dragging {
   opacity: 0.45;
+}
+
+.panel-resizing {
+  box-shadow: inset 0 0 0 1px #8fb8ff;
 }
 
 .panel-drop-before {
@@ -1904,6 +1932,38 @@ textarea:focus {
 
 .news-item a:hover {
   color: #8fb8ff;
+}
+
+.event-link {
+  color: #8fb8ff;
+  text-decoration: none;
+  font-size: 11px;
+}
+
+.event-link:hover {
+  color: #c7d9ff;
+}
+
+.earnings-drawer {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  width: min(560px, 100%);
+  height: calc(100% - 36px);
+  display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
+  background: #0b0b0b;
+  border-left: 1px solid var(--line);
+  box-shadow: -24px 0 48px rgba(0, 0, 0, 0.45);
+  overflow: auto;
+  z-index: 3;
+}
+
+.earnings-drawer-grid {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
 }
 
 .stacked-form {
@@ -2196,11 +2256,26 @@ th {
   .panel-news,
   .panel,
   .panel-market-pulse,
+  .panel-market-events,
   .intelligence-panel,
   #section-screening,
   #section-events,
   #section-limitations {
     grid-column: 1 / -1;
+  }
+
+  .workbench-header-actions {
+    display: grid;
+    gap: 8px;
+  }
+
+  .earnings-drawer {
+    position: static;
+    width: 100%;
+    height: auto;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    box-shadow: none;
   }
 }
 
@@ -2243,5 +2318,9 @@ th {
 
   .inline-form {
     grid-template-columns: 1fr;
+  }
+
+  .panel-resize-handle {
+    display: none;
   }
 }

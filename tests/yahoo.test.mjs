@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getCompanyOverview, getQuotes } from "../src/providers/yahoo.mjs";
+import { getCompanyOverview, getEarningsDetails, getQuotes } from "../src/providers/yahoo.mjs";
 
 test("quotes fall back to chart data when Yahoo batch quotes are unauthorized", async (context) => {
   const originalFetch = global.fetch;
@@ -182,6 +182,79 @@ test("company overview extracts earnings dates from calendar events", async (con
   assert.equal(overview.symbol, "MSFT");
   assert.equal(overview.earningsStart, "2026-02-28T00:00:00.000Z");
   assert.equal(overview.earningsEnd, "2026-03-01T00:00:00.000Z");
+});
+
+test("earnings details parses trend and surprise history", async (context) => {
+  const originalFetch = global.fetch;
+  context.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  global.fetch = async (url) => {
+    const href = url.toString();
+    if (href.includes("/v10/finance/quoteSummary/NVDA")) {
+      return jsonResponse(200, {
+        quoteSummary: {
+          result: [
+            {
+              price: {
+                symbol: "NVDA",
+                shortName: "NVIDIA Corporation",
+              },
+              calendarEvents: {
+                earnings: {
+                  earningsDate: [{ raw: 1772236800, fmt: "2026-02-28" }],
+                },
+              },
+              financialData: {
+                earningsAverage: { raw: 1.2 },
+                earningsLow: { raw: 1.1 },
+                earningsHigh: { raw: 1.3 },
+                revenueEstimate: { raw: 45000000000 },
+                recommendationKey: "buy",
+              },
+              earningsHistory: {
+                history: [
+                  {
+                    quarter: { raw: 1764547200, fmt: "2025-12-01" },
+                    epsEstimate: { raw: 0.88 },
+                    epsActual: { raw: 0.95 },
+                    surprisePercent: { raw: 7.95 },
+                  },
+                ],
+              },
+              earningsTrend: {
+                trend: [
+                  {
+                    period: "0q",
+                    endDate: { raw: 1772236800, fmt: "2026-02-28" },
+                    earningsEstimate: {
+                      avg: { raw: 1.2 },
+                      low: { raw: 1.1 },
+                      high: { raw: 1.3 },
+                      numberOfAnalysts: { raw: 22 },
+                    },
+                    revenueEstimate: {
+                      avg: { raw: 45000000000 },
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      });
+    }
+
+    throw new Error(`Unexpected URL: ${href}`);
+  };
+
+  const earnings = await getEarningsDetails("NVDA");
+
+  assert.equal(earnings.symbol, "NVDA");
+  assert.equal(earnings.earningsAverage, 1.2);
+  assert.equal(earnings.history[0].epsActual, 0.95);
+  assert.equal(earnings.trend[0].earningsEstimate.numberOfAnalysts, 22);
 });
 
 function makeChartPayload({

@@ -11,11 +11,33 @@ const DEFAULT_PREFERENCES = {
   },
   portfolio: [],
   panelLayout: [],
+  panelSizes: {},
 };
 
 const GUEST_PREFERENCES_KEY = "omt-guest-preferences";
+const DEFAULT_PANEL_SIZES = {
+  "section-market-pulse": 12,
+  "section-market-events": 12,
+  "section-watchlist": 5,
+  "section-workbench": 7,
+  "section-intelligence": 12,
+  "section-macro": 3,
+  "section-calendar": 5,
+  "section-news": 7,
+  "section-portfolio": 3,
+  "section-alerts": 3,
+  "section-intel-ops": 3,
+  "section-workspaces": 3,
+  "section-notes": 3,
+  "section-activity": 3,
+  "section-crypto": 3,
+  "section-screening": 12,
+  "section-events": 12,
+  "section-limitations": 12,
+};
 const DEFAULT_PANEL_LAYOUT = [
   "section-market-pulse",
+  "section-market-events",
   "section-watchlist",
   "section-workbench",
   "section-intelligence",
@@ -61,18 +83,23 @@ const state = {
   currentDetailQuote: null,
   currentCompany: null,
   currentOptions: null,
+  currentEarnings: null,
   calendarEvents: [],
   newsItems: [],
+  marketEvents: [],
   paletteCommands: [],
   commandPaletteOpen: false,
   paletteIndex: 0,
   dragPanelId: null,
+  resizePanelId: null,
+  earningsDrawerOpen: false,
 };
 
 const SECTION_COMMANDS = [
   { id: "section-market-pulse", label: "Jump to Market Pulse", meta: "cross-asset pulse board" },
   { id: "section-watchlist", label: "Jump to Watchlist", meta: "tracked market quotes" },
   { id: "section-workbench", label: "Jump to Security Workbench", meta: "detail, filings, and options" },
+  { id: "section-market-events", label: "Jump to Market Events", meta: "ranked event timeline" },
   { id: "section-intelligence", label: "Jump to Relationship Console", meta: "ownership and supply chains" },
   { id: "section-calendar", label: "Jump to Desk Calendar", meta: "earnings, Fed, and macro dates" },
   { id: "section-news", label: "Jump to Market News", meta: "live public headlines" },
@@ -109,6 +136,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   connectCrypto();
   await Promise.all([
     loadMarketPulse(),
+    loadMarketEvents(),
     loadWatchlist(state.preferences.watchlistSymbols),
     loadDetail(state.preferences.detailSymbol),
     loadMacro(),
@@ -187,12 +215,16 @@ function bindForms() {
     await loadMarketPulse();
   });
 
+  document.querySelector("#refreshEventsButton").addEventListener("click", async () => {
+    await loadMarketEvents(true);
+  });
+
   document.querySelector("#watchlistForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     state.preferences.watchlistSymbols = splitSymbols(document.querySelector("#watchlistInput").value);
     schedulePreferenceSync();
     await loadWatchlist(state.preferences.watchlistSymbols);
-    await Promise.all([loadWatchlistEvents(), loadDeskCalendar(true), loadDeskNews(true)]);
+    await Promise.all([loadWatchlistEvents(), loadDeskCalendar(true), loadDeskNews(true), loadMarketEvents(true)]);
   });
 
   document.querySelector("#saveWatchlistButton").addEventListener("click", async () => {
@@ -428,6 +460,7 @@ function bindForms() {
 function bindGlobalActions() {
   document.querySelector("#resetLayoutButton")?.addEventListener("click", () => {
     state.preferences.panelLayout = [...DEFAULT_PANEL_LAYOUT];
+    state.preferences.panelSizes = { ...DEFAULT_PANEL_SIZES };
     applyPanelLayout();
     schedulePreferenceSync();
     showStatus("Dashboard layout reset.", false);
@@ -473,6 +506,14 @@ function bindGlobalActions() {
 
   document.querySelector("#refreshNewsButton")?.addEventListener("click", async () => {
     await loadDeskNews(true);
+  });
+
+  document.querySelector("#toggleEarningsDrawerButton")?.addEventListener("click", () => {
+    toggleEarningsDrawer(true);
+  });
+
+  document.querySelector("#closeEarningsDrawerButton")?.addEventListener("click", () => {
+    toggleEarningsDrawer(false);
   });
 
   document.addEventListener("keydown", async (event) => {
@@ -525,6 +566,10 @@ function bindGlobalActions() {
       await cycleDetailSymbol(1);
     }
   });
+
+  window.addEventListener("resize", () => {
+    applyPanelLayout();
+  });
 }
 
 function initializePanelLayout() {
@@ -563,6 +608,19 @@ function initializePanelLayout() {
     });
 
     header.append(handle);
+
+    const resizeHandle = document.createElement("button");
+    resizeHandle.type = "button";
+    resizeHandle.className = "panel-resize-handle";
+    resizeHandle.setAttribute("aria-label", `Resize ${panel.id}`);
+    resizeHandle.innerHTML = "<span>//</span>";
+    resizeHandle.addEventListener("pointerdown", (event) => {
+      if (window.innerWidth <= 1320) {
+        return;
+      }
+      startPanelResize(panel, event);
+    });
+    panel.append(resizeHandle);
   });
 
   dashboard.addEventListener("dragover", (event) => {
@@ -619,9 +677,15 @@ function movePanel(sourceId, targetId, direction) {
 function applyPanelLayout() {
   const layout = normalizePanelLayout(state.preferences.panelLayout);
   state.preferences.panelLayout = layout;
+  state.preferences.panelSizes = normalizePanelSizes(state.preferences.panelSizes);
   document.querySelectorAll("#dashboardGrid > section.panel").forEach((panel) => {
     const order = layout.indexOf(panel.id);
     panel.style.order = String(order === -1 ? DEFAULT_PANEL_LAYOUT.length : order);
+    if (window.innerWidth <= 1320) {
+      panel.style.gridColumn = "";
+      return;
+    }
+    panel.style.gridColumn = `span ${panelSpan(panel.id)}`;
   });
 }
 
@@ -637,6 +701,59 @@ function normalizePanelLayout(panelLayout) {
   });
 
   return [...normalized, ...DEFAULT_PANEL_LAYOUT.filter((panelId) => !seen.has(panelId))];
+}
+
+function normalizePanelSizes(panelSizes) {
+  const input = panelSizes && typeof panelSizes === "object" ? panelSizes : {};
+  const normalized = {};
+  for (const panelId of DEFAULT_PANEL_LAYOUT) {
+    const fallback = DEFAULT_PANEL_SIZES[panelId] ?? 3;
+    const value = Number(input[panelId]);
+    normalized[panelId] = clamp(Number.isFinite(value) ? Math.round(value) : fallback, 3, 12);
+  }
+  return normalized;
+}
+
+function panelSpan(panelId) {
+  return normalizePanelSizes(state.preferences.panelSizes)[panelId] ?? DEFAULT_PANEL_SIZES[panelId] ?? 3;
+}
+
+function startPanelResize(panel, event) {
+  event.preventDefault();
+  const dashboard = document.querySelector("#dashboardGrid");
+  if (!dashboard) {
+    return;
+  }
+
+  state.resizePanelId = panel.id;
+  panel.classList.add("panel-resizing");
+  const dashboardRect = dashboard.getBoundingClientRect();
+  const styles = window.getComputedStyle(dashboard);
+  const gap = Number.parseFloat(styles.columnGap || styles.gap || "8") || 8;
+  const columnWidth = (dashboardRect.width - gap * 11) / 12;
+  const startSpan = panelSpan(panel.id);
+  const startX = event.clientX;
+
+  const onMove = (moveEvent) => {
+    const deltaColumns = Math.round((moveEvent.clientX - startX) / (columnWidth + gap));
+    const nextSpan = clamp(startSpan + deltaColumns, 3, 12);
+    state.preferences.panelSizes = {
+      ...normalizePanelSizes(state.preferences.panelSizes),
+      [panel.id]: nextSpan,
+    };
+    applyPanelLayout();
+  };
+
+  const onUp = () => {
+    panel.classList.remove("panel-resizing");
+    state.resizePanelId = null;
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    schedulePreferenceSync();
+  };
+
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
 }
 
 function clearPanelDropState() {
@@ -703,7 +820,9 @@ function teardownAuthenticatedState() {
   state.activity = [];
   state.selectedWorkspaceId = null;
   state.selectedNoteId = null;
+  state.currentEarnings = null;
   state.preferences = mergePreferences(loadStore(GUEST_PREFERENCES_KEY, DEFAULT_PREFERENCES));
+  toggleEarningsDrawer(false);
   applyPanelLayout();
   applyPreferencesToInputs();
   disconnectActivityStream();
@@ -906,7 +1025,7 @@ async function loadDetail(symbol) {
     document.querySelector("#optionsSummary").innerHTML = renderOptionsSummary(options.calls, options.puts);
     renderSymbolRibbon();
     renderPortfolio();
-    await loadIntelligence(symbol);
+    await Promise.all([loadIntelligence(symbol), loadEarningsIntel(symbol)]);
     renderHud();
   } catch (error) {
     setFeedStatus("Degraded");
@@ -943,6 +1062,38 @@ async function loadDeskNews(force = false) {
     );
     state.newsItems = payload.items ?? [];
     document.querySelector("#newsList").innerHTML = renderNewsFeed(state.newsItems);
+    markFeedHeartbeat("Live");
+  } catch (error) {
+    showStatus(error.message, true);
+  }
+}
+
+async function loadEarningsIntel(symbol) {
+  const peers = state.preferences.watchlistSymbols.filter((entry) => entry !== symbol).slice(0, 10);
+
+  try {
+    const payload = await api(
+      `/api/earnings?symbol=${encodeURIComponent(symbol)}&peerSymbols=${encodeURIComponent(peers.join(","))}`,
+    );
+    state.currentEarnings = payload;
+    renderEarningsDrawer(payload);
+  } catch (error) {
+    state.currentEarnings = null;
+    renderEarningsDrawer(null, error.message);
+  }
+}
+
+async function loadMarketEvents(force = false) {
+  const symbols = state.preferences.watchlistSymbols.slice(0, 16);
+  const focusSymbol = state.preferences.detailSymbol;
+
+  try {
+    const payload = await api(
+      `/api/market-events?symbols=${encodeURIComponent(symbols.join(","))}&focusSymbol=${encodeURIComponent(focusSymbol)}${force ? "&force=1" : ""}`,
+    );
+    state.marketEvents = payload.events ?? [];
+    document.querySelector("#marketEventsSummary").innerHTML = renderMarketEventsSummary(payload.summary ?? {});
+    document.querySelector("#marketEventsList").innerHTML = renderMarketEvents(payload.events ?? []);
     markFeedHeartbeat("Live");
   } catch (error) {
     showStatus(error.message, true);
@@ -1610,6 +1761,7 @@ function applyWorkspaceSnapshot(snapshot) {
   applyPreferencesToInputs();
   connectCrypto();
   void Promise.all([
+    loadMarketEvents(),
     loadWatchlist(state.preferences.watchlistSymbols),
     loadWatchlistEvents(),
     loadDetail(state.preferences.detailSymbol),
@@ -1629,6 +1781,7 @@ function snapshotCurrentWorkspace() {
     screenConfig: state.preferences.screenConfig,
     portfolio: state.preferences.portfolio,
     panelLayout: state.preferences.panelLayout,
+    panelSizes: state.preferences.panelSizes,
     selectedWorkspaceId: state.selectedWorkspaceId,
   };
 }
@@ -1671,6 +1824,7 @@ function persistGuestPreferencesIfNeeded() {
 
 function scheduleRefresh() {
   setInterval(() => void loadMarketPulse(), 45000);
+  setInterval(() => void loadMarketEvents(false), 120000);
   setInterval(() => void loadWatchlist(state.preferences.watchlistSymbols), 30000);
   setInterval(() => void loadWatchlistEvents(), 120000);
   setInterval(() => void loadIntelligence(state.preferences.detailSymbol), 180000);
@@ -1692,7 +1846,7 @@ async function selectDetailSymbol(symbol, options = {}) {
   if (options.jump) {
     jumpToSection("section-workbench");
   }
-  await Promise.all([loadDetail(clean), loadDeskNews(false)]);
+  await Promise.all([loadDetail(clean), loadDeskNews(false), loadMarketEvents(false)]);
 }
 
 async function cycleDetailSymbol(direction) {
@@ -1837,10 +1991,19 @@ function buildPaletteCommands(query = "") {
     },
     {
       kind: "action",
+      label: "Open earnings intel drawer",
+      meta: `open earnings detail for ${state.preferences.detailSymbol}`,
+      run: async () => {
+        toggleEarningsDrawer(true);
+      },
+    },
+    {
+      kind: "action",
       label: "Reset panel layout",
       meta: "restore the default dashboard order",
       run: async () => {
         state.preferences.panelLayout = [...DEFAULT_PANEL_LAYOUT];
+        state.preferences.panelSizes = { ...DEFAULT_PANEL_SIZES };
         applyPanelLayout();
         schedulePreferenceSync();
       },
@@ -1905,6 +2068,82 @@ function renderDetailWarnings(messages) {
   container.innerHTML = messages.length
     ? messages.map((message) => `<div class="panel-status-chip warn">${escapeHtml(message)}</div>`).join("")
     : `<div class="panel-status-chip">All currently available workbench feeds loaded.</div>`;
+}
+
+function toggleEarningsDrawer(open) {
+  state.earningsDrawerOpen = open;
+  const drawer = document.querySelector("#earningsDrawer");
+  if (!drawer) {
+    return;
+  }
+  drawer.hidden = !open;
+  drawer.classList.toggle("open", open);
+}
+
+function renderEarningsDrawer(payload, errorMessage = null) {
+  document.querySelector("#earningsDrawerTitle").textContent = payload?.companyName ?? payload?.symbol ?? "Earnings detail";
+  document.querySelector("#earningsWarning").innerHTML = errorMessage || payload?.warning
+    ? `<div class="panel-status-chip warn">${escapeHtml(errorMessage ?? payload.warning)}</div>`
+    : `<div class="panel-status-chip">Public earnings modules loaded for the current symbol.</div>`;
+
+  if (!payload) {
+    document.querySelector("#earningsSummary").innerHTML = "";
+    document.querySelector("#earningsTrendList").innerHTML = renderIntelEmpty("No earnings intelligence available.");
+    document.querySelector("#earningsHistoryBody").innerHTML = `<tr><td colspan="4" class="muted">No earnings history available.</td></tr>`;
+    document.querySelector("#peerEarningsList").innerHTML = renderIntelEmpty("No peer earnings windows mapped.");
+    return;
+  }
+
+  document.querySelector("#earningsSummary").innerHTML = [
+    renderTerminalStat("Window", formatWindow(payload.earningsWindow), "next earnings"),
+    renderTerminalStat("Avg EPS", formatNumber(payload.estimates?.average, 2), "consensus"),
+    renderTerminalStat("Low/High", `${formatNumber(payload.estimates?.low, 2)} / ${formatNumber(payload.estimates?.high, 2)}`, "estimate range"),
+    renderTerminalStat("Revenue", formatCompact(payload.estimates?.revenueEstimate), "estimate"),
+    renderTerminalStat("Street", payload.estimates?.recommendation ?? "n/a", "rating"),
+  ].join("");
+
+  document.querySelector("#earningsTrendList").innerHTML = (payload.trend ?? [])
+    .map(
+      (entry) => `
+        <div class="list-item">
+          <div>
+            <strong>${escapeHtml(entry.period ?? "Period")}</strong>
+            <div class="meta">${escapeHtml(entry.endDate ? formatDateShort(entry.endDate) : "n/a")} | ${escapeHtml(entry.earningsEstimate?.numberOfAnalysts != null ? `${entry.earningsEstimate.numberOfAnalysts} analysts` : "estimate")}</div>
+          </div>
+          <div class="meta">
+            EPS ${escapeHtml(formatNumber(entry.earningsEstimate?.avg, 2))} | Rev ${escapeHtml(formatCompact(entry.revenueEstimate?.avg))}
+          </div>
+        </div>
+      `,
+    )
+    .join("") || renderIntelEmpty("No earnings trend rows were returned.");
+
+  document.querySelector("#earningsHistoryBody").innerHTML = (payload.history ?? [])
+    .map(
+      (entry) => `
+        <tr class="intel-row ${tone(entry.surprisePercent)}">
+          <td>${escapeHtml(entry.quarter ? formatDateShort(entry.quarter) : "n/a")}</td>
+          <td>${formatNumber(entry.epsEstimate, 2)}</td>
+          <td>${formatNumber(entry.epsActual, 2)}</td>
+          <td class="${tone(entry.surprisePercent)}">${formatPercent(entry.surprisePercent)}</td>
+        </tr>
+      `,
+    )
+    .join("") || `<tr><td colspan="4" class="muted">No earnings history available.</td></tr>`;
+
+  document.querySelector("#peerEarningsList").innerHTML = (payload.peers ?? [])
+    .map(
+      (entry) => `
+        <div class="list-item">
+          <div>
+            <strong>${escapeHtml(entry.symbol)}</strong>
+            <div class="meta">${escapeHtml(entry.shortName ?? "")}</div>
+          </div>
+          <div class="meta">${escapeHtml(formatWindow({ start: entry.earningsStart, end: entry.earningsEnd }))}</div>
+        </div>
+      `,
+    )
+    .join("") || renderIntelEmpty("No peer earnings windows are near this date.");
 }
 
 function renderOverview(company) {
@@ -2206,6 +2445,42 @@ function renderNewsFeed(items) {
     .join("");
 }
 
+function renderMarketEventsSummary(summary) {
+  return [
+    renderTerminalStat("Timeline", String(summary.total ?? 0), "ranked items"),
+    renderTerminalStat("Calendar", String(summary.calendar ?? 0), "policy + macro"),
+    renderTerminalStat("News", String(summary.news ?? 0), "live headlines"),
+    renderTerminalStat("Filings", String(summary.filings ?? 0), "sec disclosures"),
+  ].join("");
+}
+
+function renderMarketEvents(events) {
+  if (!events.length) {
+    return renderIntelEmpty("No market-moving events are available right now.");
+  }
+
+  return events
+    .map(
+      (event) => `
+        <article class="calendar-item ${toneByImportance(event.importance)}">
+          <div class="calendar-time">
+            <strong>${formatDateShort(event.timestamp)}</strong>
+            <span>${formatTime(event.timestamp)}</span>
+          </div>
+          <div class="calendar-body">
+            <div class="calendar-title-row">
+              <strong>${escapeHtml(event.title)}</strong>
+              <span class="signal-chip">${escapeHtml((event.kind ?? "event").toUpperCase())}</span>
+            </div>
+            <div class="meta">${escapeHtml(event.source ?? "Source")} | ${escapeHtml(event.note ?? "")}</div>
+            ${event.link ? `<a class="event-link" href="${safeUrl(event.link)}" target="_blank" rel="noreferrer">Open source</a>` : ""}
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
 function filterCalendarEvents(events, { filter = "all", windowDays = 30 } = {}) {
   const now = Date.now();
   const max = now + windowDays * 24 * 60 * 60 * 1000;
@@ -2465,6 +2740,7 @@ function mergePreferences(preferences) {
       : [...DEFAULT_PREFERENCES.cryptoProducts],
     portfolio: Array.isArray(preferences?.portfolio) ? preferences.portfolio : [],
     panelLayout: normalizePanelLayout(preferences?.panelLayout),
+    panelSizes: normalizePanelSizes(preferences?.panelSizes),
     screenConfig: {
       ...DEFAULT_PREFERENCES.screenConfig,
       ...(preferences?.screenConfig ?? {}),
@@ -2675,6 +2951,15 @@ function formatDateTime(value) {
   return value
     ? new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
     : "n/a";
+}
+
+function formatWindow(windowLike) {
+  const start = windowLike?.start ?? null;
+  const end = windowLike?.end ?? null;
+  if (start && end) {
+    return `${formatDateShort(start)}-${formatDateShort(end)}`;
+  }
+  return start ? formatDateShort(start) : end ? formatDateShort(end) : "n/a";
 }
 
 function formatTime(value) {

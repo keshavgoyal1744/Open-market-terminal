@@ -16,6 +16,7 @@
         <nav class="topbar-nav">
           <button type="button" class="topbar-nav-btn" data-jump-section="section-watchlist">Quotes</button>
           <button type="button" class="topbar-nav-btn" data-jump-section="section-workbench">Workbench</button>
+          <button type="button" class="topbar-nav-btn" data-jump-section="section-market-events">Events</button>
           <button type="button" class="topbar-nav-btn" data-jump-section="section-intelligence">Intel</button>
           <button type="button" class="topbar-nav-btn" data-jump-section="section-portfolio">Portfolio</button>
         </nav>
@@ -160,6 +161,18 @@
           </div>
         </section>
 
+        <section id="section-market-events" class="panel panel-wide panel-market-events">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Market-Moving Events</p>
+              <h2>Ranked impact timeline across policy, earnings, filings, and live headlines</h2>
+            </div>
+            <button id="refreshEventsButton" type="button" class="secondary">Refresh</button>
+          </div>
+          <div id="marketEventsSummary" class="watchlist-summary-grid"></div>
+          <div id="marketEventsList" class="calendar-list"></div>
+        </section>
+
         <section id="section-watchlist" class="panel panel-wide panel-watchlist">
           <div class="panel-header">
             <div>
@@ -199,16 +212,19 @@
               <p class="section-label">Security Workbench</p>
               <h2>Price history, filings, fundamentals, and options</h2>
             </div>
-            <form id="detailForm" class="inline-form">
-              <input id="detailSymbol" type="text" />
-              <select id="historyRange">
-                <option value="1mo">1 month</option>
-                <option value="3mo">3 months</option>
-                <option value="6mo">6 months</option>
-                <option value="1y">1 year</option>
-              </select>
-              <button type="submit">Load</button>
-            </form>
+            <div class="workbench-header-actions">
+              <form id="detailForm" class="inline-form">
+                <input id="detailSymbol" type="text" />
+                <select id="historyRange">
+                  <option value="1mo">1 month</option>
+                  <option value="3mo">3 months</option>
+                  <option value="6mo">6 months</option>
+                  <option value="1y">1 year</option>
+                </select>
+                <button type="submit">Load</button>
+              </form>
+              <button id="toggleEarningsDrawerButton" type="button" class="secondary">Earnings Intel</button>
+            </div>
           </div>
           <div id="workbenchSummary" class="watchlist-summary-grid"></div>
           <div id="detailWarnings" class="panel-status-strip"></div>
@@ -264,6 +280,43 @@
               </div>
             </article>
           </div>
+          <aside id="earningsDrawer" class="earnings-drawer" hidden>
+            <div class="panel-header compact-header">
+              <div>
+                <p class="section-label">Earnings Intel</p>
+                <h3 id="earningsDrawerTitle">Earnings detail</h3>
+              </div>
+              <button id="closeEarningsDrawerButton" type="button" class="secondary">Close</button>
+            </div>
+            <div id="earningsWarning" class="panel-status-strip"></div>
+            <div id="earningsSummary" class="watchlist-summary-grid"></div>
+            <div class="earnings-drawer-grid">
+              <article class="subpanel">
+                <h3>Estimate Trend</h3>
+                <div id="earningsTrendList" class="list-stack"></div>
+              </article>
+              <article class="subpanel">
+                <h3>Surprise History</h3>
+                <div class="table-wrap compact terminal-table-wrap">
+                  <table class="terminal-table intel-table">
+                    <thead>
+                      <tr>
+                        <th>Quarter</th>
+                        <th>Est.</th>
+                        <th>Actual</th>
+                        <th>Surprise</th>
+                      </tr>
+                    </thead>
+                    <tbody id="earningsHistoryBody"></tbody>
+                  </table>
+                </div>
+              </article>
+              <article class="subpanel">
+                <h3>Peer Windows</h3>
+                <div id="peerEarningsList" class="list-stack"></div>
+              </article>
+            </div>
+          </aside>
         </section>
 
         <section id="section-intelligence" class="panel panel-wide intelligence-panel">

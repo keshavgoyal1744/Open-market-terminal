@@ -8,6 +8,7 @@ Open Market Terminal is a self-hosted market dashboard built around public no-ke
 - Real-time crypto streaming and public order books.
 - SEC company facts and filing history.
 - Treasury yield curves and BLS macro data.
+- Live source-backed policy and macro calendars from Federal Reserve and BLS sources.
 - Authenticated accounts with signed session cookies.
 - Saved workspaces, portfolio state, notes, alerts, and activity history.
 - Background cache warming and server-side alert evaluation.
@@ -63,3 +64,5 @@ This app uses the script-based Vercel Analytics and Speed Insights integration i
 - Yahoo Finance endpoints are public but unofficial and may change or rate limit.
 - Treasury and BLS data update on official release schedules, not every second.
 - The new relationship console mixes public data with a curated local graph for symbols that have been mapped manually.
+- Macro and policy dates are now pulled from official live Federal Reserve and BLS sources instead of local hardcoded schedules.
+- Earnings windows, estimate trend, and surprise history rely on public Yahoo Finance endpoints, which are useful but not equivalent to licensed institutional event feeds.

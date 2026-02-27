@@ -6,7 +6,7 @@ import { getOrderBook, getTicker } from "./providers/coinbase.mjs";
 import { getMarketNews } from "./providers/news.mjs";
 import { getCompanySnapshot } from "./providers/sec.mjs";
 import { getYieldCurve } from "./providers/treasury.mjs";
-import { getCompanyOverview, getHistory, getOptions, getQuotes } from "./providers/yahoo.mjs";
+import { getCompanyOverview, getEarningsDetails, getHistory, getOptions, getQuotes } from "./providers/yahoo.mjs";
 
 export class MarketDataService {
   constructor(cache) {
@@ -335,6 +335,157 @@ export class MarketDataService {
       { ttlMs: config.newsTtlMs, staleMs: config.newsTtlMs * 2 },
     );
   }
+
+  async getEarningsIntel(symbol, peerSymbols = []) {
+    const upper = symbol.trim().toUpperCase();
+    const peerUniverse = [...new Set(peerSymbols.map((entry) => entry?.trim().toUpperCase()).filter(Boolean))]
+      .filter((entry) => entry !== upper)
+      .slice(0, 12);
+
+    return this.cache.getOrSet(
+      `earnings:${upper}:${peerUniverse.join(",")}`,
+      async () => {
+        const [details, company, peers] = await Promise.all([
+          getEarningsDetails(upper).catch((error) => ({ ...emptyEarningsIntel(upper), warning: error.message })),
+          this.getCompany(upper).catch(() => null),
+          Promise.all(
+            peerUniverse.map(async (peerSymbol) => {
+              try {
+                return await this.getCompany(peerSymbol);
+              } catch {
+                return null;
+              }
+            }),
+          ),
+        ]);
+
+        const anchorDate = details.earningsStart ?? details.earningsEnd ?? company?.market?.earningsStart ?? null;
+        const peersNearDate = peers
+          .filter(Boolean)
+          .map((peer) => ({
+            symbol: peer.symbol,
+            shortName: peer.market.shortName ?? peer.sec.title ?? peer.symbol,
+            earningsStart: peer.market.earningsStart ?? null,
+            earningsEnd: peer.market.earningsEnd ?? null,
+          }))
+          .filter((peer) => peer.earningsStart || peer.earningsEnd)
+          .sort((left, right) => distanceFromAnchor(left.earningsStart ?? left.earningsEnd, anchorDate) - distanceFromAnchor(right.earningsStart ?? right.earningsEnd, anchorDate))
+          .slice(0, 8);
+
+        return {
+          symbol: upper,
+          companyName: details.shortName ?? company?.market?.shortName ?? company?.sec?.title ?? upper,
+          earningsWindow: {
+            start: details.earningsStart ?? company?.market?.earningsStart ?? null,
+            end: details.earningsEnd ?? company?.market?.earningsEnd ?? null,
+          },
+          estimates: {
+            average: details.earningsAverage,
+            low: details.earningsLow,
+            high: details.earningsHigh,
+            revenueEstimate: details.revenueEstimate,
+            recommendation: details.recommendation ?? company?.market?.analystRating ?? null,
+          },
+          trend: details.trend ?? [],
+          history: details.history ?? [],
+          peers: peersNearDate,
+          warning: details.warning ?? null,
+        };
+      },
+      { ttlMs: config.companyTtlMs, staleMs: config.companyTtlMs * 2 },
+    );
+  }
+
+  async getMarketEvents(symbols, focusSymbol) {
+    const upperSymbols = [...new Set(symbols.map((symbol) => symbol?.trim().toUpperCase()).filter(Boolean))].slice(0, 16);
+    const focus = focusSymbol?.trim().toUpperCase() || upperSymbols[0] || null;
+    const key = `${focus ?? "desk"}:${upperSymbols.join(",")}`;
+
+    return this.cache.getOrSet(
+      `market-events:${key}`,
+      async () => {
+        const [calendar, news, watchlistEvents, earnings] = await Promise.all([
+          this.getDeskCalendar(upperSymbols).catch(() => ({ events: [] })),
+          this.getDeskNews(upperSymbols, focus).catch(() => ({ items: [] })),
+          this.getWatchlistEvents(upperSymbols).catch(() => []),
+          focus ? this.getEarningsIntel(focus, upperSymbols).catch(() => null) : null,
+        ]);
+
+        const timeline = [
+          ...calendar.events.map((event) => ({
+            id: `calendar-${event.id}`,
+            kind: "calendar",
+            category: event.category,
+            importance: event.importance,
+            timestamp: event.date,
+            title: event.title,
+            source: event.source,
+            note: event.note,
+            symbol: event.symbol ?? null,
+            link: null,
+          })),
+          ...news.items.map((item) => ({
+            id: `news-${item.id}`,
+            kind: "news",
+            category: item.category,
+            importance: item.impact,
+            timestamp: item.publishedAt,
+            title: item.title,
+            source: item.source,
+            note: "Public live headline",
+            symbol: null,
+            link: item.link,
+          })),
+          ...watchlistEvents.map((entry) => ({
+            id: `filing-${entry.symbol}-${entry.filing.accessionNumber}`,
+            kind: "filing",
+            category: "filing",
+            importance: filingImportance(entry.filing.form),
+            timestamp: entry.filing.filingDate,
+            title: `${entry.symbol} filed ${entry.filing.form ?? "SEC filing"}`,
+            source: "SEC",
+            note: entry.companyName ?? entry.filing.primaryDocument ?? "Recent filing",
+            symbol: entry.symbol,
+            link: null,
+          })),
+        ];
+
+        if (earnings?.earningsWindow?.start) {
+          timeline.push({
+            id: `focus-earnings-${earnings.symbol}`,
+            kind: "earnings",
+            category: "earnings",
+            importance: "high",
+            timestamp: earnings.earningsWindow.start,
+            title: `${earnings.symbol} earnings window`,
+            source: "Yahoo Finance",
+            note: earnings.companyName,
+            symbol: earnings.symbol,
+            link: null,
+          });
+        }
+
+        const ranked = timeline
+          .filter((item) => Number.isFinite(Date.parse(item.timestamp)))
+          .map((item) => ({ ...item, score: rankEvent(item) }))
+          .sort((left, right) => right.score - left.score)
+          .slice(0, 30);
+
+        return {
+          asOf: new Date().toISOString(),
+          focusSymbol: focus,
+          summary: {
+            total: ranked.length,
+            calendar: ranked.filter((item) => item.kind === "calendar").length,
+            news: ranked.filter((item) => item.kind === "news").length,
+            filings: ranked.filter((item) => item.kind === "filing").length,
+          },
+          events: ranked,
+        };
+      },
+      { ttlMs: config.newsTtlMs, staleMs: config.newsTtlMs * 2 },
+    );
+  }
 }
 
 function mergeExecutives(curatedExecutives = [], officers = []) {
@@ -436,6 +587,56 @@ function emptyOptions(symbol, error) {
     puts: [],
     warning: error?.message ?? null,
   };
+}
+
+function emptyEarningsIntel(symbol) {
+  return {
+    symbol,
+    shortName: symbol,
+    earningsStart: null,
+    earningsEnd: null,
+    history: [],
+    trend: [],
+    earningsAverage: null,
+    earningsLow: null,
+    earningsHigh: null,
+    revenueEstimate: null,
+    recommendation: null,
+    warning: null,
+  };
+}
+
+function distanceFromAnchor(date, anchorDate) {
+  const value = Date.parse(date);
+  const anchor = Date.parse(anchorDate);
+  if (!Number.isFinite(value) || !Number.isFinite(anchor)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.abs(value - anchor);
+}
+
+function filingImportance(form) {
+  if (["8-K", "10-Q", "10-K", "20-F"].includes(form)) {
+    return "high";
+  }
+  return "medium";
+}
+
+function rankEvent(event) {
+  const importanceScore = {
+    critical: 100,
+    high: 80,
+    medium: 50,
+    low: 20,
+  }[event.importance] ?? 30;
+  const timestamp = Date.parse(event.timestamp);
+  if (!Number.isFinite(timestamp)) {
+    return importanceScore;
+  }
+  const hoursDelta = Math.abs(Date.now() - timestamp) / (1000 * 60 * 60);
+  const freshness = Math.max(0, 48 - hoursDelta);
+  const futureBoost = timestamp >= Date.now() ? 18 : 0;
+  return importanceScore + freshness + futureBoost;
 }
 
 function buildEarningsEvent(company) {
