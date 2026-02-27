@@ -53,6 +53,10 @@ npm test
 
 See [DEPLOYMENT.md](/home/grads/keshavgoyal/open-market-terminal/DEPLOYMENT.md).
 
+## Vercel browser analytics
+
+This app uses the script-based Vercel Analytics and Speed Insights integration in [public/index.html](/home/grads/keshavgoyal/open-market-terminal/public/index.html), because it is a plain HTML/JS app rather than Next.js. Do not install the Next.js components unless the app is migrated to Next.
+
 ## Data quality notes
 
 - Crypto is the only truly live market section in this build.

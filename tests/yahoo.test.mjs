@@ -129,6 +129,61 @@ test("company overview falls back to minimal quote data when summary endpoint is
   assert.deepEqual(overview.topInstitutionalHolders, []);
 });
 
+test("company overview extracts earnings dates from calendar events", async (context) => {
+  const originalFetch = global.fetch;
+  context.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  global.fetch = async (url) => {
+    const href = url.toString();
+    if (href.includes("/v10/finance/quoteSummary/MSFT")) {
+      return jsonResponse(200, {
+        quoteSummary: {
+          result: [
+            {
+              price: {
+                symbol: "MSFT",
+                shortName: "Microsoft Corporation",
+                exchangeName: "NMS",
+              },
+              summaryDetail: {
+                marketCap: { raw: 1000 },
+                trailingPE: { raw: 30 },
+              },
+              financialData: {
+                recommendationKey: "buy",
+              },
+              calendarEvents: {
+                earnings: {
+                  earningsDate: [
+                    { raw: 1772236800, fmt: "2026-02-28" },
+                    { raw: 1772323200, fmt: "2026-03-01" },
+                  ],
+                },
+              },
+              assetProfile: {
+                sector: "Technology",
+                industry: "Software",
+                longBusinessSummary: "Summary",
+                companyOfficers: [],
+              },
+            },
+          ],
+        },
+      });
+    }
+
+    throw new Error(`Unexpected URL: ${href}`);
+  };
+
+  const overview = await getCompanyOverview("MSFT");
+
+  assert.equal(overview.symbol, "MSFT");
+  assert.equal(overview.earningsStart, "2026-02-28T00:00:00.000Z");
+  assert.equal(overview.earningsEnd, "2026-03-01T00:00:00.000Z");
+});
+
 function makeChartPayload({
   symbol,
   shortName,

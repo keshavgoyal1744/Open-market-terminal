@@ -112,6 +112,7 @@ export async function getCompanyOverview(symbol) {
       "defaultKeyStatistics",
       "financialData",
       "assetProfile",
+      "calendarEvents",
       "majorHoldersBreakdown",
       "fundOwnership",
       "institutionOwnership",
@@ -151,6 +152,8 @@ export async function getCompanyOverview(symbol) {
       returnOnEquity: unwrapFormatted(result.financialData?.returnOnEquity),
       currentRatio: unwrapFormatted(result.financialData?.currentRatio),
       analystRating: result.financialData?.recommendationKey ?? null,
+      earningsStart: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.[0]),
+      earningsEnd: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.at(-1)),
       institutionPercentHeld: unwrapFormatted(result.majorHoldersBreakdown?.institutionsPercentHeld),
       insiderPercentHeld: unwrapFormatted(result.majorHoldersBreakdown?.insidersPercentHeld),
       floatShares: unwrapFormatted(result.defaultKeyStatistics?.floatShares),
@@ -194,6 +197,8 @@ export async function getCompanyOverview(symbol) {
     returnOnEquity: null,
     currentRatio: null,
     analystRating: null,
+    earningsStart: null,
+    earningsEnd: null,
     institutionPercentHeld: null,
     insiderPercentHeld: null,
     floatShares: null,
@@ -393,6 +398,24 @@ function normalizeInsiderTransactions(node) {
     value: unwrapFormatted(entry.value),
     ownership: entry.ownership ?? null,
   }));
+}
+
+function normalizeCalendarDate(value) {
+  if (!value) {
+    return null;
+  }
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+  }
+  if (typeof value.raw === "number") {
+    return new Date(value.raw * 1000).toISOString();
+  }
+  if (typeof value.fmt === "string") {
+    const parsed = new Date(value.fmt);
+    return Number.isNaN(parsed.getTime()) ? value.fmt : parsed.toISOString();
+  }
+  return null;
 }
 
 function unwrapFormatted(value) {

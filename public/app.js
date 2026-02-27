@@ -10,9 +10,29 @@ const DEFAULT_PREFERENCES = {
     minChangePct: "",
   },
   portfolio: [],
+  panelLayout: [],
 };
 
 const GUEST_PREFERENCES_KEY = "omt-guest-preferences";
+const DEFAULT_PANEL_LAYOUT = [
+  "section-market-pulse",
+  "section-watchlist",
+  "section-workbench",
+  "section-intelligence",
+  "section-macro",
+  "section-calendar",
+  "section-news",
+  "section-portfolio",
+  "section-alerts",
+  "section-intel-ops",
+  "section-workspaces",
+  "section-notes",
+  "section-activity",
+  "section-crypto",
+  "section-screening",
+  "section-events",
+  "section-limitations",
+];
 
 const state = {
   authenticated: false,
@@ -41,9 +61,12 @@ const state = {
   currentDetailQuote: null,
   currentCompany: null,
   currentOptions: null,
+  calendarEvents: [],
+  newsItems: [],
   paletteCommands: [],
   commandPaletteOpen: false,
   paletteIndex: 0,
+  dragPanelId: null,
 };
 
 const SECTION_COMMANDS = [
@@ -51,6 +74,8 @@ const SECTION_COMMANDS = [
   { id: "section-watchlist", label: "Jump to Watchlist", meta: "tracked market quotes" },
   { id: "section-workbench", label: "Jump to Security Workbench", meta: "detail, filings, and options" },
   { id: "section-intelligence", label: "Jump to Relationship Console", meta: "ownership and supply chains" },
+  { id: "section-calendar", label: "Jump to Desk Calendar", meta: "earnings, Fed, and macro dates" },
+  { id: "section-news", label: "Jump to Market News", meta: "live public headlines" },
   { id: "section-portfolio", label: "Jump to Portfolio", meta: "positions and P/L" },
   { id: "section-alerts", label: "Jump to Alerts", meta: "server-side triggers" },
   { id: "section-intel-ops", label: "Jump to Intel Ops", meta: "webhooks and digests" },
@@ -68,6 +93,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindGlobalActions();
   startHudClock();
   await loadSession();
+  initializePanelLayout();
   applyPreferencesToInputs();
   renderAuth();
   renderProtectedGuards();
@@ -87,6 +113,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadDetail(state.preferences.detailSymbol),
     loadMacro(),
     loadYieldCurve(),
+    loadDeskCalendar(),
+    loadDeskNews(),
     loadOrderBook(currentOrderBookProduct()),
     runScreen(),
     runCompare(),
@@ -164,7 +192,7 @@ function bindForms() {
     state.preferences.watchlistSymbols = splitSymbols(document.querySelector("#watchlistInput").value);
     schedulePreferenceSync();
     await loadWatchlist(state.preferences.watchlistSymbols);
-    await loadWatchlistEvents();
+    await Promise.all([loadWatchlistEvents(), loadDeskCalendar(true), loadDeskNews(true)]);
   });
 
   document.querySelector("#saveWatchlistButton").addEventListener("click", async () => {
@@ -390,9 +418,21 @@ function bindForms() {
     event.preventDefault();
     await runCompare();
   });
+
+  document.querySelector("#calendarForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await loadDeskCalendar(true);
+  });
 }
 
 function bindGlobalActions() {
+  document.querySelector("#resetLayoutButton")?.addEventListener("click", () => {
+    state.preferences.panelLayout = [...DEFAULT_PANEL_LAYOUT];
+    applyPanelLayout();
+    schedulePreferenceSync();
+    showStatus("Dashboard layout reset.", false);
+  });
+
   document.querySelector("#commandPaletteButton")?.addEventListener("click", () => {
     openCommandPalette("");
   });
@@ -429,6 +469,10 @@ function bindGlobalActions() {
 
   document.querySelector("[data-close-palette='true']")?.addEventListener("click", () => {
     closeCommandPalette();
+  });
+
+  document.querySelector("#refreshNewsButton")?.addEventListener("click", async () => {
+    await loadDeskNews(true);
   });
 
   document.addEventListener("keydown", async (event) => {
@@ -483,6 +527,129 @@ function bindGlobalActions() {
   });
 }
 
+function initializePanelLayout() {
+  const dashboard = document.querySelector("#dashboardGrid");
+  if (!dashboard || dashboard.dataset.layoutInitialized === "true") {
+    applyPanelLayout();
+    return;
+  }
+
+  dashboard.dataset.layoutInitialized = "true";
+  dashboard.querySelectorAll(":scope > section.panel").forEach((panel) => {
+    panel.dataset.panelId = panel.id;
+    const header = panel.querySelector(".panel-header");
+    if (!header || header.querySelector(".panel-drag-handle")) {
+      return;
+    }
+
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = "panel-drag-handle";
+    handle.draggable = true;
+    handle.setAttribute("aria-label", `Move ${panel.id}`);
+    handle.innerHTML = "<span>::</span><strong>Move</strong>";
+
+    handle.addEventListener("dragstart", (event) => {
+      state.dragPanelId = panel.id;
+      panel.classList.add("panel-dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", panel.id);
+    });
+
+    handle.addEventListener("dragend", () => {
+      state.dragPanelId = null;
+      clearPanelDropState();
+      dashboard.querySelectorAll(".panel-dragging").forEach((node) => node.classList.remove("panel-dragging"));
+    });
+
+    header.append(handle);
+  });
+
+  dashboard.addEventListener("dragover", (event) => {
+    const target = event.target instanceof Element ? event.target.closest("section.panel") : null;
+    if (!target || !state.dragPanelId || target.id === state.dragPanelId) {
+      return;
+    }
+    event.preventDefault();
+    clearPanelDropState();
+    target.classList.add(dropDirection(target, event) === "before" ? "panel-drop-before" : "panel-drop-after");
+  });
+
+  dashboard.addEventListener("drop", (event) => {
+    const target = event.target instanceof Element ? event.target.closest("section.panel") : null;
+    if (!target || !state.dragPanelId || target.id === state.dragPanelId) {
+      return;
+    }
+    event.preventDefault();
+    movePanel(state.dragPanelId, target.id, dropDirection(target, event));
+  });
+
+  dashboard.addEventListener("dragleave", (event) => {
+    if (!(event.target instanceof Element)) {
+      return;
+    }
+    const panel = event.target.closest("section.panel");
+    if (panel) {
+      panel.classList.remove("panel-drop-before", "panel-drop-after");
+    }
+  });
+
+  applyPanelLayout();
+}
+
+function movePanel(sourceId, targetId, direction) {
+  const layout = normalizePanelLayout(state.preferences.panelLayout);
+  const sourceIndex = layout.indexOf(sourceId);
+  const targetIndex = layout.indexOf(targetId);
+  if (sourceIndex === -1 || targetIndex === -1) {
+    return;
+  }
+
+  const next = [...layout];
+  next.splice(sourceIndex, 1);
+  const adjustedTarget = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+  const insertAt = direction === "after" ? adjustedTarget + 1 : adjustedTarget;
+  next.splice(insertAt, 0, sourceId);
+
+  state.preferences.panelLayout = normalizePanelLayout(next);
+  applyPanelLayout();
+  schedulePreferenceSync();
+}
+
+function applyPanelLayout() {
+  const layout = normalizePanelLayout(state.preferences.panelLayout);
+  state.preferences.panelLayout = layout;
+  document.querySelectorAll("#dashboardGrid > section.panel").forEach((panel) => {
+    const order = layout.indexOf(panel.id);
+    panel.style.order = String(order === -1 ? DEFAULT_PANEL_LAYOUT.length : order);
+  });
+}
+
+function normalizePanelLayout(panelLayout) {
+  const input = Array.isArray(panelLayout) ? panelLayout : [];
+  const seen = new Set();
+  const normalized = input.filter((panelId) => {
+    if (!DEFAULT_PANEL_LAYOUT.includes(panelId) || seen.has(panelId)) {
+      return false;
+    }
+    seen.add(panelId);
+    return true;
+  });
+
+  return [...normalized, ...DEFAULT_PANEL_LAYOUT.filter((panelId) => !seen.has(panelId))];
+}
+
+function clearPanelDropState() {
+  document.querySelectorAll(".panel-drop-before, .panel-drop-after").forEach((node) => {
+    node.classList.remove("panel-drop-before", "panel-drop-after");
+  });
+}
+
+function dropDirection(target, event) {
+  const rect = target.getBoundingClientRect();
+  return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+}
+
 async function loadSession(reloadUserData = false) {
   try {
     const session = await api("/api/auth/session");
@@ -499,6 +666,7 @@ async function loadSession(reloadUserData = false) {
 
     const profile = await api("/api/profile");
     state.preferences = mergePreferences(profile.preferences);
+    applyPanelLayout();
     applyPreferencesToInputs();
 
     if (reloadUserData || !state.workspaces.length) {
@@ -536,6 +704,7 @@ function teardownAuthenticatedState() {
   state.selectedWorkspaceId = null;
   state.selectedNoteId = null;
   state.preferences = mergePreferences(loadStore(GUEST_PREFERENCES_KEY, DEFAULT_PREFERENCES));
+  applyPanelLayout();
   applyPreferencesToInputs();
   disconnectActivityStream();
   renderHud();
@@ -686,14 +855,39 @@ async function loadDetail(symbol) {
   state.currentHistoryRange = range;
 
   try {
-    const [quotePayload, company, history, options] = await Promise.all([
+    const [quoteResult, companyResult, historyResult, optionsResult] = await Promise.allSettled([
       api(`/api/quote?symbols=${encodeURIComponent(symbol)}`),
       api(`/api/company?symbol=${encodeURIComponent(symbol)}`),
       api(`/api/history?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(range)}&interval=1d`),
       api(`/api/options?symbol=${encodeURIComponent(symbol)}`),
     ]);
 
-    const quote = quotePayload.quotes[0];
+    const quotePayload = quoteResult.status === "fulfilled" ? quoteResult.value : { quotes: [] };
+    const company =
+      companyResult.status === "fulfilled"
+        ? companyResult.value
+        : {
+            symbol,
+            warnings: [companyResult.reason?.message ?? "Company profile unavailable."],
+            market: { shortName: symbol },
+            sec: { filings: [], facts: {} },
+          };
+    const history =
+      historyResult.status === "fulfilled"
+        ? historyResult.value
+        : { symbol, range, interval: "1d", points: [] };
+    const options =
+      optionsResult.status === "fulfilled"
+        ? optionsResult.value
+        : { symbol, calls: [], puts: [], warning: optionsResult.reason?.message ?? "Options unavailable." };
+
+    const warnings = [
+      ...(company.warnings ?? []),
+      historyResult.status === "rejected" ? `Price history unavailable for ${symbol}.` : null,
+      options.warning ?? null,
+    ].filter(Boolean);
+
+    const quote = quotePayload.quotes[0] ?? null;
     if (quote) {
       state.latestQuotes.set(quote.symbol, quote);
     }
@@ -703,6 +897,7 @@ async function loadDetail(symbol) {
 
     renderDetailMetrics(quote, company.market);
     document.querySelector("#workbenchSummary").innerHTML = renderWorkbenchSummary(quote, company, history.points);
+    renderDetailWarnings(warnings);
     renderPriceChart(history.points, symbol);
     renderOverview(company);
     renderCompanyFacts(company);
@@ -715,6 +910,41 @@ async function loadDetail(symbol) {
     renderHud();
   } catch (error) {
     setFeedStatus("Degraded");
+    showStatus(error.message, true);
+  }
+}
+
+async function loadDeskCalendar(force = false) {
+  const symbols = state.preferences.watchlistSymbols.slice(0, 16);
+  const filter = document.querySelector("#calendarFilter")?.value ?? "all";
+  const windowDays = Number(document.querySelector("#calendarWindow")?.value ?? 30);
+
+  try {
+    const payload = await api(`/api/calendar?symbols=${encodeURIComponent(symbols.join(","))}${force ? "&force=1" : ""}`);
+    state.calendarEvents = payload.events ?? [];
+    document.querySelector("#calendarSummary").innerHTML = renderCalendarSummary(state.calendarEvents, windowDays);
+    document.querySelector("#calendarList").innerHTML = renderCalendar(state.calendarEvents, {
+      filter,
+      windowDays,
+    });
+    markFeedHeartbeat("Live");
+  } catch (error) {
+    showStatus(error.message, true);
+  }
+}
+
+async function loadDeskNews(force = false) {
+  const symbols = state.preferences.watchlistSymbols.slice(0, 8);
+  const focusSymbol = state.preferences.detailSymbol;
+
+  try {
+    const payload = await api(
+      `/api/news?symbols=${encodeURIComponent(symbols.join(","))}&focusSymbol=${encodeURIComponent(focusSymbol)}${force ? "&force=1" : ""}`,
+    );
+    state.newsItems = payload.items ?? [];
+    document.querySelector("#newsList").innerHTML = renderNewsFeed(state.newsItems);
+    markFeedHeartbeat("Live");
+  } catch (error) {
     showStatus(error.message, true);
   }
 }
@@ -1376,12 +1606,15 @@ function applyWorkspaceSnapshot(snapshot) {
     ...state.preferences,
     ...snapshot,
   });
+  applyPanelLayout();
   applyPreferencesToInputs();
   connectCrypto();
   void Promise.all([
     loadWatchlist(state.preferences.watchlistSymbols),
     loadWatchlistEvents(),
     loadDetail(state.preferences.detailSymbol),
+    loadDeskCalendar(),
+    loadDeskNews(),
     loadOrderBook(currentOrderBookProduct()),
     runScreen(),
     runCompare(),
@@ -1395,6 +1628,7 @@ function snapshotCurrentWorkspace() {
     cryptoProducts: state.preferences.cryptoProducts,
     screenConfig: state.preferences.screenConfig,
     portfolio: state.preferences.portfolio,
+    panelLayout: state.preferences.panelLayout,
     selectedWorkspaceId: state.selectedWorkspaceId,
   };
 }
@@ -1440,6 +1674,8 @@ function scheduleRefresh() {
   setInterval(() => void loadWatchlist(state.preferences.watchlistSymbols), 30000);
   setInterval(() => void loadWatchlistEvents(), 120000);
   setInterval(() => void loadIntelligence(state.preferences.detailSymbol), 180000);
+  setInterval(() => void loadDeskCalendar(false), 300000);
+  setInterval(() => void loadDeskNews(false), 120000);
   setInterval(() => void renderPortfolio(), 30000);
 }
 
@@ -1456,7 +1692,7 @@ async function selectDetailSymbol(symbol, options = {}) {
   if (options.jump) {
     jumpToSection("section-workbench");
   }
-  await loadDetail(clean);
+  await Promise.all([loadDetail(clean), loadDeskNews(false)]);
 }
 
 async function cycleDetailSymbol(direction) {
@@ -1587,6 +1823,28 @@ function buildPaletteCommands(query = "") {
       meta: `reload intelligence for ${state.preferences.detailSymbol}`,
       run: () => loadIntelligence(state.preferences.detailSymbol),
     },
+    {
+      kind: "action",
+      label: "Refresh desk calendar",
+      meta: "reload earnings and macro events",
+      run: () => loadDeskCalendar(true),
+    },
+    {
+      kind: "action",
+      label: "Refresh market news",
+      meta: "reload live public headlines",
+      run: () => loadDeskNews(true),
+    },
+    {
+      kind: "action",
+      label: "Reset panel layout",
+      meta: "restore the default dashboard order",
+      run: async () => {
+        state.preferences.panelLayout = [...DEFAULT_PANEL_LAYOUT];
+        applyPanelLayout();
+        schedulePreferenceSync();
+      },
+    },
   );
 
   return commands
@@ -1640,6 +1898,13 @@ function renderDetailMetrics(quote, market) {
     metric("P/E", formatNumber(market?.trailingPe, 2)),
     metric("Market Cap", formatCompact(market?.marketCap)),
   ].join("");
+}
+
+function renderDetailWarnings(messages) {
+  const container = document.querySelector("#detailWarnings");
+  container.innerHTML = messages.length
+    ? messages.map((message) => `<div class="panel-status-chip warn">${escapeHtml(message)}</div>`).join("")
+    : `<div class="panel-status-chip">All currently available workbench feeds loaded.</div>`;
 }
 
 function renderOverview(company) {
@@ -1780,6 +2045,11 @@ async function loadIntelligence(symbol) {
 }
 
 function renderFilings(filings) {
+  if (!filings?.length) {
+    document.querySelector("#filingsList").innerHTML = renderIntelEmpty("No recent SEC filings are available for this symbol.");
+    return;
+  }
+
   document.querySelector("#filingsList").innerHTML = filings
     .map(
       (filing) => `
@@ -1796,7 +2066,8 @@ function renderFilings(filings) {
 }
 
 function renderOptions(calls, puts) {
-  document.querySelector("#callsBody").innerHTML = calls
+  document.querySelector("#callsBody").innerHTML = calls.length
+    ? calls
     .slice(0, 12)
     .map(
       (contract, index) => `
@@ -1816,8 +2087,10 @@ function renderOptions(calls, puts) {
         </tr>
       `,
     )
-    .join("");
-  document.querySelector("#putsBody").innerHTML = puts
+    .join("")
+    : `<tr><td colspan="4" class="muted">No call data available.</td></tr>`;
+  document.querySelector("#putsBody").innerHTML = puts.length
+    ? puts
     .slice(0, 12)
     .map(
       (contract, index) => `
@@ -1837,7 +2110,8 @@ function renderOptions(calls, puts) {
         </tr>
       `,
     )
-    .join("");
+    .join("")
+    : `<tr><td colspan="4" class="muted">No put data available.</td></tr>`;
 }
 
 function renderPriceChart(points, symbol) {
@@ -1868,6 +2142,88 @@ function renderPriceChart(points, symbol) {
       <text x="620" y="44" fill="#8ea1c7" font-size="12">Low ${formatMoney(min)}</text>
     </svg>
   `;
+}
+
+function renderCalendarSummary(events, windowDays) {
+  const filtered = filterCalendarEvents(events, { filter: "all", windowDays });
+  const earnings = filtered.filter((event) => event.category === "earnings").length;
+  const macro = filtered.filter((event) => event.category !== "earnings").length;
+  const nextEvent = filtered[0] ?? null;
+
+  return [
+    renderTerminalStat("Window", `${windowDays}d`, "browse horizon"),
+    renderTerminalStat("Events", String(filtered.length), "scheduled"),
+    renderTerminalStat("Earnings", String(earnings), "watchlist"),
+    renderTerminalStat("Macro", String(macro), "policy + econ"),
+    renderTerminalStat("Next", nextEvent ? compactLabel(nextEvent.title, 18) : "n/a", nextEvent ? formatDateTime(nextEvent.date) : "none"),
+  ].join("");
+}
+
+function renderCalendar(events, options = {}) {
+  const filtered = filterCalendarEvents(events, options);
+  if (!filtered.length) {
+    return renderIntelEmpty("No desk calendar events match the current filter.");
+  }
+
+  return filtered
+    .map(
+      (event) => `
+        <article class="calendar-item ${toneByImportance(event.importance)}">
+          <div class="calendar-time">
+            <strong>${formatDateShort(event.date)}</strong>
+            <span>${formatTime(event.date)}</span>
+          </div>
+          <div class="calendar-body">
+            <div class="calendar-title-row">
+              <strong>${escapeHtml(event.title ?? "Event")}</strong>
+              <span class="signal-chip">${escapeHtml((event.category ?? "event").toUpperCase())}</span>
+            </div>
+            <div class="meta">${escapeHtml(event.source ?? "Public source")} | ${escapeHtml(event.note ?? "")}</div>
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function renderNewsFeed(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No public market headlines are available right now.");
+  }
+
+  return items
+    .map(
+      (item) => `
+        <article class="news-item ${toneByImportance(item.impact)}">
+          <div class="news-item-head">
+            <span class="signal-chip">${escapeHtml((item.category ?? "news").toUpperCase())}</span>
+            <span class="muted">${escapeHtml(item.source ?? "News")} | ${formatTimeAgo(item.publishedAt)}</span>
+          </div>
+          <a href="${safeUrl(item.link)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function filterCalendarEvents(events, { filter = "all", windowDays = 30 } = {}) {
+  const now = Date.now();
+  const max = now + windowDays * 24 * 60 * 60 * 1000;
+  return (events ?? [])
+    .filter((event) => {
+      const timestamp = Date.parse(event.date);
+      if (!Number.isFinite(timestamp) || timestamp < now - 24 * 60 * 60 * 1000 || timestamp > max) {
+        return false;
+      }
+      if (filter === "all") {
+        return true;
+      }
+      if (filter === "macro") {
+        return event.category !== "earnings" && event.category !== "policy";
+      }
+      return event.category === filter;
+    })
+    .sort((left, right) => new Date(left.date) - new Date(right.date));
 }
 
 function renderBarChart(values, labels, caption, suffix) {
@@ -2108,6 +2464,7 @@ function mergePreferences(preferences) {
       ? preferences.cryptoProducts
       : [...DEFAULT_PREFERENCES.cryptoProducts],
     portfolio: Array.isArray(preferences?.portfolio) ? preferences.portfolio : [],
+    panelLayout: normalizePanelLayout(preferences?.panelLayout),
     screenConfig: {
       ...DEFAULT_PREFERENCES.screenConfig,
       ...(preferences?.screenConfig ?? {}),
@@ -2308,8 +2665,39 @@ function formatDate(value) {
   return value ? new Date(value).toLocaleString() : "n/a";
 }
 
+function formatDateShort(value) {
+  return value
+    ? new Date(value).toLocaleDateString([], { month: "short", day: "numeric" })
+    : "n/a";
+}
+
+function formatDateTime(value) {
+  return value
+    ? new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+    : "n/a";
+}
+
 function formatTime(value) {
   return value ? new Date(value).toLocaleTimeString() : "n/a";
+}
+
+function formatTimeAgo(value) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return "n/a";
+  }
+  const diffMinutes = Math.round((Date.now() - timestamp) / 60000);
+  if (diffMinutes < 1) {
+    return "just now";
+  }
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+  return `${Math.round(diffHours / 24)}d ago`;
 }
 
 function tone(value) {
@@ -2317,6 +2705,13 @@ function tone(value) {
     return "";
   }
   return value >= 0 ? "positive" : "negative";
+}
+
+function toneByImportance(value) {
+  if (value === "critical" || value === "high") {
+    return "positive";
+  }
+  return "";
 }
 
 function trimPreview(value) {

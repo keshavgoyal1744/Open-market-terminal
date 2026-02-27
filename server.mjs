@@ -47,6 +47,18 @@ export async function handleRequest(request, response, options = {}) {
   const context = await buildRequestContext(request);
 
   try {
+    if (
+      url.pathname === "/_vercel/insights/script.js" ||
+      url.pathname === "/_vercel/speed-insights/script.js"
+    ) {
+      response.writeHead(200, baseHeaders({
+        "Content-Type": "application/javascript; charset=utf-8",
+        "Cache-Control": "no-store",
+      }));
+      response.end("/* local no-op for Vercel browser insights */");
+      return;
+    }
+
     if (url.pathname.startsWith("/api/")) {
       return await handleApi(request, response, url, context);
     }
@@ -390,6 +402,17 @@ async function handleApi(request, response, url, context) {
     return sendJson(response, 200, { events: await market.getWatchlistEvents(symbols) });
   }
 
+  if (request.method === "GET" && url.pathname === "/api/calendar") {
+    const symbols = splitList(url.searchParams.get("symbols"));
+    return sendJson(response, 200, await market.getDeskCalendar(symbols));
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/news") {
+    const symbols = splitList(url.searchParams.get("symbols"));
+    const focusSymbol = url.searchParams.get("focusSymbol") ?? null;
+    return sendJson(response, 200, await market.getDeskNews(symbols, cleanSymbol(focusSymbol)));
+  }
+
   if (request.method === "GET" && url.pathname === "/api/quote") {
     const symbols = splitList(url.searchParams.get("symbols"));
     return sendJson(response, 200, { quotes: await market.getQuotes(symbols) });
@@ -617,6 +640,12 @@ function sanitizePreferencePatch(body) {
           .filter((position) => position.symbol && Number.isFinite(position.quantity) && Number.isFinite(position.cost))
           .slice(0, 250)
       : undefined,
+    panelLayout: Array.isArray(body.panelLayout)
+      ? body.panelLayout
+          .map((panelId) => String(panelId ?? "").trim())
+          .filter(Boolean)
+          .slice(0, 32)
+      : undefined,
   };
 
   return Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
@@ -637,6 +666,9 @@ function sanitizeWorkspaceSnapshot(snapshot) {
       : config.defaultCryptoProducts,
     screenConfig: snapshot.screenConfig && typeof snapshot.screenConfig === "object" ? snapshot.screenConfig : {},
     portfolio: Array.isArray(snapshot.portfolio) ? snapshot.portfolio.slice(0, 250) : [],
+    panelLayout: Array.isArray(snapshot.panelLayout)
+      ? snapshot.panelLayout.map((panelId) => String(panelId ?? "").trim()).filter(Boolean).slice(0, 32)
+      : [],
     selectedWorkspaceId: typeof snapshot.selectedWorkspaceId === "string" ? snapshot.selectedWorkspaceId : null,
   };
 }

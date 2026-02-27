@@ -20,6 +20,10 @@
           <button type="button" class="topbar-nav-btn" data-jump-section="section-portfolio">Portfolio</button>
         </nav>
         <div class="topbar-strip">
+          <button id="resetLayoutButton" type="button" class="topbar-chip topbar-chip-action">
+            <span>Layout</span>
+            <strong>Reset</strong>
+          </button>
           <button id="commandPaletteButton" type="button" class="topbar-chip topbar-chip-action">
             <span>Command</span>
             <strong>Ctrl/⌘ K</strong>
@@ -134,7 +138,7 @@
         </article>
       </section>
 
-      <main class="dashboard">
+      <main id="dashboardGrid" class="dashboard">
         <section id="section-market-pulse" class="panel panel-wide panel-market-pulse">
           <div class="panel-header">
             <div>
@@ -207,6 +211,7 @@
             </form>
           </div>
           <div id="workbenchSummary" class="watchlist-summary-grid"></div>
+          <div id="detailWarnings" class="panel-status-strip"></div>
           <div class="detail-grid">
             <article class="subpanel">
               <div id="detailMetrics" class="metric-strip"></div>
@@ -462,6 +467,42 @@
           </div>
         </section>
 
+        <section id="section-calendar" class="panel panel-calendar">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Desk Calendar</p>
+              <h2>Earnings, Fed, and macro dates</h2>
+            </div>
+            <form id="calendarForm" class="inline-form compact-inline-form">
+              <select id="calendarFilter">
+                <option value="all">All events</option>
+                <option value="earnings">Earnings</option>
+                <option value="macro">Macro</option>
+                <option value="policy">Policy</option>
+              </select>
+              <select id="calendarWindow">
+                <option value="14">14d</option>
+                <option value="30" selected>30d</option>
+                <option value="90">90d</option>
+              </select>
+              <button type="submit">Refresh</button>
+            </form>
+          </div>
+          <div id="calendarSummary" class="watchlist-summary-grid"></div>
+          <div id="calendarList" class="calendar-list"></div>
+        </section>
+
+        <section id="section-news" class="panel panel-news">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Market News</p>
+              <h2>Live public headlines with market tags</h2>
+            </div>
+            <button id="refreshNewsButton" type="button" class="secondary">Refresh</button>
+          </div>
+          <div id="newsList" class="news-list"></div>
+        </section>
+
         <section id="section-portfolio" class="panel">
           <div class="panel-header">
             <div>
@@ -658,6 +699,8 @@
     </div>
 
     <div id="statusToast" class="status-toast" hidden></div>
+    <script defer src="/_vercel/insights/script.js"></script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

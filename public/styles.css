@@ -1698,11 +1698,19 @@ button:hover {
 }
 
 .panel-watchlist {
-  grid-column: 1 / span 5;
+  grid-column: span 5;
 }
 
 .panel-workbench {
-  grid-column: 6 / -1;
+  grid-column: span 7;
+}
+
+.panel-calendar {
+  grid-column: span 5;
+}
+
+.panel-news {
+  grid-column: span 7;
 }
 
 .panel-header {
@@ -1710,6 +1718,34 @@ button:hover {
   min-height: 34px;
   background: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid var(--line);
+}
+
+.panel-drag-handle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 72px;
+  justify-content: center;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: grab;
+}
+
+.panel-drag-handle:active {
+  cursor: grabbing;
+}
+
+.panel-dragging {
+  opacity: 0.45;
+}
+
+.panel-drop-before {
+  box-shadow: inset 0 2px 0 #8fb8ff;
+}
+
+.panel-drop-after {
+  box-shadow: inset 0 -2px 0 #8fb8ff;
 }
 
 .panel-header h2,
@@ -1771,6 +1807,103 @@ textarea:focus {
 
 .inline-form {
   grid-template-columns: minmax(160px, 1fr) auto auto;
+}
+
+.compact-inline-form {
+  grid-template-columns: auto auto auto;
+}
+
+.panel-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  background: #0d0d0d;
+}
+
+.panel-status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  background: #090909;
+  color: #a7a7a7;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.panel-status-chip.warn {
+  border-color: #6f5d22;
+  color: #d4c078;
+}
+
+.calendar-list,
+.news-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.calendar-item,
+.news-item {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: #0b0b0b;
+  padding: 10px;
+}
+
+.calendar-item {
+  grid-template-columns: 84px minmax(0, 1fr);
+}
+
+.calendar-time {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  color: #c5c5c5;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.calendar-body,
+.news-item-head {
+  display: grid;
+  gap: 4px;
+}
+
+.calendar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.signal-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid #2f3e57;
+  background: #0f1724;
+  color: #8fb8ff;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.news-item a {
+  color: #f2f2f2;
+  text-decoration: none;
+  line-height: 1.5;
+}
+
+.news-item a:hover {
+  color: #8fb8ff;
 }
 
 .stacked-form {
@@ -2059,6 +2192,8 @@ th {
 
   .panel-watchlist,
   .panel-workbench,
+  .panel-calendar,
+  .panel-news,
   .panel,
   .panel-market-pulse,
   .intelligence-panel,

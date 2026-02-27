@@ -27,6 +27,8 @@ export const config = {
   historyTtlMs: Number(process.env.HISTORY_TTL_MS ?? 300000),
   companyTtlMs: Number(process.env.COMPANY_TTL_MS ?? 900000),
   macroTtlMs: Number(process.env.MACRO_TTL_MS ?? 1800000),
+  calendarTtlMs: Number(process.env.CALENDAR_TTL_MS ?? 900000),
+  newsTtlMs: Number(process.env.NEWS_TTL_MS ?? 120000),
   yieldCurveTtlMs: Number(process.env.YIELD_CURVE_TTL_MS ?? 1800000),
   cryptoOrderBookTtlMs: Number(process.env.CRYPTO_ORDERBOOK_TTL_MS ?? 5000),
   digestCheckMs: Number(process.env.DIGEST_CHECK_MS ?? 300000),
@@ -60,5 +62,6 @@ export function defaultUserPreferences() {
       minChangePct: "",
     },
     portfolio: [],
+    panelLayout: [],
   };
 }
