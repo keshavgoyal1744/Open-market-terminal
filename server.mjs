@@ -1,6 +1,7 @@
 import http from "node:http";
 import crypto from "node:crypto";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import "./src/load-env.mjs";
 import {
@@ -33,11 +34,15 @@ const market = new MarketDataService(cache);
 const notifier = new NotificationService(config);
 const authLimiter = new FixedWindowRateLimiter();
 const cryptoHub = new CoinbaseTickerHub();
+const isDirectExecution = process.argv[1] ? path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;
 
 await storage.init();
-const jobs = startBackgroundJobs({ storage, market, events, notifier });
+const jobs = config.isServerless
+  ? { stop() {} }
+  : startBackgroundJobs({ storage, market, events, notifier });
 
-const server = http.createServer(async (request, response) => {
+export async function handleRequest(request, response, options = {}) {
+  const serveStatic = options.serveStatic !== false;
   const url = new URL(request.url, `http://${request.headers.host ?? `${config.host}:${config.port}`}`);
   const context = await buildRequestContext(request);
 
@@ -46,25 +51,39 @@ const server = http.createServer(async (request, response) => {
       return await handleApi(request, response, url, context);
     }
 
+    if (!serveStatic) {
+      throw httpError(404, "Not found.");
+    }
+
     return await sendStaticFile(response, publicDir, url.pathname);
   } catch (error) {
     const statusCode = error.statusCode ?? 500;
     return sendError(response, statusCode, error.message, error.details ?? null);
   }
-});
+}
 
-server.on("error", (error) => {
-  console.error(`[server] ${error.message}`);
-});
+const server = isDirectExecution
+  ? http.createServer((request, response) => handleRequest(request, response))
+  : null;
 
-server.listen(config.port, config.host, () => {
-  console.log(`Open Market Terminal running on http://${config.host}:${config.port}`);
-});
+if (server) {
+  server.on("error", (error) => {
+    console.error(`[server] ${error.message}`);
+  });
+
+  server.listen(config.port, config.host, () => {
+    console.log(`Open Market Terminal running on http://${config.host}:${config.port}`);
+  });
+}
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     jobs.stop();
-    server.close(() => process.exit(0));
+    if (server) {
+      server.close(() => process.exit(0));
+      return;
+    }
+    process.exit(0);
   });
 }
 

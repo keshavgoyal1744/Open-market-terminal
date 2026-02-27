@@ -27,6 +27,26 @@ export SEC_USER_AGENT="OpenMarketTerminal/0.2 your-email@example.com"
 node server.mjs
 ```
 
+## Vercel
+
+This repository now exposes the backend through `api/[...route].js`, which forwards Vercel `/api/*` requests into the existing market server logic.
+
+Set these environment variables in the Vercel project:
+
+- `SESSION_SECRET`: required.
+- `SECURE_COOKIES=true`: recommended because Vercel is HTTPS.
+- `APP_URL=https://your-project.vercel.app`
+- `SEC_USER_AGENT`: recommended for SEC requests.
+- `SMTP_*` or `SENDMAIL_PATH`: optional, only if you want email delivery.
+
+Serverless limits still matter:
+
+- Persistent app state is ephemeral. On Vercel this build writes state into `/tmp`, which can reset on cold starts and deployments.
+- Background jobs do not run continuously, so scheduled digests and polling-based automations are best-effort only.
+- SSE-style endpoints such as live crypto streams can be less reliable than on a long-running host.
+
+For stable persistence and continuous workers, use Railway, Render, Fly.io, or a VM instead.
+
 ## Reverse proxy notes
 
 - Terminate TLS at the proxy.

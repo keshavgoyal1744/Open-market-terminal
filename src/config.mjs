@@ -3,15 +3,20 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, "..");
+const isServerless = Boolean(
+  process.env.VERCEL || process.env.AWS_REGION || process.env.LAMBDA_TASK_ROOT || process.env.NOW_REGION,
+);
+const defaultDataDir = isServerless ? "/tmp/open-market-terminal-data" : path.join(appRoot, "data");
 
 export const config = {
   appRoot,
+  isServerless,
   dataDir: process.env.DATA_DIR
     ? path.resolve(process.env.DATA_DIR)
-    : path.join(appRoot, "data"),
+    : defaultDataDir,
   dataFile: process.env.DATA_FILE
     ? path.resolve(process.env.DATA_FILE)
-    : path.join(process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(appRoot, "data"), "state.json"),
+    : path.join(process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : defaultDataDir, "state.json"),
   port: Number(process.env.PORT ?? 3000),
   host: process.env.HOST ?? "127.0.0.1",
   sessionCookieName: process.env.SESSION_COOKIE_NAME ?? "omt_session",
