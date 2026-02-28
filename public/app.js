@@ -260,9 +260,9 @@ const PAGE_PANEL_COLUMNS = {
   },
   research: {
     "section-research-rail": "1",
-    "section-workbench": "2",
-    "section-intelligence": "3",
-    "section-screening": "2",
+    "section-workbench": "2 / span 2",
+    "section-intelligence": "2",
+    "section-screening": "3",
     "section-events": "2 / span 2",
   },
   ops: {
@@ -289,7 +289,7 @@ const PAGE_PANEL_ROWS = {
   research: {
     "section-research-rail": "1 / span 3",
     "section-workbench": "1",
-    "section-intelligence": "1 / span 2",
+    "section-intelligence": "2",
     "section-screening": "2",
     "section-events": "3",
   },

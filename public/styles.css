@@ -1814,10 +1814,11 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] {
-  grid-template-columns: 220px minmax(0, 1.5fr) minmax(340px, 0.98fr);
-  grid-auto-flow: row;
+  grid-template-columns: 216px minmax(0, 1.65fr) minmax(360px, 1fr);
+  grid-auto-flow: dense;
   grid-auto-rows: minmax(min-content, max-content);
   align-items: start;
+  gap: 10px;
 }
 
 #dashboardGrid[data-page="research"] .panel,
@@ -1830,6 +1831,8 @@ button:hover {
 #dashboardGrid[data-page="research"] .panel {
   align-content: start;
   min-height: 0;
+  gap: 8px;
+  padding: 10px;
 }
 
 #dashboardGrid[data-page="research"] #section-research-rail {
@@ -1852,11 +1855,11 @@ button:hover {
 #dashboardGrid[data-page="research"] #section-intelligence .panel-header,
 #dashboardGrid[data-page="research"] #section-screening .panel-header,
 #dashboardGrid[data-page="research"] #section-events .panel-header {
-  padding-bottom: 10px;
+  padding-bottom: 8px;
 }
 
 #dashboardGrid[data-page="research"] #section-workbench .detail-grid {
-  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.95fr);
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.9fr);
   gap: 8px;
   padding: 0;
   align-items: start;
@@ -1882,6 +1885,10 @@ button:hover {
   gap: 6px;
 }
 
+#dashboardGrid[data-page="research"] #section-workbench .watchlist-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 #dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(3) .list-stack,
 #dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(4) .terminal-table-wrap {
   max-height: 320px;
@@ -1901,6 +1908,15 @@ button:hover {
 #dashboardGrid[data-page="research"] #section-intelligence .intel-grid {
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .command-bar {
+  gap: 4px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .command-pill {
+  min-width: 76px;
+  padding: 8px 9px;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .metric-strip,
@@ -1923,18 +1939,36 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] #section-screening .screen-form {
-  grid-template-columns: minmax(0, 1.45fr) repeat(4, minmax(0, 0.8fr)) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
+#dashboardGrid[data-page="research"] #section-screening .screen-form > :first-child {
+  grid-column: 1 / -1;
+  min-height: 88px;
+}
+
+#dashboardGrid[data-page="research"] #section-screening .screen-form > button:last-child {
+  justify-self: start;
+  min-width: 140px;
+}
+
 #dashboardGrid[data-page="research"] #section-screening .table-wrap {
-  max-height: 280px;
+  max-height: 250px;
   overflow: auto;
 }
 
 #dashboardGrid[data-page="research"] #section-events .list-stack {
   max-height: 320px;
   overflow: auto;
+}
+
+#dashboardGrid[data-page="research"] #section-events {
+  gap: 6px;
+}
+
+#dashboardGrid[data-page="research"] #section-events .list-stack {
+  gap: 6px;
 }
 
 #dashboardGrid[data-page="research"] .research-sparkline {
@@ -1950,6 +1984,10 @@ button:hover {
 #dashboardGrid[data-page="research"] .compact-toolbar {
   padding-left: 8px;
   padding-right: 8px;
+}
+
+#dashboardGrid[data-page="research"] .section-label {
+  margin-bottom: 2px;
 }
 
 #dashboardGrid[data-page="ops"] {
