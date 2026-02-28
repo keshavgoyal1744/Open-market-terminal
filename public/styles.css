@@ -1859,6 +1859,19 @@ button:hover {
   align-self: start;
 }
 
+#dashboardGrid[data-page="overview"] #section-macro .macro-grid {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+#dashboardGrid[data-page="overview"] #section-macro .subpanel {
+  gap: 8px;
+}
+
+#dashboardGrid[data-page="overview"] #section-macro #yieldCurveChart {
+  min-height: 250px;
+}
+
 #dashboardGrid[data-page="overview"] #section-market-events {
   grid-column: span 6;
   align-self: start;
