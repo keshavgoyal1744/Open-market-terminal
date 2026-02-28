@@ -70,6 +70,19 @@ const DEFAULT_PANEL_LAYOUT = [
   "section-events",
   "section-limitations",
 ];
+const DEFAULT_SECTORS = [
+  "Technology",
+  "Communication Services",
+  "Consumer Cyclical",
+  "Consumer Defensive",
+  "Financial Services",
+  "Healthcare",
+  "Industrials",
+  "Energy",
+  "Utilities",
+  "Real Estate",
+  "Basic Materials",
+];
 
 const PAGE_DEFINITIONS = {
   overview: {
@@ -208,6 +221,14 @@ const PAGE_PANEL_SPANS = {
 };
 
 const PAGE_PANEL_ORDERS = {
+  overview: {
+    "section-market-pulse": 0,
+    "section-macro": 1,
+    "section-market-events": 2,
+    "section-heatmap": 3,
+    "section-watchlist": 4,
+    "section-flow": 5,
+  },
   research: {
     "section-research-rail": 0,
     "section-workbench": 1,
@@ -215,25 +236,71 @@ const PAGE_PANEL_ORDERS = {
     "section-events": 3,
     "section-screening": 4,
   },
+  ops: {
+    "section-portfolio": 0,
+    "section-alerts": 1,
+    "section-intel-ops": 2,
+    "section-activity": 3,
+    "section-crypto": 4,
+    "section-workspaces": 5,
+    "section-notes": 6,
+    "section-limitations": 7,
+  },
 };
 
 const PAGE_PANEL_COLUMNS = {
+  overview: {
+    "section-market-pulse": "1 / span 3",
+    "section-macro": "4 / span 3",
+    "section-market-events": "7 / span 6",
+    "section-heatmap": "1 / -1",
+    "section-watchlist": "1 / span 7",
+    "section-flow": "8 / span 5",
+  },
   research: {
-    "section-research-rail": "1 / span 3",
-    "section-workbench": "4 / span 5",
+    "section-research-rail": "1 / span 2",
+    "section-workbench": "3 / span 6",
     "section-intelligence": "9 / span 4",
-    "section-events": "4 / span 5",
+    "section-events": "3 / span 6",
     "section-screening": "9 / span 4",
+  },
+  ops: {
+    "section-portfolio": "1 / span 4",
+    "section-alerts": "5 / span 4",
+    "section-intel-ops": "9 / span 4",
+    "section-activity": "1 / span 6",
+    "section-crypto": "7 / span 6",
+    "section-workspaces": "1 / span 6",
+    "section-notes": "7 / span 6",
+    "section-limitations": "1 / -1",
   },
 };
 
 const PAGE_PANEL_ROWS = {
+  overview: {
+    "section-market-pulse": "1",
+    "section-macro": "1",
+    "section-market-events": "1",
+    "section-heatmap": "2",
+    "section-watchlist": "3",
+    "section-flow": "3",
+  },
   research: {
     "section-research-rail": "1 / span 2",
     "section-workbench": "1",
     "section-intelligence": "1",
     "section-events": "2",
     "section-screening": "2",
+  },
+  ops: {
+    "section-portfolio": "1",
+    "section-alerts": "1",
+    "section-intel-ops": "1",
+    "section-activity": "2",
+    "section-crypto": "2",
+    "section-workspaces": "3",
+    "section-notes": "3",
+    "section-limitations": "4",
   },
 };
 
@@ -1173,7 +1240,7 @@ function setActivePage(pageId, options = {}) {
     void loadCompanyMap(state.preferences.detailSymbol);
   }
   if (state.preferences.activePage === "sectors") {
-    syncSectorSelector(state.sectorBoard?.sectors ?? state.heatmap?.sectors ?? [], state.preferences.sectorFocus);
+    syncSectorSelector(state.sectorBoard?.sectors ?? state.heatmap?.sectors ?? DEFAULT_SECTORS, state.preferences.sectorFocus);
     if (!(state.sectorBoard?.sectors?.length || state.heatmap?.sectors?.length)) {
       void loadSectorBoard(false);
     }
@@ -1443,7 +1510,7 @@ async function loadHeatmap(force = false) {
   try {
     const payload = await api(`/api/heatmap${force ? "?force=1" : ""}`);
     state.heatmap = payload;
-    syncSectorSelector(payload.sectors ?? []);
+    syncSectorSelector(payload.sectors?.length ? payload.sectors : DEFAULT_SECTORS);
     document.querySelector("#heatmapSummary").innerHTML = renderHeatmapSummary(payload);
     document.querySelector("#heatmapWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
     setText("#heatmapAsOf", payload.asOf ? `Updated ${formatDateTime(payload.asOf)}` : "Awaiting heatmap sync");
@@ -1473,7 +1540,7 @@ async function loadSectorBoard(force = false) {
     const payload = await api(`/api/sector-board?sector=${encodeURIComponent(sector)}${force ? "&force=1" : ""}`);
     state.sectorBoard = payload;
     state.preferences.sectorFocus = payload.sector ?? sector;
-    syncSectorSelector(payload.sectors?.length ? payload.sectors : state.heatmap?.sectors ?? [], payload.sector);
+    syncSectorSelector(payload.sectors?.length ? payload.sectors : state.heatmap?.sectors ?? DEFAULT_SECTORS, payload.sector);
     const sectorLabel = payload.sector ?? state.preferences.sectorFocus ?? "selected sector";
     document.querySelector("#sectorBoardSummary").innerHTML = renderSectorBoardSummary(payload);
     document.querySelector("#sectorBoardWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
@@ -2439,8 +2506,12 @@ function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFo
 
   const ordered = [...new Set((sectors ?? []).map((item) => item?.sector ?? item).filter(Boolean))];
   if (!ordered.length) {
-    select.innerHTML = `<option value="">Loading sectors...</option>`;
-    select.disabled = true;
+    select.innerHTML = DEFAULT_SECTORS
+      .map((sector) => `<option value="${escapeHtml(sector)}">${escapeHtml(sector)}</option>`)
+      .join("");
+    select.disabled = false;
+    select.value = DEFAULT_SECTORS.includes(selectedSector) ? selectedSector : DEFAULT_SECTORS[0];
+    state.preferences.sectorFocus = select.value;
     return;
   }
   select.disabled = false;
@@ -3572,15 +3643,19 @@ function renderFilings(filings) {
 function renderOptions(options, quote) {
   const calls = options?.calls ?? [];
   const puts = options?.puts ?? [];
+  const unavailable = Boolean(options?.warning) && !calls.length && !puts.length;
   const status = document.querySelector("#optionsStatus");
+  document.querySelector("#section-workbench .options-grid")?.classList.toggle("options-grid-unavailable", unavailable);
   if (status) {
     status.innerHTML = options?.warning
       ? `<div class="panel-status-chip warn">${escapeHtml(normalizeWorkbenchWarning(options.warning))}</div>`
       : `<div class="panel-status-chip">${escapeHtml(isFundLike(quote) ? "Listed options may be partial or delayed for fund-like instruments." : "Current listed options snapshot loaded.")}</div>`;
   }
 
-  const emptyMessage = options?.warning
-    ? "Public options feed unavailable right now."
+  const emptyMessage = unavailable
+    ? "Free listed-options chain is unavailable right now."
+    : options?.warning
+    ? "Options coverage is partial from the current public source."
     : "No listed contracts were returned for this snapshot.";
 
   document.querySelector("#callsBody").innerHTML = calls.length
@@ -4527,7 +4602,7 @@ function renderCompanyMapHolders(items) {
               <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
               <div>
                 <strong>${escapeHtml(holder.holder ?? "n/a")}</strong>
-                <div class="muted">ownership filing</div>
+                <div class="muted">${escapeHtml(holder.note ?? "ownership filing")}</div>
               </div>
             </div>
           </td>
@@ -4561,7 +4636,7 @@ function renderCompanyMapHolderList(items) {
   }
 
   return items
-    .map((item) => renderIntelListItem(item.holder ?? "Holder", formatPercentScaled(item.pctHeld), formatCompact(item.shares)))
+    .map((item) => renderIntelListItem(item.holder ?? "Holder", formatPercentScaled(item.pctHeld), item.note ?? formatCompact(item.shares)))
     .join("");
 }
 
@@ -4819,11 +4894,25 @@ function renderWorkbenchSummary(quote, company, points) {
 function renderOptionsSummary(options, quote) {
   const calls = options?.calls ?? [];
   const puts = options?.puts ?? [];
+  const unavailable = Boolean(options?.warning) && !calls.length && !puts.length;
   const frontCall = calls[0] ?? null;
   const frontPut = puts[0] ?? null;
   const callVolume = sum(calls.map((contract) => contract.volume)) ?? null;
   const putVolume = sum(puts.map((contract) => contract.volume)) ?? null;
   const openInterest = sum([...calls, ...puts].map((contract) => contract.openInterest)) ?? null;
+  if (unavailable) {
+    return [
+      renderTerminalStat("Source", "Blocked", "free listed-options feed"),
+      renderTerminalStat("Instrument", humanizeInstrumentType(quote), quote?.exchange ?? "public quote"),
+      renderTerminalStat(
+        "Share Vol",
+        formatCompact(quote?.volume),
+        formatCompact(quote?.averageVolume) !== "n/a" ? `avg ${formatCompact(quote?.averageVolume)}` : "share tape",
+      ),
+      renderTerminalStat("Contracts", "n/a", "retry later"),
+      renderTerminalStat("Coverage", "Degraded", "quote and filings still live"),
+    ].join("");
+  }
   return [
     renderTerminalStat("Calls", String(calls?.length ?? 0), "visible contracts"),
     renderTerminalStat("Puts", String(puts?.length ?? 0), "visible contracts"),
@@ -5717,7 +5806,7 @@ function normalizeWorkbenchWarning(message) {
     return null;
   }
   if (text.includes("Invalid Crumb")) {
-    return "Yahoo blocked this module request. Showing degraded public-source coverage.";
+    return "Free listed-options coverage is blocked by the current public upstream. Quote, chart, and filings coverage remain live.";
   }
   if (text.includes("Unauthorized")) {
     return "An upstream public market-data endpoint denied this request. Showing fallback coverage.";

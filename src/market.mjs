@@ -464,25 +464,43 @@ export class MarketDataService {
           ...(company.market.topInstitutionalHolders ?? []),
           ...(company.market.topFundHolders ?? []),
         ]);
-        const resolvedHolders = (holders.length
-          ? holders
-          : [
-              company.market.institutionPercentHeld != null
-                ? {
-                    holder: "Institutions (aggregate)",
-                    shares: null,
-                    pctHeld: company.market.institutionPercentHeld,
-                  }
-                : null,
-              company.market.insiderPercentHeld != null
-                ? {
-                    holder: "Insiders (aggregate)",
-                    shares: null,
-                    pctHeld: company.market.insiderPercentHeld,
-                  }
-                : null,
-            ].filter(Boolean)
-        ).slice(0, 16);
+        const ownershipFallbacks = [
+          company.market.institutionPercentHeld != null
+            ? {
+                holder: "Institutions (aggregate)",
+                shares: null,
+                pctHeld: company.market.institutionPercentHeld,
+                note: "aggregate institutional ownership",
+              }
+            : null,
+          company.market.insiderPercentHeld != null
+            ? {
+                holder: "Insiders (aggregate)",
+                shares: null,
+                pctHeld: company.market.insiderPercentHeld,
+                note: "aggregate insider ownership",
+              }
+            : null,
+          company.market.floatShares != null
+            ? {
+                holder: "Public float",
+                shares: company.market.floatShares,
+                pctHeld: null,
+                note: "estimated freely traded shares",
+              }
+            : null,
+          company.market.sharesShort != null
+            ? {
+                holder: "Reported short interest",
+                shares: company.market.sharesShort,
+                pctHeld: null,
+                note: company.market.shortRatio != null
+                  ? `${roundTo(company.market.shortRatio, 2)} days to cover`
+                  : "public short-interest signal",
+              }
+            : null,
+        ].filter(Boolean);
+        const resolvedHolders = dedupeHolders(holders.length ? holders : ownershipFallbacks).slice(0, 16);
         const resolvedInsiderHolders = (
           company.market.insiderHolders?.length
             ? company.market.insiderHolders
