@@ -2774,7 +2774,13 @@ function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFo
     return;
   }
 
-  const ordered = [...new Set((sectors ?? []).map((item) => item?.sector ?? item).filter(Boolean))];
+  const weighted = (sectors ?? [])
+    .map((item) => (typeof item === "string" ? { sector: item, weight: 0 } : item))
+    .filter((item) => item?.sector);
+  const ordered = [...weighted]
+    .sort((left, right) => (numeric(right.weight) ?? 0) - (numeric(left.weight) ?? 0))
+    .map((item) => item.sector)
+    .filter((sector, index, list) => list.indexOf(sector) === index);
   if (!ordered.length) {
     select.innerHTML = DEFAULT_SECTORS
       .map((sector) => `<option value="${escapeHtml(sector)}">${escapeHtml(sector)}</option>`)
@@ -2800,9 +2806,15 @@ function heatmapSectorSpan(weight) {
     return 4;
   }
   if (weight >= 24) {
+    return 8;
+  }
+  if (weight >= 16) {
+    return 7;
+  }
+  if (weight >= 10) {
     return 6;
   }
-  if (weight >= 14) {
+  if (weight >= 5) {
     return 5;
   }
   return 4;
@@ -4517,7 +4529,7 @@ function renderHeatmapTiles(payload) {
         weight: sum(items.map((item) => item.weight)),
       };
       const sectorSpan = heatmapSectorSpan(sector.weight);
-      const visibleCount = sector.weight >= 20 ? 20 : sector.weight >= 10 ? 16 : 12;
+      const visibleCount = sector.weight >= 22 ? 32 : sector.weight >= 12 ? 24 : sector.weight >= 6 ? 18 : 14;
       const visibleItems = items.slice(0, visibleCount);
       const hiddenCount = Math.max(items.length - visibleItems.length, 0);
 
@@ -4526,7 +4538,7 @@ function renderHeatmapTiles(payload) {
           <button type="button" class="heatmap-sector-header" data-heatmap-sector="${escapeHtml(sector.sector ?? "Sector")}">
             <div>
               <h3>${escapeHtml(sector.sector ?? "Sector")}</h3>
-              <span>${formatPercent(sector.weight)} index share</span>
+              <span>${formatPercent(sector.weight)} index share · ${visibleItems.length}${hiddenCount ? ` of ${items.length}` : ""} names</span>
             </div>
             <strong class="${tone(sector.averageMove)}">${formatPercent(sector.averageMove)}</strong>
           </button>
@@ -4534,12 +4546,13 @@ function renderHeatmapTiles(payload) {
             ${visibleItems
               .map((tile) => {
                 const intensity = Math.min(Math.abs(tile.changePercent ?? 0) / 4, 1);
+                const tileSize = Math.max(tile.columnSpan ?? 1, tile.rowSpan ?? 1);
                 return `
                   <button
                     type="button"
                     class="heatmap-tile ${tone(tile.changePercent)}${tile.symbol === state.heatmapFocusSymbol ? " active" : ""}"
                     data-heatmap-symbol="${escapeHtml(tile.symbol)}"
-                    data-size="${tile.columnSpan}"
+                    data-size="${tileSize}"
                     style="grid-column: span ${tile.columnSpan}; grid-row: span ${tile.rowSpan}; --heat-opacity: ${0.18 + intensity * 0.46};"
                   >
                     <div class="heatmap-tile-top">

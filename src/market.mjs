@@ -1017,7 +1017,7 @@ export class MarketDataService {
           },
           leaders,
           laggards,
-          items: hydratedItems.slice(0, 48),
+          items: hydratedItems,
           news: (news.items ?? []).slice(0, 12),
         };
       },
@@ -2587,13 +2587,16 @@ function heatmapColumnSpan(weight) {
   if (!Number.isFinite(weight)) {
     return 1;
   }
-  if (weight >= 6) {
+  if (weight >= 7) {
+    return 5;
+  }
+  if (weight >= 4) {
+    return 4;
+  }
+  if (weight >= 2) {
     return 3;
   }
-  if (weight >= 3) {
-    return 2;
-  }
-  if (weight >= 1) {
+  if (weight >= 0.75) {
     return 2;
   }
   return 1;
@@ -2603,10 +2606,13 @@ function heatmapRowSpan(weight) {
   if (!Number.isFinite(weight)) {
     return 1;
   }
-  if (weight >= 6) {
-    return 2;
+  if (weight >= 7) {
+    return 4;
   }
-  if (weight >= 2) {
+  if (weight >= 4) {
+    return 3;
+  }
+  if (weight >= 1.5) {
     return 2;
   }
   return 1;

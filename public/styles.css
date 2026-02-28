@@ -2273,8 +2273,8 @@ button:hover {
 .heatmap-shell {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
-  padding: 10px;
+  gap: 8px;
+  padding: 8px;
 }
 
 .panel-research-rail {
@@ -2427,7 +2427,7 @@ button:hover {
 }
 
 .heatmap-canvas-panel {
-  min-height: 600px;
+  min-height: 700px;
 }
 
 .heatmap-detail-panel {
@@ -2436,19 +2436,22 @@ button:hover {
 
 .sp500-heatmap {
   display: grid;
-  grid-template-columns: repeat(18, minmax(0, 1fr));
-  gap: 2px;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, auto);
+  gap: 4px;
   align-content: start;
 }
 
 .heatmap-sector {
   display: grid;
-  gap: 3px;
-  min-height: 96px;
-  padding: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  gap: 4px;
+  min-height: 132px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.008)),
+    #080808;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015);
 }
 
 .heatmap-sector-header {
@@ -2457,7 +2460,7 @@ button:hover {
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  padding: 0 0 1px;
+  padding: 0 0 2px;
   border: none;
   background: transparent;
   text-align: left;
@@ -2471,7 +2474,7 @@ button:hover {
 
 .heatmap-sector-header h3 {
   margin: 0;
-  font-size: 12px;
+  font-size: 13px;
   text-transform: none;
   letter-spacing: 0;
   color: #f0f0f0;
@@ -2479,7 +2482,7 @@ button:hover {
 
 .heatmap-sector-header span {
   display: block;
-  margin-top: 1px;
+  margin-top: 2px;
   font-size: 9px;
   color: #8f8f8f;
   text-transform: uppercase;
@@ -2487,13 +2490,13 @@ button:hover {
 }
 
 .heatmap-sector-header strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .heatmap-sector-grid {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-auto-rows: 16px;
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+  grid-auto-rows: 18px;
   gap: 2px;
 }
 
@@ -2504,9 +2507,9 @@ button:hover {
   gap: 2px;
   min-height: 100%;
   width: 100%;
-  padding: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.018);
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.012);
   text-align: left;
   overflow: hidden;
 }
@@ -2527,11 +2530,11 @@ button:hover {
 .heatmap-tile.active,
 .heatmap-tile:hover,
 .heatmap-tile:focus-visible {
-  border-color: rgba(255, 255, 255, 0.75);
+  border-color: rgba(255, 255, 255, 0.45);
   z-index: 1;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
-    0 12px 24px rgba(0, 0, 0, 0.24);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 10px 20px rgba(0, 0, 0, 0.24);
 }
 
 .heatmap-sector.negative .heatmap-sector-header strong {
@@ -2570,18 +2573,18 @@ button:hover {
 }
 
 .heatmap-tile strong {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 0.95;
 }
 
 .heatmap-name {
-  font-size: 8px;
+  font-size: 9px;
   line-height: 1.2;
   color: rgba(255, 255, 255, 0.78);
 }
 
 .heatmap-move {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1;
 }
@@ -2621,6 +2624,18 @@ button:hover {
 }
 
 .heatmap-tile[data-size="2"] .heatmap-move {
+  font-size: 10px;
+}
+
+.heatmap-tile[data-size="3"] strong,
+.heatmap-tile[data-size="4"] strong,
+.heatmap-tile[data-size="5"] strong {
+  font-size: 14px;
+}
+
+.heatmap-tile[data-size="3"] .heatmap-name,
+.heatmap-tile[data-size="4"] .heatmap-name,
+.heatmap-tile[data-size="5"] .heatmap-name {
   font-size: 10px;
 }
 
