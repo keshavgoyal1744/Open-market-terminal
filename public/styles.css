@@ -1806,6 +1806,7 @@ button:hover {
 
 #dashboardGrid[data-page="sectors"] .sector-board-shell > article:nth-child(3) {
   grid-area: news;
+  align-self: start;
 }
 
 #dashboardGrid[data-page="sectors"] .sector-board-shell > article:nth-child(4) {
@@ -2547,7 +2548,9 @@ button:hover {
 .sector-news-panel {
   padding: 8px 10px 10px;
   gap: 4px;
-  min-height: 100%;
+  min-height: 0;
+  align-self: start;
+  align-content: start;
 }
 
 .sector-news-panel .subpanel-header {
@@ -2567,6 +2570,7 @@ button:hover {
   display: grid;
   grid-template-columns: 1fr;
   gap: 4px;
+  align-content: start;
 }
 
 .sector-news-card {
