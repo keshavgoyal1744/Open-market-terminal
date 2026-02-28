@@ -3,6 +3,7 @@ const DEFAULT_PREFERENCES = {
   researchPinnedSymbols: [],
   detailSymbol: "AAPL",
   newsFocus: "",
+  sectorFocus: "Technology",
   cryptoProducts: ["BTC-USD", "ETH-USD", "SOL-USD"],
   activePage: "overview",
   screenConfig: {
@@ -21,8 +22,10 @@ const GUEST_PREFERENCES_KEY = "omt-guest-preferences";
 const DEFAULT_PANEL_SIZES = {
   "section-market-pulse": 12,
   "section-heatmap": 12,
+  "section-sector-board": 12,
   "section-market-events": 12,
   "section-watchlist": 5,
+  "section-flow": 7,
   "section-research-rail": 3,
   "section-workbench": 7,
   "section-intelligence": 12,
@@ -43,8 +46,10 @@ const DEFAULT_PANEL_SIZES = {
 const DEFAULT_PANEL_LAYOUT = [
   "section-market-pulse",
   "section-heatmap",
+  "section-sector-board",
   "section-market-events",
   "section-watchlist",
+  "section-flow",
   "section-research-rail",
   "section-workbench",
   "section-intelligence",
@@ -69,15 +74,27 @@ const PAGE_DEFINITIONS = {
     sectionLabel: "Markets Desk",
     title: "Cross-asset market board with breadth, catalysts, and scheduled risk.",
     description:
-      "Keep the heatmap, pulse board, ranked events, watchlists, and macro calendar on one cleaner market page.",
-    tags: ["Heatmap", "Pulse", "Calendar", "Events"],
+      "Keep the heatmap, pulse board, ranked events, watchlists, flow signals, and macro calendar on one cleaner market page.",
+    tags: ["Heatmap", "Pulse", "Flow", "Calendar"],
     sections: [
       "section-market-pulse",
       "section-heatmap",
       "section-market-events",
       "section-watchlist",
+      "section-flow",
       "section-macro",
       "section-calendar",
+    ],
+  },
+  sectors: {
+    label: "Sectors",
+    sectionLabel: "Sector Desk",
+    title: "Sector drilldowns with relative movers, weight maps, and linked headlines.",
+    description:
+      "Open any heatmap sector into its own board with constituent ranks, sector headlines, and direct routes back into single-name research.",
+    tags: ["Sector Board", "Leaders", "Weights", "Headlines"],
+    sections: [
+      "section-sector-board",
     ],
   },
   news: {
@@ -131,9 +148,13 @@ const PAGE_PANEL_SPANS = {
     "section-market-pulse": 4,
     "section-market-events": 8,
     "section-watchlist": 5,
+    "section-flow": 7,
     "section-heatmap": 12,
     "section-macro": 3,
     "section-calendar": 4,
+  },
+  sectors: {
+    "section-sector-board": 12,
   },
   news: {
     "section-news": 12,
@@ -229,6 +250,8 @@ const state = {
   calendarEvents: [],
   newsItems: [],
   marketEvents: [],
+  sectorBoard: null,
+  flow: null,
   paletteCommands: [],
   commandPaletteOpen: false,
   paletteIndex: 0,
@@ -240,7 +263,9 @@ const state = {
 const SECTION_COMMANDS = [
   { id: "section-market-pulse", label: "Jump to Market Pulse", meta: "cross-asset pulse board" },
   { id: "section-heatmap", label: "Jump to S&P 500 Heatmap", meta: "live breadth and hover reasons" },
+  { id: "section-sector-board", label: "Jump to Sector Board", meta: "sector drilldown and constituents" },
   { id: "section-watchlist", label: "Jump to Watchlist", meta: "tracked market quotes" },
+  { id: "section-flow", label: "Jump to Flow Monitor", meta: "share volume, options flow, short interest" },
   { id: "section-research-rail", label: "Jump to Research Rail", meta: "symbol stack and focus list" },
   { id: "section-workbench", label: "Jump to Security Workbench", meta: "detail, filings, and options" },
   { id: "section-market-events", label: "Jump to Market Events", meta: "ranked event timeline" },
@@ -283,8 +308,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   await Promise.all([
     loadMarketPulse(),
     loadHeatmap(),
+    loadSectorBoard(),
     loadMarketEvents(),
     loadWatchlist(state.preferences.watchlistSymbols),
+    loadFlow(),
     loadResearchRail(),
     loadDetail(state.preferences.detailSymbol),
     loadMacro(),
@@ -368,6 +395,10 @@ function bindForms() {
     await loadHeatmap(true);
   });
 
+  document.querySelector("#refreshSectorBoardButton")?.addEventListener("click", async () => {
+    await loadSectorBoard(true);
+  });
+
   document.querySelector("#refreshEventsButton").addEventListener("click", async () => {
     await loadMarketEvents(true);
   });
@@ -377,7 +408,7 @@ function bindForms() {
     state.preferences.watchlistSymbols = splitSymbols(document.querySelector("#watchlistInput").value);
     schedulePreferenceSync();
     await loadWatchlist(state.preferences.watchlistSymbols);
-    await Promise.all([loadWatchlistEvents(), loadDeskCalendar(true), loadDeskNews(true), loadMarketEvents(true)]);
+    await Promise.all([loadWatchlistEvents(), loadDeskCalendar(true), loadDeskNews(true), loadMarketEvents(true), loadFlow(true)]);
   });
 
   document.querySelector("#saveWatchlistButton").addEventListener("click", async () => {
@@ -388,6 +419,15 @@ function bindForms() {
     event.preventDefault();
     state.currentHistoryRange = document.querySelector("#historyRange").value;
     await selectDetailSymbol(document.querySelector("#detailSymbol").value.trim().toUpperCase());
+  });
+
+  document.querySelector("#sectorBoardForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await selectSectorFocus(document.querySelector("#sectorBoardSelect")?.value, { page: "sectors", jump: false });
+  });
+
+  document.querySelector("#refreshFlowButton")?.addEventListener("click", async () => {
+    await loadFlow(true);
   });
 
   document.querySelector("#workspaceForm").addEventListener("submit", async (event) => {
@@ -667,11 +707,40 @@ function bindGlobalActions() {
   });
 
   document.querySelector("#sp500Heatmap")?.addEventListener("click", async (event) => {
+    const sectorTrigger = event.target instanceof Element ? event.target.closest("[data-heatmap-sector]") : null;
+    if (sectorTrigger?.dataset.heatmapSector) {
+      await selectSectorFocus(sectorTrigger.dataset.heatmapSector, { jump: true, page: "sectors" });
+      return;
+    }
     const trigger = event.target instanceof Element ? event.target.closest("[data-heatmap-symbol]") : null;
     if (!trigger) {
       return;
     }
     await selectDetailSymbol(trigger.dataset.heatmapSymbol, { jump: true, page: "research" });
+  });
+
+  document.querySelector("#sectorBoardTiles")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-sector-symbol]") : null;
+    if (!trigger?.dataset.sectorSymbol) {
+      return;
+    }
+    await selectDetailSymbol(trigger.dataset.sectorSymbol, { jump: true, page: "research" });
+  });
+
+  document.querySelector("#sectorBoardBody")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-sector-symbol]") : null;
+    if (!trigger?.dataset.sectorSymbol) {
+      return;
+    }
+    await selectDetailSymbol(trigger.dataset.sectorSymbol, { jump: true, page: "research" });
+  });
+
+  document.querySelector("#flowBody")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-flow-symbol]") : null;
+    if (!trigger?.dataset.flowSymbol) {
+      return;
+    }
+    await selectDetailSymbol(trigger.dataset.flowSymbol, { jump: true, page: "research" });
   });
 
   document.querySelector("#intelGraph")?.addEventListener("click", async (event) => {
@@ -713,8 +782,15 @@ function bindGlobalActions() {
     await loadDeskNews(true);
   });
 
-  document.querySelector("#toggleEarningsDrawerButton")?.addEventListener("click", () => {
+  document.querySelector("#toggleEarningsDrawerButton")?.addEventListener("click", async () => {
     toggleEarningsDrawer(true);
+    document.querySelector("#earningsWarning").innerHTML =
+      `<div class="panel-status-chip">Loading ${escapeHtml(state.preferences.detailSymbol)} earnings modules...</div>`;
+    if (supportsEarningsIntel(state.currentDetailQuote, state.currentCompany)) {
+      await loadEarningsIntel(state.preferences.detailSymbol, { forceOpen: true });
+    } else if (state.currentEarnings) {
+      renderEarningsDrawer(state.currentEarnings);
+    }
   });
 
   document.querySelector("#closeEarningsDrawerButton")?.addEventListener("click", () => {
@@ -1196,6 +1272,7 @@ async function loadHeatmap(force = false) {
   try {
     const payload = await api(`/api/heatmap${force ? "?force=1" : ""}`);
     state.heatmap = payload;
+    syncSectorSelector(payload.sectors ?? []);
     document.querySelector("#heatmapSummary").innerHTML = renderHeatmapSummary(payload);
     document.querySelector("#heatmapWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
     setText("#heatmapAsOf", payload.asOf ? `Updated ${formatDateTime(payload.asOf)}` : "Awaiting heatmap sync");
@@ -1214,6 +1291,36 @@ async function loadHeatmap(force = false) {
   } catch (error) {
     setFeedStatus("Degraded");
     document.querySelector("#heatmapWarnings").innerHTML =
+      `<div class="panel-status-chip warn">${escapeHtml(error.message)}</div>`;
+    showStatus(error.message, true);
+  }
+}
+
+async function loadSectorBoard(force = false) {
+  const sector = String(state.preferences.sectorFocus ?? "").trim();
+  try {
+    const payload = await api(`/api/sector-board?sector=${encodeURIComponent(sector)}${force ? "&force=1" : ""}`);
+    state.sectorBoard = payload;
+    state.preferences.sectorFocus = payload.sector ?? sector;
+    syncSectorSelector(state.heatmap?.sectors ?? [], payload.sector);
+    document.querySelector("#sectorBoardSummary").innerHTML = renderSectorBoardSummary(payload);
+    document.querySelector("#sectorBoardWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
+    document.querySelector("#sectorBoardTitle").textContent = `${payload.sector ?? "Sector"} board`;
+    document.querySelector("#sectorBoardMeta").textContent =
+      `${payload.summary?.names ?? 0} names | ${payload.asOf ? `updated ${formatDateTime(payload.asOf)}` : "awaiting sync"}`;
+    document.querySelector("#sectorNewsMeta").textContent = payload.news?.length
+      ? `Public source blend for ${payload.sector}`
+      : `No sector headlines available for ${payload.sector}`;
+    document.querySelector("#sectorBoardTiles").innerHTML = renderSectorBoardTiles(payload.items ?? []);
+    document.querySelector("#sectorLeadersList").innerHTML = (payload.leaders ?? []).map(renderQuoteListItem).join("")
+      || renderIntelEmpty("No leaders available.");
+    document.querySelector("#sectorLaggardsList").innerHTML = (payload.laggards ?? []).map(renderQuoteListItem).join("")
+      || renderIntelEmpty("No laggards available.");
+    document.querySelector("#sectorNewsList").innerHTML = renderCompactNewsFeed(payload.news ?? []);
+    document.querySelector("#sectorBoardBody").innerHTML = renderSectorBoardRows(payload.items ?? []);
+    markFeedHeartbeat("Live");
+  } catch (error) {
+    document.querySelector("#sectorBoardWarnings").innerHTML =
       `<div class="panel-status-chip warn">${escapeHtml(error.message)}</div>`;
     showStatus(error.message, true);
   }
@@ -1255,6 +1362,29 @@ async function focusHeatmapSymbol(symbol, force = false) {
     document.querySelector("#heatmapCatalysts").innerHTML = "";
     document.querySelector("#heatmapReferencesBody").innerHTML =
       `<tr><td colspan="3" class="muted">No live references are available right now.</td></tr>`;
+  }
+}
+
+async function loadFlow(force = false) {
+  const symbols = state.preferences.watchlistSymbols.slice(0, 16);
+  if (!symbols.length) {
+    document.querySelector("#flowSummary").innerHTML = "";
+    document.querySelector("#flowWarnings").innerHTML = "";
+    document.querySelector("#flowBody").innerHTML = "";
+    return;
+  }
+
+  try {
+    const payload = await api(`/api/flow?symbols=${encodeURIComponent(symbols.join(","))}${force ? "&force=1" : ""}`);
+    state.flow = payload;
+    document.querySelector("#flowSummary").innerHTML = renderFlowSummary(payload.summary ?? {});
+    document.querySelector("#flowWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
+    document.querySelector("#flowBody").innerHTML = renderFlowRows(payload.rows ?? []);
+    markFeedHeartbeat("Live");
+  } catch (error) {
+    document.querySelector("#flowWarnings").innerHTML =
+      `<div class="panel-status-chip warn">${escapeHtml(error.message)}</div>`;
+    showStatus(error.message, true);
   }
 }
 
@@ -1412,13 +1542,16 @@ async function loadDeskCalendar(force = false) {
   const windowDays = Number(document.querySelector("#calendarWindow")?.value ?? 30);
 
   try {
-    const payload = await api(`/api/calendar?symbols=${encodeURIComponent(symbols.join(","))}${force ? "&force=1" : ""}`);
+    const payload = await api(`/api/calendar?symbols=${encodeURIComponent(symbols.join(","))}&window=${encodeURIComponent(windowDays)}${force ? "&force=1" : ""}`);
     state.calendarEvents = payload.events ?? [];
     document.querySelector("#calendarSummary").innerHTML = renderCalendarSummary(state.calendarEvents, windowDays);
     document.querySelector("#calendarList").innerHTML = renderCalendar(state.calendarEvents, {
       filter,
       windowDays,
     });
+    if (document.querySelector("#calendarWarnings")) {
+      document.querySelector("#calendarWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
+    }
     markFeedHeartbeat("Live");
   } catch (error) {
     showStatus(error.message, true);
@@ -1447,7 +1580,7 @@ async function loadDeskNews(force = false) {
   }
 }
 
-async function loadEarningsIntel(symbol) {
+async function loadEarningsIntel(symbol, options = {}) {
   const peers = state.preferences.watchlistSymbols.filter((entry) => entry !== symbol).slice(0, 10);
 
   try {
@@ -1456,9 +1589,15 @@ async function loadEarningsIntel(symbol) {
     );
     state.currentEarnings = payload;
     renderEarningsDrawer(payload);
+    if (options.forceOpen) {
+      toggleEarningsDrawer(true);
+    }
   } catch (error) {
     state.currentEarnings = null;
     renderEarningsDrawer(null, error.message);
+    if (options.forceOpen) {
+      toggleEarningsDrawer(true);
+    }
   }
 }
 
@@ -1955,16 +2094,16 @@ function renderResearchRailItem(item, index, pinned) {
         <div class="research-rail-head">
           <strong>${escapeHtml(item.symbol)}</strong>
           <div class="research-rail-actions">
-            <span class="terminal-chip ${tone(item.changePercent)}">${formatPercent(item.changePercent)}</span>
+            <span class="terminal-chip">${formatMoney(item.price)}</span>
             <button type="button" class="research-pin-button${pinned ? " pinned" : ""}" data-pin-symbol="${escapeHtml(item.symbol)}" aria-label="${pinned ? "Unpin" : "Pin"} ${escapeHtml(item.symbol)}">${pinned ? "★" : "☆"}</button>
           </div>
         </div>
         <div class="research-rail-meta">
-          <span>${escapeHtml(truncateText(item.shortName ?? "watchlist symbol", 26))}</span>
-          <span>${formatMoney(item.price)}</span>
+          <span>${escapeHtml(truncateText(item.shortName ?? "watchlist symbol", 24))}</span>
+          <span class="${tone(item.changePercent)}">${formatPercent(item.changePercent)}</span>
         </div>
         <div class="research-rail-tail">
-          <span>${escapeHtml(item.industry ?? item.sector ?? "Unclassified")}</span>
+          <span>${escapeHtml(truncateText(item.industry ?? item.sector ?? "Unclassified", 22))}</span>
           ${renderResearchSparkline(item.sparkline, item.changePercent)}
         </div>
       </div>
@@ -2034,6 +2173,23 @@ function groupHeatmapTiles(tiles) {
       [...items].sort((left, right) => (right.weight ?? 0) - (left.weight ?? 0)),
     ])
     .sort((left, right) => (sum(right[1].map((item) => item.weight)) ?? 0) - (sum(left[1].map((item) => item.weight)) ?? 0));
+}
+
+function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFocus) {
+  const select = document.querySelector("#sectorBoardSelect");
+  if (!select) {
+    return;
+  }
+
+  const ordered = (sectors ?? []).map((item) => item.sector).filter(Boolean);
+  const preferred = selectedSector && ordered.includes(selectedSector) ? selectedSector : ordered[0] ?? selectedSector ?? "Technology";
+  select.innerHTML = ordered
+    .map((sector) => `<option value="${escapeHtml(sector)}">${escapeHtml(sector)}</option>`)
+    .join("");
+  if (preferred) {
+    select.value = preferred;
+    state.preferences.sectorFocus = preferred;
+  }
 }
 
 function heatmapSectorSpan(weight) {
@@ -2397,6 +2553,9 @@ function applyPreferencesToInputs() {
   document.querySelector("#watchlistInput").value = state.preferences.watchlistSymbols.join(",");
   document.querySelector("#detailSymbol").value = state.preferences.detailSymbol;
   document.querySelector("#newsFocusInput").value = state.preferences.newsFocus ?? "";
+  if (document.querySelector("#sectorBoardSelect")) {
+    document.querySelector("#sectorBoardSelect").value = state.preferences.sectorFocus ?? "";
+  }
   document.querySelector("#historyRange").value = state.currentHistoryRange;
   document.querySelector("#screenSymbols").value = state.preferences.screenConfig.symbols;
   document.querySelector("#screenMaxPe").value = state.preferences.screenConfig.maxPe;
@@ -2435,8 +2594,10 @@ function applyWorkspaceSnapshot(snapshot) {
   connectCrypto();
   void Promise.all([
     loadHeatmap(false),
+    loadSectorBoard(false),
     loadMarketEvents(),
     loadWatchlist(state.preferences.watchlistSymbols),
+    loadFlow(false),
     loadResearchRail(true),
     loadWatchlistEvents(),
     loadDetail(state.preferences.detailSymbol),
@@ -2454,6 +2615,7 @@ function snapshotCurrentWorkspace() {
     researchPinnedSymbols: state.preferences.researchPinnedSymbols,
     detailSymbol: state.preferences.detailSymbol,
     newsFocus: state.preferences.newsFocus,
+    sectorFocus: state.preferences.sectorFocus,
     cryptoProducts: state.preferences.cryptoProducts,
     activePage: state.preferences.activePage,
     screenConfig: state.preferences.screenConfig,
@@ -2503,8 +2665,10 @@ function persistGuestPreferencesIfNeeded() {
 function scheduleRefresh() {
   setInterval(() => void loadMarketPulse(), 45000);
   setInterval(() => void loadHeatmap(false), 180000);
+  setInterval(() => void loadSectorBoard(false), 180000);
   setInterval(() => void loadMarketEvents(false), 120000);
   setInterval(() => void loadWatchlist(state.preferences.watchlistSymbols), 30000);
+  setInterval(() => void loadFlow(false), 120000);
   setInterval(() => void loadResearchRail(false), 180000);
   setInterval(() => void loadWatchlistEvents(), 120000);
   setInterval(() => void loadDetail(state.preferences.detailSymbol), 60000);
@@ -2534,6 +2698,23 @@ async function selectDetailSymbol(symbol, options = {}) {
     void focusHeatmapSymbol(clean);
   }
   await Promise.all([loadDetail(clean), loadDeskNews(false), loadMarketEvents(false)]);
+}
+
+async function selectSectorFocus(sector, options = {}) {
+  const clean = String(sector ?? "").trim();
+  if (!clean) {
+    return;
+  }
+
+  state.preferences.sectorFocus = clean;
+  schedulePreferenceSync();
+  if (options.page) {
+    setActivePage(options.page, { scroll: false });
+  }
+  if (options.jump) {
+    jumpToSection("section-sector-board");
+  }
+  await loadSectorBoard(true);
 }
 
 async function cycleDetailSymbol(direction) {
@@ -2650,6 +2831,15 @@ function buildPaletteCommands(query = "") {
   );
 
   commands.push(
+    ...((state.heatmap?.sectors ?? []).slice(0, 16).map((sector) => ({
+      kind: "sector",
+      label: `Open ${sector.sector} sector`,
+      meta: `${formatPercent(sector.averageMove)} · ${formatPercent(sector.weight)} index weight`,
+      run: () => selectSectorFocus(sector.sector, { jump: true, page: "sectors" }),
+    }))),
+  );
+
+  commands.push(
     ...SECTION_COMMANDS.map((section) => ({
       kind: "panel",
       label: section.label,
@@ -2701,6 +2891,11 @@ function buildPaletteCommands(query = "") {
       meta: `open earnings detail for ${state.preferences.detailSymbol}`,
       run: async () => {
         toggleEarningsDrawer(true);
+        if (supportsEarningsIntel(state.currentDetailQuote, state.currentCompany)) {
+          await loadEarningsIntel(state.preferences.detailSymbol, { forceOpen: true });
+        } else if (state.currentEarnings) {
+          renderEarningsDrawer(state.currentEarnings);
+        }
       },
     },
     {
@@ -3213,7 +3408,7 @@ function renderCalendar(events, options = {}) {
           </div>
           <div class="calendar-body">
             <div class="calendar-title-row">
-              <strong>${escapeHtml(event.title ?? "Event")}</strong>
+              <strong>${event.link ? `<a class="event-link" href="${safeUrl(event.link)}" target="_blank" rel="noreferrer">${escapeHtml(event.title ?? "Event")}</a>` : escapeHtml(event.title ?? "Event")}</strong>
               <span class="signal-chip">${escapeHtml((event.category ?? "event").toUpperCase())}</span>
             </div>
             <div class="meta">${escapeHtml(event.source ?? "Public source")} | ${escapeHtml(event.note ?? "")}</div>
@@ -3358,18 +3553,21 @@ function renderHeatmapTiles(payload) {
         weight: sum(items.map((item) => item.weight)),
       };
       const sectorSpan = heatmapSectorSpan(sector.weight);
+      const visibleCount = sector.weight >= 20 ? 10 : sector.weight >= 10 ? 8 : 6;
+      const visibleItems = items.slice(0, visibleCount);
+      const hiddenCount = Math.max(items.length - visibleItems.length, 0);
 
       return `
         <section class="heatmap-sector ${tone(sector.averageMove)}" style="grid-column: span ${sectorSpan};">
-          <header class="heatmap-sector-header">
+          <button type="button" class="heatmap-sector-header" data-heatmap-sector="${escapeHtml(sector.sector ?? "Sector")}">
             <div>
               <h3>${escapeHtml(sector.sector ?? "Sector")}</h3>
               <span>${escapeHtml(String(items.length))} names</span>
             </div>
             <strong class="${tone(sector.averageMove)}">${formatPercent(sector.averageMove)}</strong>
-          </header>
+          </button>
           <div class="heatmap-sector-grid">
-            ${items
+            ${visibleItems
               .map((tile) => {
                 const intensity = Math.min(Math.abs(tile.changePercent ?? 0) / 4, 1);
                 return `
@@ -3381,17 +3579,27 @@ function renderHeatmapTiles(payload) {
                     style="grid-column: span ${tile.columnSpan}; grid-row: span ${tile.rowSpan}; --heat-opacity: ${0.18 + intensity * 0.46};"
                   >
                     <div class="heatmap-tile-top">
-                      <span class="heatmap-industry">${escapeHtml(truncateText(tile.name ?? tile.symbol, 20))}</span>
                       <span class="heatmap-weight">${formatPercent(tile.weight)}</span>
                     </div>
                     <div class="heatmap-tile-body">
                       <strong>${escapeHtml(tile.symbol)}</strong>
+                      <div class="heatmap-name">${escapeHtml(truncateText(tile.name ?? tile.symbol, 18))}</div>
                       <div class="heatmap-move ${tone(tile.changePercent)}">${formatPercent(tile.changePercent)}</div>
                     </div>
                   </button>
                 `;
               })
               .join("")}
+            ${hiddenCount
+              ? `
+                <button type="button" class="heatmap-tile heatmap-more-tile" data-heatmap-sector="${escapeHtml(sector.sector ?? "Sector")}" style="grid-column: span 2; grid-row: span 1;">
+                  <div class="heatmap-tile-body">
+                    <strong>+${hiddenCount}</strong>
+                    <div class="heatmap-name">open full sector board</div>
+                  </div>
+                </button>
+              `
+              : ""}
           </div>
         </section>
       `;
@@ -3448,6 +3656,154 @@ function renderHeatmapContext(payload) {
     .join("") || `<tr><td colspan="3" class="muted">No live references are available right now.</td></tr>`;
 
   highlightHeatmapFocus();
+}
+
+function renderSectorBoardSummary(payload) {
+  return [
+    renderTerminalStat("Sector", payload.sector ?? "n/a", "focus board"),
+    renderTerminalStat("Names", String(payload.summary?.names ?? 0), "constituents"),
+    renderTerminalStat("Avg Move", formatPercent(payload.summary?.averageMove), "sector mean"),
+    renderTerminalStat("Weight", formatPercent(payload.summary?.weight), "index share"),
+    renderTerminalStat("Volume", formatCompact(payload.summary?.aggregateVolume), "aggregate"),
+    renderTerminalStat("Mkt Cap", formatCompact(payload.summary?.aggregateCap), "aggregate"),
+  ].join("");
+}
+
+function renderSectorBoardTiles(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No sector constituents are available right now.");
+  }
+
+  const totalWeight = sum(items.map((item) => item.weight)) ?? 1;
+  return items
+    .slice(0, 20)
+    .map((item) => {
+      const relativeWeight = Number.isFinite(item.weight) ? item.weight / totalWeight : 0.03;
+      const span = relativeWeight >= 0.16 ? 3 : relativeWeight >= 0.08 ? 2 : 1;
+      return `
+        <button
+          type="button"
+          class="sector-board-tile ${tone(item.changePercent)}"
+          data-sector-symbol="${escapeHtml(item.symbol)}"
+          style="grid-column: span ${span};"
+        >
+          <span class="sector-board-weight">${formatPercent(item.weight)}</span>
+          <strong>${escapeHtml(item.symbol)}</strong>
+          <div class="meta">${escapeHtml(truncateText(item.name ?? item.symbol, 28))}</div>
+          <div class="sector-board-move ${tone(item.changePercent)}">${formatPercent(item.changePercent)}</div>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function renderSectorBoardRows(items) {
+  if (!items.length) {
+    return `<tr><td colspan="6" class="muted">No constituents are available for this sector.</td></tr>`;
+  }
+
+  return items
+    .map(
+      (item) => `
+        <tr class="intel-row sector-board-row" data-sector-symbol="${escapeHtml(item.symbol)}">
+          <td>
+            <div class="terminal-symbol-line">
+              <strong>${escapeHtml(item.symbol)}</strong>
+              <span class="terminal-chip">${escapeHtml(compactLabel(item.name ?? item.symbol, 22))}</span>
+            </div>
+          </td>
+          <td>${formatMoney(item.price)}</td>
+          <td class="${tone(item.changePercent)}">${formatPercent(item.changePercent)}</td>
+          <td>${formatPercent(item.weight)}</td>
+          <td>${formatCompact(item.volume)}</td>
+          <td>${formatCompact(item.marketCap)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderCompactNewsFeed(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No sector headlines are available right now.");
+  }
+
+  return items
+    .slice(0, 8)
+    .map(
+      (item) => `
+        <article class="sector-news-card ${toneByImportance(item.impact)}">
+          <div class="sector-news-head">
+            <span class="signal-chip">${escapeHtml((item.category ?? "news").toUpperCase())}</span>
+            <span class="news-time">${escapeHtml(formatTimeAgo(item.publishedAt))}</span>
+          </div>
+          <a class="sector-news-link" href="${safeUrl(item.link)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a>
+          <div class="sector-news-foot">
+            <span class="muted">${escapeHtml(item.source ?? "News")}</span>
+            <span>${escapeHtml(item.symbols?.[0] ?? item.category ?? "live")}</span>
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function renderFlowSummary(summary) {
+  return [
+    renderTerminalStat("Symbols", String(summary.symbols ?? 0), "watchlist coverage"),
+    renderTerminalStat("Shares", formatCompact(summary.shareVolume), "aggregate tape"),
+    renderTerminalStat("Options", formatCompact(summary.optionsVolume), "calls + puts"),
+    renderTerminalStat("P/C", formatRatio(summary.averagePutCall), "watchlist mean"),
+    renderTerminalStat("Elevated", String(summary.elevated ?? 0), "high rel-vol / short"),
+  ].join("");
+}
+
+function renderFlowRows(rows) {
+  if (!rows.length) {
+    return `<tr><td colspan="8" class="muted">No flow rows are available right now.</td></tr>`;
+  }
+
+  return rows
+    .map(
+      (row) => `
+        <tr class="watchlist-row ${tone(row.changePercent)} flow-row" data-flow-symbol="${escapeHtml(row.symbol)}">
+          <td>
+            <div class="watchlist-symbol-cell">
+              <div>
+                <div class="terminal-symbol-line">
+                  <strong>${escapeHtml(row.symbol)}</strong>
+                  <span class="terminal-chip">${escapeHtml(compactLabel(row.sector ?? "Unclassified", 14))}</span>
+                </div>
+                <div class="meta">${escapeHtml(compactLabel(row.shortName ?? row.symbol, 28))}</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <div class="terminal-price-stack">
+              <strong>${formatCompact(row.shareVolume)}</strong>
+              <div class="meta">avg ${formatCompact(row.averageShareVolume)}</div>
+            </div>
+          </td>
+          <td>${formatRatio(row.relativeVolume)}</td>
+          <td>
+            <div class="terminal-price-stack">
+              <strong>${formatCompact(row.callVolume)} / ${formatCompact(row.putVolume)}</strong>
+              <div class="meta">last ${formatMoney(row.price)}</div>
+            </div>
+          </td>
+          <td>${formatRatio(row.putCallRatio)}</td>
+          <td>${formatCompact(row.openInterest)}</td>
+          <td>
+            <div class="terminal-price-stack">
+              <strong>${formatNumber(row.shortRatio, 2)}</strong>
+              <div class="meta">${formatCompact(row.sharesShort)}</div>
+            </div>
+          </td>
+          <td>${escapeHtml(row.analystRating ?? "n/a")}</td>
+        </tr>
+      `,
+    )
+    .join("");
 }
 
 function filterCalendarEvents(events, { filter = "all", windowDays = 30 } = {}) {
@@ -3516,7 +3872,7 @@ function renderQuoteListItem(quote) {
           <strong>${escapeHtml(quote.symbol)}</strong>
           <span class="terminal-chip ${tone(quote.changePercent)}">${formatPercent(quote.changePercent)}</span>
         </div>
-        <div class="meta">${escapeHtml(quote.shortName ?? "")}</div>
+        <div class="meta">${escapeHtml(quote.shortName ?? quote.name ?? "")}</div>
       </div>
       <div class="terminal-price-stack">
         <strong>${formatMoney(quote.price)}</strong>
@@ -3724,6 +4080,7 @@ function mergePreferences(preferences) {
       : [...DEFAULT_PREFERENCES.cryptoProducts],
     portfolio: Array.isArray(preferences?.portfolio) ? preferences.portfolio : [],
     newsFocus: typeof preferences?.newsFocus === "string" ? preferences.newsFocus : "",
+    sectorFocus: typeof preferences?.sectorFocus === "string" ? preferences.sectorFocus : DEFAULT_PREFERENCES.sectorFocus,
     activePage: normalizePage(preferences?.activePage),
     panelLayout: normalizePanelLayout(preferences?.panelLayout),
     panelSizes: normalizePanelSizes(preferences?.panelSizes),
@@ -3752,6 +4109,8 @@ function inferNewsFocusSymbol(query) {
 
 function resolveHistoryInterval(range) {
   return {
+    "1d": "5m",
+    "1w": "30m",
     "1mo": "1h",
     "3mo": "1d",
     "6mo": "1d",
@@ -4397,6 +4756,10 @@ function formatCompact(value) {
     : "n/a";
 }
 
+function formatRatio(value) {
+  return Number.isFinite(value) ? `${value.toFixed(2)}x` : "n/a";
+}
+
 function formatBasisPoints(value) {
   return Number.isFinite(value) ? `${value.toFixed(1)} bps` : "n/a";
 }
@@ -4534,6 +4897,8 @@ function normalizeWorkbenchWarning(message) {
 
 function historyRangeLabel(range) {
   return {
+    "1d": "1D",
+    "1w": "1W",
     "1mo": "1M",
     "3mo": "3M",
     "6mo": "6M",

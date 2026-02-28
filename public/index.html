@@ -15,6 +15,7 @@
         </div>
         <nav class="topbar-nav">
           <button type="button" class="topbar-nav-btn" data-page="overview">Markets</button>
+          <button type="button" class="topbar-nav-btn" data-page="sectors">Sectors</button>
           <button type="button" class="topbar-nav-btn" data-page="news">News</button>
           <button type="button" class="topbar-nav-btn" data-page="research">Research</button>
           <button type="button" class="topbar-nav-btn" data-page="ops">Ops</button>
@@ -86,7 +87,7 @@
           <div class="signal-log">
             <div class="signal-row"><span>ROUTING</span><strong>Ctrl/⌘ + K opens the terminal palette</strong></div>
             <div class="signal-row"><span>SYMBOLS</span><strong>[ and ] cycle through watchlist names</strong></div>
-            <div class="signal-row"><span>PAGES</span><strong>Overview, Research, and Ops split the desk into cleaner views</strong></div>
+            <div class="signal-row"><span>PAGES</span><strong>Markets, Sectors, News, Research, and Ops split the desk into cleaner views</strong></div>
           </div>
         </div>
         <aside class="auth-card control-card">
@@ -224,6 +225,70 @@
           </div>
         </section>
 
+        <section id="section-sector-board" class="panel panel-wide panel-sector-board">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Sector Drilldown</p>
+              <h2>Sector board, relative movers, and linked news</h2>
+            </div>
+            <div class="workbench-header-actions">
+              <form id="sectorBoardForm" class="inline-form compact-inline-form">
+                <select id="sectorBoardSelect"></select>
+                <button type="submit">Load Sector</button>
+              </form>
+              <button id="refreshSectorBoardButton" type="button" class="secondary">Refresh</button>
+            </div>
+          </div>
+          <div id="sectorBoardSummary" class="watchlist-summary-grid"></div>
+          <div id="sectorBoardWarnings" class="panel-status-strip"></div>
+          <div class="sector-board-shell">
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3 id="sectorBoardTitle">Sector Board</h3>
+                <div id="sectorBoardMeta" class="muted">Loading sector composition</div>
+              </div>
+              <div id="sectorBoardTiles" class="sector-board-tiles"></div>
+            </article>
+            <article class="subpanel">
+              <div class="two-column">
+                <div>
+                  <h3>Leaders</h3>
+                  <div id="sectorLeadersList" class="list-stack"></div>
+                </div>
+                <div>
+                  <h3>Laggards</h3>
+                  <div id="sectorLaggardsList" class="list-stack"></div>
+                </div>
+              </div>
+            </article>
+            <article class="subpanel sector-news-panel">
+              <div class="subpanel-header">
+                <h3>Sector Headlines</h3>
+                <div id="sectorNewsMeta" class="muted">Public source blend</div>
+              </div>
+              <div id="sectorNewsList" class="sector-news-list"></div>
+            </article>
+            <article class="subpanel">
+              <h3>Constituent Board</h3>
+              <div class="table-wrap terminal-table-wrap">
+                <table class="terminal-table">
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Last</th>
+                      <th>Move</th>
+                      <th>Weight</th>
+                      <th>Volume</th>
+                      <th>Market Cap</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sectorBoardBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+
         <section id="section-market-events" class="panel panel-wide panel-market-events">
           <div class="panel-header">
             <div>
@@ -269,6 +334,35 @@
           </div>
         </section>
 
+        <section id="section-flow" class="panel panel-wide panel-flow">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Flow Monitor</p>
+              <h2>Share volume, options activity, put/call ratios, and short-interest context</h2>
+            </div>
+            <button id="refreshFlowButton" type="button" class="secondary">Refresh</button>
+          </div>
+          <div id="flowSummary" class="watchlist-summary-grid"></div>
+          <div id="flowWarnings" class="panel-status-strip"></div>
+          <div class="table-wrap terminal-table-wrap">
+            <table class="terminal-table flow-table">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Shares / Avg</th>
+                  <th>Rel Vol</th>
+                  <th>Calls / Puts</th>
+                  <th>P/C</th>
+                  <th>Open Int</th>
+                  <th>Short</th>
+                  <th>Street</th>
+                </tr>
+              </thead>
+              <tbody id="flowBody"></tbody>
+            </table>
+          </div>
+        </section>
+
         <section id="section-research-rail" class="panel panel-research-rail">
           <div class="panel-header">
             <div>
@@ -290,6 +384,8 @@
               <form id="detailForm" class="inline-form">
                 <input id="detailSymbol" type="text" />
                 <select id="historyRange">
+                  <option value="1d">1 day</option>
+                  <option value="1w">1 week</option>
                   <option value="1mo">1 month</option>
                   <option value="3mo">3 months</option>
                   <option value="6mo">6 months</option>
@@ -583,6 +679,7 @@
             </form>
           </div>
           <div id="calendarSummary" class="watchlist-summary-grid"></div>
+          <div id="calendarWarnings" class="panel-status-strip"></div>
           <div id="calendarList" class="calendar-list"></div>
         </section>
 

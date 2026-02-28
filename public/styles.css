@@ -1737,6 +1737,10 @@ button:hover {
   grid-column: span 5;
 }
 
+#dashboardGrid[data-page="overview"] #section-flow {
+  grid-column: span 7;
+}
+
 #dashboardGrid[data-page="overview"] #section-heatmap,
 #dashboardGrid[data-page="overview"] #section-events {
   grid-column: 1 / -1;
@@ -1752,6 +1756,10 @@ button:hover {
 }
 
 #dashboardGrid[data-page="news"] #section-news {
+  grid-column: 1 / -1;
+}
+
+#dashboardGrid[data-page="sectors"] #section-sector-board {
   grid-column: 1 / -1;
 }
 
@@ -1817,22 +1825,27 @@ button:hover {
 }
 
 .panel-research-rail {
-  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  max-height: calc(100vh - 112px);
   position: sticky;
   top: 10px;
   align-self: start;
-  height: fit-content;
+  overflow: hidden;
 }
 
 .research-rail-list {
   display: grid;
-  gap: 6px;
-  padding: 10px;
+  gap: 4px;
+  padding: 8px;
+  align-content: start;
+  overflow: auto;
 }
 
 .research-rail-group {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .research-rail-group-header {
@@ -1850,8 +1863,8 @@ button:hover {
 .research-rail-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  padding: 10px;
+  gap: 8px;
+  padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: #0b0b0b;
   text-align: left;
@@ -1870,6 +1883,8 @@ button:hover {
   color: #8f8f8f;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  align-self: start;
+  padding-top: 3px;
 }
 
 .research-rail-main,
@@ -1887,6 +1902,10 @@ button:hover {
 }
 
 .research-rail-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   color: #9ea7b4;
   font-size: 10px;
 }
@@ -1964,16 +1983,16 @@ button:hover {
 
 .sp500-heatmap {
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
   align-content: start;
 }
 
 .heatmap-sector {
   display: grid;
-  gap: 6px;
-  min-height: 168px;
-  padding: 8px;
+  gap: 5px;
+  min-height: 132px;
+  padding: 7px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -1984,7 +2003,17 @@ button:hover {
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  padding-bottom: 2px;
+  width: 100%;
+  padding: 0 0 2px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.heatmap-sector-header:hover,
+.heatmap-sector-header:focus-visible {
+  color: #dfeaff;
 }
 
 .heatmap-sector-header h3 {
@@ -2010,8 +2039,8 @@ button:hover {
 
 .heatmap-sector-grid {
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  grid-auto-rows: 22px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-auto-rows: 20px;
   gap: 3px;
 }
 
@@ -2022,7 +2051,7 @@ button:hover {
   gap: 4px;
   min-height: 100%;
   width: 100%;
-  padding: 6px;
+  padding: 5px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.018);
   text-align: left;
@@ -2088,18 +2117,18 @@ button:hover {
 }
 
 .heatmap-tile strong {
-  font-size: 15px;
+  font-size: 13px;
   line-height: 0.95;
 }
 
 .heatmap-name {
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: 10px;
+  line-height: 1.2;
   color: rgba(255, 255, 255, 0.78);
 }
 
 .heatmap-move {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1;
 }
@@ -2142,9 +2171,115 @@ button:hover {
   font-size: 12px;
 }
 
+.heatmap-more-tile {
+  min-height: 52px;
+  place-items: center;
+  border-style: dashed;
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.heatmap-more-tile::before {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.heatmap-more-tile strong,
+.heatmap-more-tile .heatmap-name {
+  text-align: center;
+}
+
 .heatmap-detail-panel .terminal-table a {
   color: #d7e6ff;
   text-decoration: none;
+}
+
+.sector-board-shell {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.sector-board-tiles {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-auto-rows: minmax(76px, auto);
+  gap: 6px;
+}
+
+.sector-board-tile {
+  display: grid;
+  gap: 6px;
+  align-content: space-between;
+  min-height: 100%;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
+  text-align: left;
+}
+
+.sector-board-tile:hover,
+.sector-board-tile:focus-visible,
+.sector-board-row:hover,
+.flow-row:hover {
+  border-color: #8fb8ff;
+  background: #101723;
+}
+
+.sector-board-weight,
+.sector-board-move {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sector-board-tile strong {
+  font-size: 16px;
+}
+
+.sector-news-panel {
+  min-height: 100%;
+}
+
+.sector-news-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sector-news-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-height: 132px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #0b0b0b;
+}
+
+.sector-news-head,
+.sector-news-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sector-news-link {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: #f2f2f2;
+  text-decoration: none;
+  line-height: 1.45;
+  min-height: 4.35em;
+}
+
+.sector-news-link:hover {
+  color: #8fb8ff;
+}
+
+.flow-table tbody tr {
+  cursor: pointer;
 }
 
 .reference-link {
@@ -3308,7 +3443,8 @@ th {
   }
 
   .heatmap-context-grid,
-  .earnings-drawer-grid {
+  .earnings-drawer-grid,
+  .sector-board-shell {
     grid-template-columns: 1fr;
   }
 
@@ -3331,6 +3467,7 @@ th {
 
   .panel-research-rail {
     position: static;
+    max-height: none;
   }
 }
 
@@ -3384,7 +3521,8 @@ th {
   }
 
   .heatmap-context-stats,
-  .news-list {
+  .news-list,
+  .sector-news-list {
     grid-template-columns: 1fr;
   }
 
@@ -3414,5 +3552,9 @@ th {
   .heatmap-sector-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));
     grid-auto-rows: 32px;
+  }
+
+  .sector-board-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

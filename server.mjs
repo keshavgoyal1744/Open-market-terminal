@@ -409,7 +409,8 @@ async function handleApi(request, response, url, context) {
 
   if (request.method === "GET" && url.pathname === "/api/calendar") {
     const symbols = splitList(url.searchParams.get("symbols"));
-    return sendJson(response, 200, await market.getDeskCalendar(symbols));
+    const windowDays = parseNullableNumber(url.searchParams.get("window")) ?? 30;
+    return sendJson(response, 200, await market.getDeskCalendar(symbols, { windowDays }));
   }
 
   if (request.method === "GET" && url.pathname === "/api/news") {
@@ -438,6 +439,16 @@ async function handleApi(request, response, url, context) {
   if (request.method === "GET" && url.pathname === "/api/heatmap-context") {
     const symbol = requireParam(url, "symbol");
     return sendJson(response, 200, await market.getHeatmapContext(symbol));
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/sector-board") {
+    const sector = String(url.searchParams.get("sector") ?? "").trim();
+    return sendJson(response, 200, await market.getSectorBoard(sector));
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/flow") {
+    const symbols = splitList(url.searchParams.get("symbols"));
+    return sendJson(response, 200, await market.getWatchlistFlow(symbols));
   }
 
   if (request.method === "GET" && url.pathname === "/api/quote") {
@@ -685,6 +696,7 @@ function sanitizePreferencePatch(body) {
       : undefined,
     detailSymbol: typeof body.detailSymbol === "string" ? cleanSymbol(body.detailSymbol) : undefined,
     newsFocus: typeof body.newsFocus === "string" ? String(body.newsFocus).trim().slice(0, 80) : undefined,
+    sectorFocus: typeof body.sectorFocus === "string" ? String(body.sectorFocus).trim().slice(0, 80) : undefined,
     cryptoProducts: Array.isArray(body.cryptoProducts)
       ? body.cryptoProducts.map(cleanSymbol).filter(Boolean).slice(0, 12)
       : undefined,
@@ -743,6 +755,7 @@ function sanitizeWorkspaceSnapshot(snapshot) {
       : [],
     detailSymbol: typeof snapshot.detailSymbol === "string" ? cleanSymbol(snapshot.detailSymbol) : "AAPL",
     newsFocus: typeof snapshot.newsFocus === "string" ? String(snapshot.newsFocus).trim().slice(0, 80) : "",
+    sectorFocus: typeof snapshot.sectorFocus === "string" ? String(snapshot.sectorFocus).trim().slice(0, 80) : "Technology",
     cryptoProducts: Array.isArray(snapshot.cryptoProducts)
       ? snapshot.cryptoProducts.map(cleanSymbol).filter(Boolean).slice(0, 12)
       : config.defaultCryptoProducts,
@@ -769,7 +782,7 @@ function cleanSymbol(value) {
 }
 
 function normalizePage(value) {
-  return ["overview", "news", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
+  return ["overview", "sectors", "news", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
     ? String(value).trim().toLowerCase()
     : "overview";
 }

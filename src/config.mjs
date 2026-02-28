@@ -55,6 +55,7 @@ export function defaultUserPreferences() {
     researchPinnedSymbols: [],
     detailSymbol: "AAPL",
     newsFocus: "",
+    sectorFocus: "Technology",
     cryptoProducts: [...config.defaultCryptoProducts],
     activePage: "overview",
     screenConfig: {

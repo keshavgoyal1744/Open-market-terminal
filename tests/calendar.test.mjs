@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getMacroCalendar } from "../src/providers/calendar.mjs";
+import { getMacroCalendar, getNasdaqEarningsCalendar } from "../src/providers/calendar.mjs";
 
 test("macro calendar merges live Fed and BLS sources without hardcoded dates", async (context) => {
   const originalFetch = global.fetch;
@@ -45,6 +45,54 @@ END:VCALENDAR`);
   assert.equal(events[1].source, "Federal Reserve");
   assert.equal(events[1].title, "FOMC Rate Decision");
 });
+
+test("nasdaq earnings calendar normalizes public earnings rows by date", async (context) => {
+  const originalFetch = global.fetch;
+  const firstBusinessDay = nextBusinessDayIso();
+  context.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  global.fetch = async (url) => {
+    const href = url.toString();
+    if (!href.includes("api.nasdaq.com/api/calendar/earnings")) {
+      throw new Error(`Unexpected URL: ${href}`);
+    }
+    const hasTargetDay = href.includes(`date=${firstBusinessDay}`);
+    return textResponse(200, JSON.stringify({
+      data: {
+        rows: hasTargetDay ? [
+          {
+            symbol: "MSFT",
+            name: "Microsoft Corporation",
+            time: "After Market Close",
+            epsForecast: "3.02",
+            noOfEsts: "28",
+            fiscalQuarterEnding: "Jun/2026",
+            marketCap: "$3.1T",
+          },
+        ] : [],
+      },
+    }));
+  };
+
+  const events = await getNasdaqEarningsCalendar(1);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].symbol, "MSFT");
+  assert.equal(events[0].category, "earnings");
+  assert.equal(events[0].source, "Nasdaq / Zacks");
+  assert.match(events[0].note, /EPS est 3.02/);
+});
+
+function nextBusinessDayIso() {
+  const cursor = new Date();
+  cursor.setUTCHours(0, 0, 0, 0);
+  while ([0, 6].includes(cursor.getUTCDay())) {
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return cursor.toISOString().slice(0, 10);
+}
 
 function textResponse(status, payload) {
   return {

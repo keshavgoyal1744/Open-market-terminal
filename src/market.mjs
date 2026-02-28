@@ -1,7 +1,7 @@
 import { config } from "./config.mjs";
 import { getCuratedIntelligence, listSupportedIntelligenceSymbols } from "./intelligence-graph.mjs";
 import { getMacroSnapshot } from "./providers/bls.mjs";
-import { getMacroCalendar } from "./providers/calendar.mjs";
+import { getMacroCalendar, getNasdaqEarningsCalendar } from "./providers/calendar.mjs";
 import { getOrderBook, getTicker } from "./providers/coinbase.mjs";
 import { getMarketNews } from "./providers/news.mjs";
 import { getCompanySnapshot } from "./providers/sec.mjs";
@@ -318,12 +318,12 @@ export class MarketDataService {
           Promise.resolve(getCuratedIntelligence(upper)),
         ]);
 
-        const competitorUniverse = [...new Set([...(curated.peerSymbols ?? []), ...(curated.competitorSymbols ?? [])])]
+        const derived = buildDerivedRelationshipIntel(upper, company);
+        const competitorUniverse = [...new Set([...(curated.peerSymbols ?? []), ...(curated.competitorSymbols ?? []), ...(derived.peerSymbols ?? [])])]
           .filter((entry) => entry && entry !== upper)
           .slice(0, 8);
         const competitorQuotes = competitorUniverse.length ? await this.getQuotes(competitorUniverse).catch(() => []) : [];
         const competitorMap = new Map(competitorQuotes.map((quote) => [quote.symbol, quote]));
-        const derived = buildDerivedRelationshipIntel(upper, company);
 
         return {
           symbol: upper,
@@ -385,14 +385,16 @@ export class MarketDataService {
     );
   }
 
-  async getDeskCalendar(symbols) {
+  async getDeskCalendar(symbols, options = {}) {
     const upperSymbols = [...new Set(symbols.map((symbol) => symbol?.trim().toUpperCase()).filter(Boolean))].slice(0, 16);
-    const key = upperSymbols.join(",");
+    const windowDays = clampWindowDays(options.windowDays);
+    const key = `${windowDays}:${upperSymbols.join(",")}`;
     return this.cache.getOrSet(
       `calendar:${key}`,
       async () => {
-        const [macroEvents, companies] = await Promise.all([
+        const [macroEvents, nasdaqEarnings, companies] = await Promise.all([
           getMacroCalendar().catch(() => []),
+          getNasdaqEarningsCalendar(windowDays).catch(() => []),
           Promise.all(
             upperSymbols.map(async (symbol) => {
               try {
@@ -404,18 +406,22 @@ export class MarketDataService {
           ),
         ]);
 
-        const earnings = companies
+        const fallbackEarnings = companies
           .filter(Boolean)
           .map((company) => buildEarningsEvent(company))
           .filter(Boolean);
 
+        const earnings = nasdaqEarnings.length ? nasdaqEarnings : fallbackEarnings;
+
         const events = [...macroEvents, ...earnings]
+          .filter((event) => withinWindow(event.date, windowDays))
           .sort((left, right) => new Date(left.date) - new Date(right.date))
-          .slice(0, 80);
+          .slice(0, windowDays >= 90 ? 400 : 220);
 
         return {
           asOf: new Date().toISOString(),
           events,
+          warnings: nasdaqEarnings.length ? [] : ["Nasdaq earnings calendar unavailable. Showing fallback issuer dates from public company modules."],
         };
       },
       { ttlMs: config.calendarTtlMs, staleMs: config.calendarTtlMs * 2 },
@@ -669,6 +675,135 @@ export class MarketDataService {
     );
   }
 
+  async getSectorBoard(sector) {
+    const requested = String(sector ?? "").trim();
+    const cacheKey = requested ? requested.toLowerCase() : "default";
+
+    return this.cache.getOrSet(
+      `sector-board:${cacheKey}`,
+      async () => {
+        const heatmap = await this.getSp500Heatmap();
+        const availableSectors = heatmap.sectors ?? [];
+        const matchedSector = resolveSectorName(requested, availableSectors) ?? availableSectors[0]?.sector ?? "Technology";
+        const items = (heatmap.tiles ?? [])
+          .filter((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(matchedSector))
+          .sort((left, right) => (numeric(right.weight) ?? 0) - (numeric(left.weight) ?? 0))
+          .map((item, index) => ({ ...item, rank: index + 1 }));
+
+        const leaders = [...items]
+          .filter((item) => Number.isFinite(item.changePercent))
+          .sort((left, right) => right.changePercent - left.changePercent)
+          .slice(0, 6);
+        const laggards = [...items]
+          .filter((item) => Number.isFinite(item.changePercent))
+          .sort((left, right) => left.changePercent - right.changePercent)
+          .slice(0, 6);
+        const topSymbols = items.slice(0, 10).map((item) => item.symbol);
+        const news = topSymbols.length
+          ? await this.getDeskNews(topSymbols, topSymbols[0] ?? null, matchedSector).catch(() => ({ items: [] }))
+          : { items: [] };
+
+        return {
+          sector: matchedSector,
+          asOf: heatmap.asOf,
+          source: heatmap.source,
+          warnings: heatmap.warnings ?? [],
+          summary: {
+            names: items.length,
+            averageMove: average(items.map((item) => item.changePercent)),
+            weight: sum(items.map((item) => item.weight)),
+            aggregateVolume: sum(items.map((item) => item.volume)),
+            aggregateCap: sum(items.map((item) => item.marketCap)),
+          },
+          leaders,
+          laggards,
+          items: items.slice(0, 48),
+          news: (news.items ?? []).slice(0, 12),
+        };
+      },
+      { ttlMs: config.quoteTtlMs * 3, staleMs: config.quoteTtlMs * 8 },
+    );
+  }
+
+  async getWatchlistFlow(symbols) {
+    const universe = [...new Set(symbols.map((symbol) => symbol?.trim().toUpperCase()).filter(Boolean))].slice(0, 16);
+    const key = universe.join(",");
+
+    return this.cache.getOrSet(
+      `flow:${key}`,
+      async () => {
+        const quotes = await this.getQuotes(universe).catch(() => []);
+        const quoteMap = new Map(quotes.map((quote) => [quote.symbol, quote]));
+
+        const rows = await Promise.all(
+          universe.map(async (symbol) => {
+            const quote = quoteMap.get(symbol) ?? null;
+            const [company, options] = await Promise.all([
+              this.getCompany(symbol).catch(() => null),
+              this.getOptions(symbol).catch((error) => emptyOptions(symbol, error)),
+            ]);
+
+            const callVolume = sum((options.calls ?? []).map((contract) => numeric(contract.volume)));
+            const putVolume = sum((options.puts ?? []).map((contract) => numeric(contract.volume)));
+            const openInterest = sum(
+              [...(options.calls ?? []), ...(options.puts ?? [])].map((contract) => numeric(contract.openInterest)),
+            );
+
+            return {
+              symbol,
+              shortName: quote?.shortName ?? company?.market?.shortName ?? symbol,
+              sector: company?.market?.sector ?? "Unclassified",
+              price: quote?.price ?? null,
+              changePercent: quote?.changePercent ?? null,
+              shareVolume: quote?.volume ?? null,
+              averageShareVolume: quote?.averageVolume ?? null,
+              relativeVolume:
+                Number.isFinite(quote?.volume) && Number.isFinite(quote?.averageVolume) && quote.averageVolume > 0
+                  ? quote.volume / quote.averageVolume
+                  : null,
+              callVolume,
+              putVolume,
+              optionsVolume: sum([callVolume, putVolume]),
+              putCallRatio:
+                Number.isFinite(callVolume) && callVolume > 0 && Number.isFinite(putVolume)
+                  ? putVolume / callVolume
+                  : null,
+              openInterest,
+              shortRatio: company?.market?.shortRatio ?? null,
+              sharesShort: company?.market?.sharesShort ?? null,
+              analystRating: company?.market?.analystRating ?? null,
+              warnings: [...new Set([...(company?.warnings ?? []), options?.warning].filter(Boolean))].slice(0, 3),
+            };
+          }),
+        );
+
+        const ranked = [...rows].sort((left, right) => {
+          const optionsCompare = (numeric(right.optionsVolume) ?? 0) - (numeric(left.optionsVolume) ?? 0);
+          if (optionsCompare !== 0) {
+            return optionsCompare;
+          }
+          return (numeric(right.relativeVolume) ?? 0) - (numeric(left.relativeVolume) ?? 0);
+        });
+
+        return {
+          asOf: new Date().toISOString(),
+          summary: {
+            symbols: ranked.length,
+            shareVolume: sum(ranked.map((row) => row.shareVolume)),
+            optionsVolume: sum(ranked.map((row) => row.optionsVolume)),
+            averagePutCall: average(ranked.map((row) => row.putCallRatio)),
+            elevated: ranked.filter(
+              (row) => (numeric(row.relativeVolume) ?? 0) >= 1.5 || (numeric(row.shortRatio) ?? 0) >= 3,
+            ).length,
+          },
+          rows: ranked,
+          warnings: ranked.flatMap((row) => row.warnings.map((warning) => `${row.symbol}: ${warning}`)).slice(0, 6),
+        };
+      },
+      { ttlMs: config.quoteTtlMs * 2, staleMs: config.quoteTtlMs * 6 },
+    );
+  }
+
   async getHeatmapContext(symbol) {
     const upper = symbol.trim().toUpperCase();
     return this.cache.getOrSet(
@@ -866,9 +1001,14 @@ function buildDerivedRelationshipIntel(symbol, company) {
   const coverageNotes = ["Fallback graph derived from public holders, officers, sector, industry, and positioning data."];
   const executives = [];
   const ecosystemRelations = [];
+  const supplierRelations = [];
+  const customerRelations = [];
   const corporate = [];
   const ecosystems = [];
   const eventChains = [];
+  const customerConcentration = [];
+  const geography = { revenueMix: [], manufacturing: [], supplyRegions: [] };
+  const template = sectorTemplateForMarket(market);
 
   const addNode = (node) => {
     if (node?.id && !graphNodes.find((entry) => entry.id === node.id)) {
@@ -916,6 +1056,33 @@ function buildDerivedRelationshipIntel(symbol, company) {
     });
     ecosystems.push({ name: market.industry, stages: [market.sector ?? "Sector", "Peer set", "Public market comp set"] });
   }
+
+  if (template.coverageNote) {
+    coverageNotes.push(template.coverageNote);
+  }
+
+  for (const item of [...template.suppliers, ...template.customers, ...template.ecosystem]) {
+    const id = `template:${item.domain}:${templateKey(item.target)}`;
+    addNode({ id, label: item.target, kind: templateNodeKind(item.domain), symbol: item.symbol ?? undefined });
+    addEdge({
+      source: symbol,
+      target: id,
+      relation: item.relation,
+      domain: item.domain,
+      label: item.label,
+      weight: item.weight ?? 2,
+    });
+  }
+
+  supplierRelations.push(...template.suppliers);
+  customerRelations.push(...template.customers);
+  ecosystemRelations.push(...template.ecosystem);
+  customerConcentration.push(...template.customerConcentration);
+  geography.revenueMix.push(...(template.geography?.revenueMix ?? []));
+  geography.manufacturing.push(...(template.geography?.manufacturing ?? []));
+  geography.supplyRegions.push(...(template.geography?.supplyRegions ?? []));
+  ecosystems.push(...template.ecosystems);
+  eventChains.push(...template.eventChains);
 
   for (const holder of [...(market.topInstitutionalHolders ?? []), ...(market.topFundHolders ?? [])].slice(0, 5)) {
     if (!holder?.holder) {
@@ -1004,15 +1171,16 @@ function buildDerivedRelationshipIntel(symbol, company) {
   }
 
   return {
+    peerSymbols: template.peerSymbols,
     coverageNotes,
     executives,
-    supplyChain: { suppliers: [], customers: [], ecosystem: ecosystemRelations },
-    customers: [],
+    supplyChain: { suppliers: supplierRelations, customers: customerRelations, ecosystem: ecosystemRelations },
+    customers: customerRelations,
     ecosystemRelations,
     corporateRelations: [],
     corporate,
-    customerConcentration: [],
-    geography: { revenueMix: [], manufacturing: [], supplyRegions: [] },
+    customerConcentration,
+    geography,
     ecosystems,
     eventChains,
     graph: {
@@ -1025,6 +1193,285 @@ function buildDerivedRelationshipIntel(symbol, company) {
 function roundTo(value, decimals) {
   const factor = 10 ** decimals;
   return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
+}
+
+function templateNodeKind(domain) {
+  return {
+    "supply-chain": "supplier",
+    customer: "customer",
+    ecosystem: "ecosystem",
+  }[domain] ?? "ecosystem";
+}
+
+function templateKey(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-");
+}
+
+function sectorTemplateForMarket(market) {
+  const sector = String(market?.sector ?? "").toLowerCase();
+  const industry = market?.industry ?? market?.sector ?? "public market cluster";
+
+  const defaults = {
+    peerSymbols: [],
+    suppliers: [
+      relation(`${industry} suppliers`, "supply cluster", "supply-chain", `${industry} input and vendor chain`, 2),
+    ],
+    customers: [
+      relation(`${industry} customers`, "customer cluster", "customer", `${industry} end-market demand`, 2),
+    ],
+    ecosystem: [
+      relation(industry, "industry map", "ecosystem", "public sector / industry classification", 2),
+    ],
+    customerConcentration: [
+      concentration("End-market mix", "Varies", `${industry} demand sensitivity depends on the issuer's disclosed customer mix.`),
+    ],
+    geography: {
+      revenueMix: weights([["North America", 3, "Common reporting base"], ["Europe", 2, "Diversified developed-market exposure"], ["Asia", 3, "Supply and demand linkage"]]),
+      manufacturing: weights([["Global footprint", 3, "Issuer-specific production and service footprint varies"]]),
+      supplyRegions: weights([["Global supply chain", 3, "Upstream exposure depends on disclosed vendors and manufacturing base"]]),
+    },
+    ecosystems: [
+      ecosystem(industry, [market?.sector ?? "Sector", industry, "Customers / suppliers", "Public market peers"]),
+    ],
+    eventChains: [
+      impact(`${industry} demand surprise`, [`${symbolFromSectorLabel(market?.sector)} end-market expectations move`, "Sector peers reprice", "Supplier and customer baskets adjust"]),
+    ],
+    coverageNote: `Sector-template relationships are generalized for ${industry} when no curated company map is available.`,
+  };
+
+  if (sector.includes("technology")) {
+    return {
+      ...defaults,
+      peerSymbols: ["MSFT", "AAPL", "NVDA", "AMD", "AVGO"],
+      suppliers: [
+        relation("Semiconductor / hardware vendors", "supplier cluster", "supply-chain", "Chips, networking, and equipment inputs", 3),
+        relation("Cloud / infrastructure vendors", "platform suppliers", "supply-chain", "Hosting, compute, and software dependencies", 2),
+      ],
+      customers: [
+        relation("Enterprise IT buyers", "customer base", "customer", "Corporate software and infrastructure budgets", 3),
+        relation("Consumers / devices", "end demand", "customer", "Consumer hardware, software, and platform demand", 2),
+      ],
+      ecosystem: [
+        relation("AI / cloud ecosystem", "ecosystem node", "ecosystem", "Model, cloud, and developer-stack read-through", 3),
+        relation(industry, "industry map", "ecosystem", "Public technology peer cluster", 2),
+      ],
+      customerConcentration: [
+        concentration("Enterprise spend", "Moderate", "Enterprise budgets and hyperscaler capex often drive second-order moves."),
+        concentration("Platform partners", "Moderate", "Large distributors, OEMs, or cloud partners can matter depending on the company model."),
+      ],
+      geography: {
+        revenueMix: weights([["US", 4, "Core software and cloud demand"], ["Europe", 3, "Enterprise demand"], ["Asia", 4, "Hardware assembly and semiconductor chain"]]),
+        manufacturing: weights([["Taiwan / Asia", 4, "Semiconductor and component dependence"], ["US / Europe", 2, "Software and design footprint"]]),
+        supplyRegions: weights([["Taiwan", 4, "Foundry and advanced-node exposure"], ["North America", 3, "Cloud and software stack"], ["Europe / Japan", 2, "Equipment and materials"]]),
+      },
+      ecosystems: [
+        ecosystem("Technology stack", ["Semis", "Cloud", "Enterprise demand", "Distribution channels"]),
+      ],
+      eventChains: [
+        impact("Enterprise / AI demand accelerates", ["Budgets and backlog improve", "Peer technology names rerate", "Hardware and infrastructure suppliers react"]),
+      ],
+      coverageNote: `Technology fallback maps connect the issuer to hardware, software, cloud, and AI ecosystem layers when no curated map exists.`,
+    };
+  }
+
+  if (sector.includes("health")) {
+    return {
+      ...defaults,
+      peerSymbols: ["UNH", "LLY", "MRK", "ABBV", "CVS"],
+      suppliers: [
+        relation("Clinical / manufacturing vendors", "supplier cluster", "supply-chain", "Clinical, ingredient, and manufacturing support", 2),
+        relation("Distribution / PBM channels", "distribution", "supply-chain", "Drug and care delivery channels", 2),
+      ],
+      customers: [
+        relation("Patients / payers", "end demand", "customer", "Treatment volumes and reimbursement", 3),
+        relation("Providers / hospitals", "care network", "customer", "Clinical channel demand", 2),
+      ],
+      ecosystem: [
+        relation("Reimbursement / regulation", "policy node", "ecosystem", "Pricing, reimbursement, and regulation sensitivity", 3),
+      ],
+      customerConcentration: [
+        concentration("Payers / reimbursement", "High", "Public reimbursement and payer dynamics are often the core revenue sensitivity."),
+      ],
+      eventChains: [
+        impact("Reimbursement or trial readout shifts", ["Care volumes or pricing outlook change", "Managed-care / pharma peers react", "Distribution and provider baskets reprice"]),
+      ],
+      coverageNote: `Healthcare fallback maps focus on payers, providers, reimbursement, and manufacturing channels.`,
+    };
+  }
+
+  if (sector.includes("financial")) {
+    return {
+      ...defaults,
+      peerSymbols: ["JPM", "BAC", "GS", "MS", "V"],
+      suppliers: [
+        relation("Funding markets", "liquidity source", "supply-chain", "Deposit and wholesale funding conditions", 3),
+        relation("Core banking / market infrastructure", "platform dependency", "supply-chain", "Payments, exchanges, and clearing rails", 2),
+      ],
+      customers: [
+        relation("Consumers / corporates", "client base", "customer", "Loan, card, and treasury-service demand", 3),
+        relation("Institutional clients", "capital-markets demand", "customer", "Trading, underwriting, and advisory activity", 2),
+      ],
+      ecosystem: [
+        relation("Rates / credit spreads", "macro node", "ecosystem", "Policy-rate and spread sensitivity", 3),
+      ],
+      customerConcentration: [
+        concentration("Loan / card demand", "Moderate", "Credit demand, funding costs, and asset quality often dominate the setup."),
+      ],
+      eventChains: [
+        impact("Rates or credit backdrop shifts", ["Net-interest or fee outlook changes", "Bank / broker peers rerate", "Funding-sensitive baskets adjust"]),
+      ],
+      coverageNote: `Financial-sector fallback maps link issuers to funding markets, client demand, and rate sensitivity.`,
+    };
+  }
+
+  if (sector.includes("energy")) {
+    return {
+      ...defaults,
+      peerSymbols: ["XOM", "CVX", "SLB", "EOG", "VLO"],
+      suppliers: [
+        relation("Service / equipment vendors", "upstream services", "supply-chain", "Drilling, completion, and field-service exposure", 3),
+        relation("Midstream / logistics", "transport and storage", "supply-chain", "Gathering, pipelines, and shipping", 2),
+      ],
+      customers: [
+        relation("Refiners / industrial buyers", "commodity demand", "customer", "Hydrocarbon demand and realized-price sensitivity", 3),
+        relation("Global end markets", "macro demand", "customer", "Oil, gas, and product consumption", 2),
+      ],
+      ecosystem: [
+        relation("Oil / gas curves", "price node", "ecosystem", "Commodity-price and spread sensitivity", 3),
+      ],
+      customerConcentration: [
+        concentration("Commodity demand", "High", "Benchmark prices and global demand often matter more than named customer concentration."),
+      ],
+      eventChains: [
+        impact("Commodity curve moves", ["Realized-price outlook changes", "Exploration / service peers react", "Refining and transport baskets move next"]),
+      ],
+      coverageNote: `Energy fallback maps connect issuers to service vendors, logistics layers, and commodity-price sensitivity.`,
+    };
+  }
+
+  if (sector.includes("industrial")) {
+    return {
+      ...defaults,
+      peerSymbols: ["GE", "CAT", "RTX", "BA", "UPS"],
+      suppliers: [
+        relation("Component / machinery suppliers", "supplier cluster", "supply-chain", "Industrial components, automation, and equipment inputs", 3),
+        relation("Freight / logistics", "distribution", "supply-chain", "Freight throughput and delivery channels", 2),
+      ],
+      customers: [
+        relation("Infrastructure / manufacturing buyers", "capital spend", "customer", "Capex and industrial-production demand", 3),
+        relation("Aerospace / transport customers", "end market", "customer", "Transport and mobility demand", 2),
+      ],
+      ecosystem: [
+        relation("PMI / capex cycle", "macro node", "ecosystem", "Industrial cycle and order-book sensitivity", 3),
+      ],
+      eventChains: [
+        impact("Industrial orders accelerate", ["Backlogs improve", "Capital-goods peers rerate", "Component and freight names follow"]),
+      ],
+      coverageNote: `Industrial fallback maps emphasize suppliers, logistics, and capital-spending end markets.`,
+    };
+  }
+
+  if (sector.includes("consumer")) {
+    return {
+      ...defaults,
+      peerSymbols: ["AMZN", "WMT", "COST", "NKE", "HD"],
+      suppliers: [
+        relation("Consumer goods / sourcing vendors", "supplier base", "supply-chain", "Sourcing, merchandising, and import exposure", 2),
+        relation("Logistics / retail channels", "distribution", "supply-chain", "Warehousing, shipping, and store/channel operations", 2),
+      ],
+      customers: [
+        relation("Consumers", "end demand", "customer", "Discretionary and defensive spending trends", 3),
+        relation("Retail / wholesale channels", "sell-through", "customer", "Shelf space and channel demand", 2),
+      ],
+      ecosystem: [
+        relation("Consumer spending", "macro node", "ecosystem", "Disposable income and traffic sensitivity", 3),
+      ],
+      customerConcentration: [
+        concentration("Retail channels", "Moderate", "Large retail or digital channels can dominate public consumer-company setups."),
+      ],
+      eventChains: [
+        impact("Consumer demand inflects", ["Sell-through or traffic changes", "Retail / brand peers move", "Logistics and sourcing names react"]),
+      ],
+      coverageNote: `Consumer fallback maps focus on retail channels, logistics, and discretionary-demand sensitivity.`,
+    };
+  }
+
+  if (sector.includes("communication")) {
+    return {
+      ...defaults,
+      peerSymbols: ["META", "GOOGL", "NFLX", "TMUS", "T"],
+      suppliers: [
+        relation("Content / ad-tech vendors", "supply cluster", "supply-chain", "Content, traffic-acquisition, and infrastructure inputs", 2),
+      ],
+      customers: [
+        relation("Advertisers / subscribers", "revenue base", "customer", "Ad budgets and subscriber demand", 3),
+      ],
+      ecosystem: [
+        relation("Ad spend / subscriber churn", "demand node", "ecosystem", "Media and telecom demand sensitivity", 3),
+      ],
+      eventChains: [
+        impact("Ad or subscriber trends shift", ["Revenue mix changes", "Platform / media peers rerate", "Content and distribution names move"]),
+      ],
+      coverageNote: `Communication-services fallback maps focus on advertisers, subscribers, and platform distribution.`,
+    };
+  }
+
+  return defaults;
+}
+
+function symbolFromSectorLabel(value) {
+  const sector = String(value ?? "").toLowerCase();
+  if (sector.includes("technology")) return "tech";
+  if (sector.includes("financial")) return "bank";
+  if (sector.includes("health")) return "healthcare";
+  if (sector.includes("energy")) return "energy";
+  if (sector.includes("industrial")) return "industrial";
+  if (sector.includes("consumer")) return "consumer";
+  return "sector";
+}
+
+function relation(target, relationLabel, domain, label, weight = 2, symbol = null) {
+  return {
+    target,
+    relation: relationLabel,
+    domain,
+    label,
+    weight,
+    symbol,
+  };
+}
+
+function concentration(name, level, description) {
+  return {
+    name,
+    level,
+    commentary: description,
+  };
+}
+
+function ecosystem(name, stages) {
+  return {
+    name,
+    stages,
+  };
+}
+
+function impact(title, steps) {
+  return {
+    title,
+    steps,
+  };
+}
+
+function weights(entries) {
+  return entries.map(([label, weight, commentary]) => ({
+    label,
+    weight,
+    commentary,
+  }));
 }
 
 function emptySecSnapshot(symbol, error) {
@@ -1363,6 +1810,42 @@ function groupBySector(items) {
     map.set(key, bucket);
     return map;
   }, new Map());
+}
+
+function clampWindowDays(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 30;
+  }
+  return Math.min(Math.max(Math.round(numericValue), 7), 90);
+}
+
+function withinWindow(value, windowDays = 30) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return false;
+  }
+  const now = Date.now();
+  const earliest = now - 1000 * 60 * 60 * 24 * 2;
+  const latest = now + clampWindowDays(windowDays) * 1000 * 60 * 60 * 24;
+  return timestamp >= earliest && timestamp <= latest;
+}
+
+function normalizeSectorKey(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function resolveSectorName(input, sectors) {
+  const normalized = normalizeSectorKey(input);
+  if (!normalized) {
+    return null;
+  }
+  return sectors.find((sector) => normalizeSectorKey(sector.sector) === normalized)?.sector ?? null;
 }
 
 function heatmapColumnSpan(weight) {
