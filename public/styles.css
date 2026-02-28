@@ -877,6 +877,17 @@ svg {
   gap: 8px;
 }
 
+.intel-detail-split-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+.intel-detail-split-grid > .span-full {
+  grid-column: 1 / -1;
+}
+
 .intel-mini-heading {
   display: flex;
   align-items: baseline;
@@ -1087,6 +1098,64 @@ svg {
   margin: 0;
 }
 
+.intel-impact-list {
+  gap: 6px;
+}
+
+.intel-impact-sequence {
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.intel-impact-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.intel-impact-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 22px;
+  padding: 0 6px;
+  border: 1px solid rgba(143, 184, 255, 0.22);
+  color: #8fb8ff;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.chain-steps-compact {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0 0 0 34px;
+  list-style: none;
+}
+
+.chain-step-compact {
+  position: relative;
+  padding-left: 14px;
+  color: #d9e4f2;
+  line-height: 1.28;
+  font-size: 12px;
+}
+
+.chain-step-compact::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.52em;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(143, 184, 255, 0.82);
+}
+
 .intel-empty {
   justify-content: flex-start;
 }
@@ -1132,6 +1201,8 @@ svg {
 
 .intel-graph-card {
   min-height: 380px;
+  width: 100%;
+  max-width: none;
 }
 
 .intel-headline {
@@ -1933,10 +2004,11 @@ button:hover {
 }
 
 #dashboardGrid[data-page="sectors"] .sector-board-shell {
-  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.78fr);
   grid-template-areas:
-    "tiles leaders"
-    "board news";
+    "tiles tiles"
+    "leaders news"
+    "board board";
   align-items: start;
 }
 
@@ -2062,8 +2134,9 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .intel-console-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
   gap: 8px;
+  align-items: start;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .command-bar {
@@ -2094,11 +2167,24 @@ button:hover {
 #dashboardGrid[data-page="research"] #section-intelligence #intelGraph {
   min-height: 460px;
   overflow: visible;
+  width: 100%;
+  justify-self: stretch;
+  align-self: stretch;
 }
 
-#dashboardGrid[data-page="research"] #section-intelligence .intel-detail-body .list-stack {
-  max-height: 220px;
-  overflow: auto;
+#dashboardGrid[data-page="research"] #section-intelligence .intel-detail-panel {
+  align-content: start;
+  min-height: 0;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-detail-body {
+  gap: 7px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-detail-body .list-stack,
+#dashboardGrid[data-page="research"] #section-intelligence .intel-detail-body .terminal-table-wrap {
+  max-height: none;
+  overflow: visible;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence #intelHeadline {
@@ -2112,6 +2198,19 @@ button:hover {
 
 #dashboardGrid[data-page="research"] #section-intelligence .intel-detail-panel {
   gap: 6px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-detail-split-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 7px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-impact-list {
+  gap: 5px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-impact-sequence {
+  padding: 7px 8px;
 }
 
 #dashboardGrid[data-page="research"] #section-screening {
@@ -2193,7 +2292,8 @@ button:hover {
 
 #dashboardGrid[data-page="research"] #section-intelligence .intel-graph-grid .subpanel {
   display: grid;
-  justify-items: center;
+  justify-items: stretch;
+  align-items: start;
   gap: 8px;
 }
 
@@ -2865,17 +2965,17 @@ button:hover {
 
 .sector-board-tiles {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  grid-auto-rows: minmax(76px, auto);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: minmax(68px, auto);
   gap: 6px;
 }
 
 .sector-board-tile {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   align-content: space-between;
-  min-height: 100%;
-  padding: 10px;
+  min-height: 0;
+  padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
   text-align: left;
@@ -2897,7 +2997,16 @@ button:hover {
 }
 
 .sector-board-tile strong {
-  font-size: 16px;
+  font-size: 14px;
+}
+
+.sector-board-tile-overflow {
+  background: #0d1218;
+  color: #d3def0;
+}
+
+.sector-board-tile .meta {
+  line-height: 1.2;
 }
 
 .sector-news-panel {
@@ -2926,6 +3035,8 @@ button:hover {
   grid-template-columns: 1fr;
   gap: 4px;
   align-content: start;
+  max-height: 420px;
+  overflow: auto;
 }
 
 .sector-news-card {
@@ -2994,6 +3105,15 @@ button:hover {
 
 .sector-news-link:hover {
   color: #8fb8ff;
+}
+
+#section-sector-board .table-wrap {
+  max-height: 580px;
+  overflow: auto;
+}
+
+#section-sector-board #sectorBoardPager {
+  margin-top: 8px;
 }
 
 .flow-table tbody tr {
@@ -3718,7 +3838,8 @@ textarea:focus {
 .graph-network {
   position: relative;
   min-height: 420px;
-  padding: 24px 18px;
+  width: 100%;
+  padding: 20px 12px 24px;
   background:
     radial-gradient(circle at center, rgba(53, 240, 210, 0.08), transparent 26%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
@@ -3749,8 +3870,8 @@ textarea:focus {
   top: 50%;
   display: grid;
   gap: 6px;
-  width: 150px;
-  padding: 16px 14px;
+  width: 136px;
+  padding: 14px 12px;
   border: 1px solid rgba(124, 247, 212, 0.22);
   background: rgba(4, 10, 18, 0.92);
   text-align: center;
@@ -3777,8 +3898,8 @@ textarea:focus {
 .graph-network-node {
   display: grid;
   gap: 4px;
-  width: 148px;
-  padding: 10px;
+  width: 136px;
+  padding: 9px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(5, 10, 16, 0.94);
   text-align: left;

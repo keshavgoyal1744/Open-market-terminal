@@ -88,6 +88,8 @@ const DEFAULT_SECTORS = [
   "Real Estate",
   "Basic Materials",
 ];
+const SECTOR_TILE_LIMIT = 36;
+const SECTOR_TABLE_PAGE_SIZE = 32;
 const COMPACT_LAYOUT_BREAKPOINT = 1080;
 const INTEL_VIEWS = ["SPLC", "REL", "OWN", "BMAP", "RV", "FA", "DES"];
 
@@ -409,6 +411,7 @@ const state = {
   calendarPage: 1,
   newsPage: 1,
   marketEventsPage: 1,
+  sectorBoardPage: 1,
   paletteCommands: [],
   commandPaletteOpen: false,
   paletteIndex: 0,
@@ -1134,6 +1137,15 @@ function bindGlobalActions() {
     rerenderPageScopedPanels();
   });
 
+  document.querySelector("#sectorBoardPager")?.addEventListener("click", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-sector-board-page]") : null;
+    if (!trigger) {
+      return;
+    }
+    state.sectorBoardPage = Number(trigger.dataset.sectorBoardPage);
+    rerenderPageScopedPanels();
+  });
+
   document.querySelector("#toggleEarningsDrawerButton")?.addEventListener("click", async () => {
     toggleEarningsDrawer(true);
     document.querySelector("#earningsWarning").innerHTML =
@@ -1420,6 +1432,9 @@ function setActivePage(pageId, options = {}) {
   }
   if (state.preferences.activePage === "sectors") {
     syncSectorSelector(state.sectorBoard?.sectors ?? state.heatmap?.sectors ?? DEFAULT_SECTORS, state.preferences.sectorFocus);
+    if (state.sectorBoard) {
+      renderSectorBoardPanel(state.sectorBoard);
+    }
     if (!(state.sectorBoard?.sectors?.length || state.heatmap?.sectors?.length)) {
       void loadSectorBoard(false);
     }
@@ -1463,6 +1478,9 @@ function rerenderPageScopedPanels() {
   }
   if (document.querySelector("#marketEventsList")) {
     renderMarketEventsPanel(state.marketEvents);
+  }
+  if (document.querySelector("#sectorBoardBody")) {
+    renderSectorBoardPanel(state.sectorBoard);
   }
   if (document.querySelector("#terminalHotkeys")) {
     renderTerminalHotkeys();
@@ -1722,23 +1740,8 @@ async function loadSectorBoard(force = false) {
     const payload = await api(`/api/sector-board?sector=${encodeURIComponent(sector)}${force ? "&force=1" : ""}`);
     state.sectorBoard = payload;
     state.preferences.sectorFocus = payload.sector ?? sector;
-    syncSectorSelector(payload.sectors?.length ? payload.sectors : state.heatmap?.sectors ?? DEFAULT_SECTORS, payload.sector);
-    const sectorLabel = payload.sector ?? state.preferences.sectorFocus ?? "selected sector";
-    document.querySelector("#sectorBoardSummary").innerHTML = renderSectorBoardSummary(payload);
-    document.querySelector("#sectorBoardWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
-    document.querySelector("#sectorBoardTitle").textContent = `${sectorLabel} board`;
-    document.querySelector("#sectorBoardMeta").textContent =
-      `${payload.summary?.names ?? 0} names | ${payload.asOf ? `updated ${formatDateTime(payload.asOf)}` : "awaiting sync"}`;
-    document.querySelector("#sectorNewsMeta").textContent = payload.news?.length
-      ? `Public source blend for ${sectorLabel}`
-      : `No sector headlines available for ${sectorLabel}`;
-    document.querySelector("#sectorBoardTiles").innerHTML = renderSectorBoardTiles(payload.items ?? []);
-    document.querySelector("#sectorLeadersList").innerHTML = (payload.leaders ?? []).map(renderQuoteListItem).join("")
-      || renderIntelEmpty("No leaders available.");
-    document.querySelector("#sectorLaggardsList").innerHTML = (payload.laggards ?? []).map(renderQuoteListItem).join("")
-      || renderIntelEmpty("No laggards available.");
-    document.querySelector("#sectorNewsList").innerHTML = renderCompactNewsFeed(payload.news ?? []);
-    document.querySelector("#sectorBoardBody").innerHTML = renderSectorBoardRows(payload.items ?? []);
+    state.sectorBoardPage = 1;
+    renderSectorBoardPanel(payload);
     markFeedHeartbeat("Live");
   } catch (error) {
     document.querySelector("#sectorBoardWarnings").innerHTML =
@@ -2804,7 +2807,8 @@ function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFo
   const ordered = [...weighted]
     .sort((left, right) => (numeric(right.weight) ?? 0) - (numeric(left.weight) ?? 0))
     .map((item) => item.sector)
-    .filter((sector, index, list) => list.indexOf(sector) === index);
+    .concat(DEFAULT_SECTORS)
+    .filter((sector, index, list) => list.findIndex((candidate) => normalizeSectorKey(candidate) === normalizeSectorKey(sector)) === index);
   if (!ordered.length) {
     select.innerHTML = DEFAULT_SECTORS
       .map((sector) => `<option value="${escapeHtml(sector)}">${escapeHtml(sector)}</option>`)
@@ -2823,6 +2827,69 @@ function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFo
     select.value = preferred;
     state.preferences.sectorFocus = preferred;
   }
+}
+
+function normalizeSectorKey(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function resolveSectorBoardSector(payload) {
+  const sectors = [
+    ...(payload?.sectors ?? []).map((item) => (typeof item === "string" ? item : item?.sector)).filter(Boolean),
+    ...(payload?.items ?? []).map((item) => item?.sector).filter(Boolean),
+    ...DEFAULT_SECTORS,
+  ];
+  const uniqueSectors = sectors.filter(
+    (sector, index) => sectors.findIndex((candidate) => normalizeSectorKey(candidate) === normalizeSectorKey(sector)) === index,
+  );
+  const candidates = [
+    payload?.sector,
+    state.preferences.sectorFocus,
+    document.querySelector("#sectorBoardSelect")?.value,
+    uniqueSectors[0],
+    DEFAULT_SECTORS[0],
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const match = uniqueSectors.find((sector) => normalizeSectorKey(sector) === normalizeSectorKey(candidate));
+    if (match) {
+      return match;
+    }
+  }
+  return candidates[0] ?? "Technology";
+}
+
+function filterSectorBoardItems(items, selectedSector) {
+  const list = Array.isArray(items) ? items : [];
+  const selectedKey = normalizeSectorKey(selectedSector);
+  if (!selectedKey) {
+    return list;
+  }
+  const sectorAware = list.filter((item) => normalizeSectorKey(item?.sector));
+  if (!sectorAware.length) {
+    return list;
+  }
+  return sectorAware.filter((item) => normalizeSectorKey(item?.sector) === selectedKey);
+}
+
+function summarizeSectorBoardItems(items) {
+  const list = Array.isArray(items) ? items : [];
+  const moves = list.map((item) => Number(item?.changePercent)).filter(Number.isFinite);
+  const weights = list.map((item) => Number(item?.weight)).filter(Number.isFinite);
+  const volumes = list.map((item) => Number(item?.volume)).filter(Number.isFinite);
+  const marketCaps = list.map((item) => Number(item?.marketCap)).filter(Number.isFinite);
+  return {
+    names: list.length,
+    averageMove: moves.length ? sum(moves) / moves.length : null,
+    weight: weights.length ? sum(weights) : null,
+    aggregateVolume: volumes.length ? sum(volumes) : null,
+    aggregateCap: marketCaps.length ? sum(marketCaps) : null,
+  };
 }
 
 function heatmapSectorSpan(weight) {
@@ -3379,6 +3446,7 @@ async function selectSectorFocus(sector, options = {}) {
   }
 
   state.preferences.sectorFocus = clean;
+  state.sectorBoardPage = 1;
   schedulePreferenceSync();
   if (options.page) {
     setActivePage(options.page, { scroll: false });
@@ -4660,13 +4728,16 @@ function renderHeatmapContext(payload) {
 }
 
 function renderSectorBoardSummary(payload) {
+  const sectorLabel = resolveSectorBoardSector(payload);
+  const items = filterSectorBoardItems(payload?.items ?? [], sectorLabel);
+  const summary = summarizeSectorBoardItems(items);
   return [
-    renderTerminalStat("Sector", payload.sector ?? "n/a", "focus board"),
-    renderTerminalStat("Names", String(payload.summary?.names ?? 0), "constituents"),
-    renderTerminalStat("Avg Move", formatPercent(payload.summary?.averageMove), "sector mean"),
-    renderTerminalStat("Weight", formatPercent(payload.summary?.weight), "index share"),
-    renderTerminalStat("Volume", formatCompact(payload.summary?.aggregateVolume), "aggregate"),
-    renderTerminalStat("Mkt Cap", formatCompact(payload.summary?.aggregateCap), "aggregate"),
+    renderTerminalStat("Sector", sectorLabel ?? "n/a", "focus board"),
+    renderTerminalStat("Names", String(summary.names), "constituents"),
+    renderTerminalStat("Avg Move", formatPercent(summary.averageMove), "sector mean"),
+    renderTerminalStat("Weight", formatPercent(summary.weight), "index share"),
+    renderTerminalStat("Volume", formatCompact(summary.aggregateVolume), "aggregate"),
+    renderTerminalStat("Mkt Cap", formatCompact(summary.aggregateCap), "aggregate"),
   ].join("");
 }
 
@@ -4676,10 +4747,14 @@ function renderSectorBoardTiles(items) {
   }
 
   const totalWeight = sum(items.map((item) => item.weight)) ?? 1;
-  return items
+  const visibleItems = items.slice(0, SECTOR_TILE_LIMIT);
+  const overflowCount = Math.max(items.length - visibleItems.length, 0);
+
+  return [
+    ...visibleItems
     .map((item) => {
       const relativeWeight = Number.isFinite(item.weight) ? item.weight / totalWeight : 0.03;
-      const span = relativeWeight >= 0.16 ? 3 : relativeWeight >= 0.08 ? 2 : 1;
+      const span = relativeWeight >= 0.12 ? 4 : relativeWeight >= 0.07 ? 3 : relativeWeight >= 0.03 ? 2 : 1;
       return `
         <button
           type="button"
@@ -4693,8 +4768,17 @@ function renderSectorBoardTiles(items) {
           <div class="sector-board-move ${tone(item.changePercent)}">${formatPercent(item.changePercent)}</div>
         </button>
       `;
-    })
-    .join("");
+    }),
+    overflowCount
+      ? `
+        <div class="sector-board-tile sector-board-tile-overflow">
+          <span class="sector-board-weight">Table</span>
+          <strong>+${overflowCount}</strong>
+          <div class="meta">More selected-sector names continue below in the constituent board.</div>
+        </div>
+      `
+      : "",
+  ].join("");
 }
 
 function renderSectorBoardRows(items) {
@@ -4721,6 +4805,53 @@ function renderSectorBoardRows(items) {
       `,
     )
     .join("");
+}
+
+function renderSectorBoardPanel(payload) {
+  if (!payload) {
+    return;
+  }
+  const sectorLabel = resolveSectorBoardSector(payload);
+  const filteredItems = filterSectorBoardItems(payload?.items ?? [], sectorLabel);
+  const sortedItems = [...filteredItems].sort((left, right) => (Number(right.weight) || 0) - (Number(left.weight) || 0));
+  const summary = summarizeSectorBoardItems(sortedItems);
+  const leaders = [...sortedItems]
+    .filter((item) => Number.isFinite(Number(item.changePercent)))
+    .sort((left, right) => (Number(right.changePercent) || 0) - (Number(left.changePercent) || 0))
+    .slice(0, 6);
+  const laggards = [...sortedItems]
+    .filter((item) => Number.isFinite(Number(item.changePercent)))
+    .sort((left, right) => (Number(left.changePercent) || 0) - (Number(right.changePercent) || 0))
+    .slice(0, 6);
+  const pageState = paginateItems(sortedItems, state.sectorBoardPage, SECTOR_TABLE_PAGE_SIZE);
+  state.sectorBoardPage = pageState.page;
+
+  syncSectorSelector(payload?.sectors?.length ? payload.sectors : state.heatmap?.sectors ?? DEFAULT_SECTORS, sectorLabel);
+  document.querySelector("#sectorBoardSummary").innerHTML = renderSectorBoardSummary({
+    ...payload,
+    sector: sectorLabel,
+    items: sortedItems,
+    summary,
+  });
+  document.querySelector("#sectorBoardWarnings").innerHTML = renderHeatmapWarnings(payload?.warnings ?? []);
+  document.querySelector("#sectorBoardTitle").textContent = `${sectorLabel} board`;
+  document.querySelector("#sectorBoardMeta").textContent = sortedItems.length
+    ? `${sortedItems.length} names | showing top ${Math.min(sortedItems.length, SECTOR_TILE_LIMIT)} in board | ${payload?.asOf ? `updated ${formatDateTime(payload.asOf)}` : "awaiting sync"}`
+    : `No names mapped for ${sectorLabel}`;
+  document.querySelector("#sectorNewsMeta").textContent = payload?.news?.length
+    ? `Public source blend for ${sectorLabel}`
+    : `No sector headlines available for ${sectorLabel}`;
+  document.querySelector("#sectorBoardTiles").innerHTML = renderSectorBoardTiles(sortedItems);
+  document.querySelector("#sectorLeadersList").innerHTML = leaders.map(renderQuoteListItem).join("")
+    || renderIntelEmpty("No leaders available.");
+  document.querySelector("#sectorLaggardsList").innerHTML = laggards.map(renderQuoteListItem).join("")
+    || renderIntelEmpty("No laggards available.");
+  document.querySelector("#sectorNewsList").innerHTML = renderCompactNewsFeed(payload?.news ?? []);
+  document.querySelector("#sectorBoardBody").innerHTML = renderSectorBoardRows(pageState.items);
+  const pager = document.querySelector("#sectorBoardPager");
+  if (pager) {
+    pager.innerHTML = renderPager(pageState.page, pageState.totalPages, "sector-board-page");
+  }
 }
 
 function renderCompactNewsFeed(items) {
@@ -5577,7 +5708,7 @@ function buildIntelConsoleView(payload, holders, view) {
           ),
         secondaryTitle: "Impact Chains",
         secondaryMeta: `${payload.eventChains?.length ?? 0} mapped catalysts`,
-        secondaryHtml: `<div class="list-stack">${impactRows}</div>`,
+        secondaryHtml: `<div class="list-stack intel-impact-list">${impactRows}</div>`,
         mount() {
           mountGeoExposureChart(document.querySelector("#intelDetailGeoChart"), payload.geography);
         },
@@ -5594,7 +5725,7 @@ function buildIntelConsoleView(payload, holders, view) {
           ),
         secondaryTitle: "Impact Chains",
         secondaryMeta: `${payload.eventChains?.length ?? 0} mapped catalysts`,
-        secondaryHtml: `<div class="list-stack">${impactRows}</div>`,
+        secondaryHtml: `<div class="list-stack intel-impact-list">${impactRows}</div>`,
       };
     case "FA":
       return {
@@ -5659,18 +5790,27 @@ function buildIntelConsoleView(payload, holders, view) {
           ),
         secondaryTitle: "Demand Side + Catalysts",
         secondaryMeta: `${customerCount + customerThemeCount} downstream signals`,
-        secondaryHtml:
-          renderIntelSection(
-            "Customer Channels",
-            `<div class="list-stack">${customerLinkRows}</div>`,
-            `${customerCount} named channels`,
-          ) +
-          renderIntelSection(
-            "Concentration Themes",
-            `<div class="list-stack">${customerThemeRows}</div>`,
-            `${customerThemeCount} public demand themes`,
-          ) +
-          renderIntelSection("Impact Chains", `<div class="list-stack">${impactRows}</div>`, `${impactCount} mapped catalysts`),
+        secondaryHtml: `
+          <div class="intel-detail-split-grid">
+            ${renderIntelSection(
+              "Customer Channels",
+              `<div class="list-stack">${customerLinkRows}</div>`,
+              `${customerCount} named channels`,
+            )}
+            ${renderIntelSection(
+              "Concentration Themes",
+              `<div class="list-stack">${customerThemeRows}</div>`,
+              `${customerThemeCount} public demand themes`,
+            )}
+            <section class="intel-detail-block span-full">
+              <div class="intel-mini-heading">
+                <strong>Impact Chains</strong>
+                <span>${escapeHtml(`${impactCount} mapped catalysts`)}</span>
+              </div>
+              <div class="list-stack intel-impact-list">${impactRows}</div>
+            </section>
+          </div>
+        `,
       };
   }
 }
@@ -6009,14 +6149,14 @@ function renderIntelNote(note, index) {
 
 function renderImpactChain(chain, index) {
   return `
-    <div class="intel-sequence">
-      <div class="terminal-symbol-line">
+    <div class="intel-sequence intel-impact-sequence">
+      <div class="intel-impact-header">
+        <span class="intel-impact-index">${String(index + 1).padStart(2, "0")}</span>
         <strong>${escapeHtml(chain.title)}</strong>
-        <span class="terminal-chip">${String(index + 1).padStart(2, "0")}</span>
       </div>
-      <div class="chain-steps">
-        ${chain.steps.map((step) => `<span class="chain-step">${escapeHtml(step)}</span>`).join("")}
-      </div>
+      <ol class="chain-steps chain-steps-compact">
+        ${chain.steps.map((step) => `<li class="chain-step-compact">${escapeHtml(step)}</li>`).join("")}
+      </ol>
     </div>
   `;
 }
@@ -6492,17 +6632,17 @@ function renderIntelGraphNetwork(graph, symbol) {
     market: nodes.filter((node) => ["competitor", "ecosystem"].includes(String(node.kind))),
   };
 
-  const width = 980;
+  const width = 1320;
   const height = Math.max(500, 220 + Math.max(lanes.supply.length, lanes.customer.length, 4) * 56);
   const hub = { x: width / 2, y: height / 2 };
   const topY = 82;
   const bottomY = height - 86;
-  const leftX = 108;
-  const rightX = width - 108;
-  const laneXFrom = 190;
-  const laneXTo = width - 190;
-  const laneYFrom = 162;
-  const laneYTo = height - 148;
+  const leftX = 74;
+  const rightX = width - 74;
+  const laneXFrom = 124;
+  const laneXTo = width - 124;
+  const laneYFrom = 150;
+  const laneYTo = height - 136;
   const positioned = [
     ...layoutGraphLane(lanes.corporate, { xFrom: laneXFrom, xTo: laneXTo, y: topY }),
     ...layoutGraphLane(lanes.supply, { xFrom: leftX, xTo: leftX, yFrom: laneYFrom, yTo: laneYTo }),
