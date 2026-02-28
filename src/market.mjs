@@ -526,7 +526,7 @@ export class MarketDataService {
               }
             : null,
         ].filter(Boolean);
-        const resolvedHolders = dedupeHolders(holders.length ? holders : ownershipFallbacks).slice(0, 16);
+        const resolvedHolders = dedupeHolders(holders.length ? holders : ownershipFallbacks);
         const resolvedInsiderHolders = (
           company.market.insiderHolders?.length
             ? company.market.insiderHolders
@@ -540,7 +540,7 @@ export class MarketDataService {
                   },
                 ]
               : []
-        ).slice(0, 12);
+        );
         const acquisitionsTimeline = buildAcquisitionTimeline(intel, company.sec?.filings ?? []);
         const indexTimeline = buildIndexTimeline(indexMemberships);
         const ownershipTrend = buildOwnershipTrend(company.market, resolvedHolders, company.market.insiderTransactions ?? []);
@@ -577,9 +577,9 @@ export class MarketDataService {
                   yearBorn: null,
                   totalPay: item.compensation ?? null,
                 }))
-          ).slice(0, 16),
+          ),
           insiderHolders: resolvedInsiderHolders,
-          insiderTransactions: (company.market.insiderTransactions ?? []).slice(0, 12),
+          insiderTransactions: company.market.insiderTransactions ?? [],
           boardInterlocks,
           acquisitionsTimeline,
           indexTimeline,

@@ -452,6 +452,8 @@ const state = {
   sectorOverflowOpen: false,
   sectorOverflowItems: [],
   sectorOverflowSector: "",
+  companyMapExplorerOpen: false,
+  companyMapExplorerFocus: "overview",
 };
 
 const SECTION_COMMANDS = [
@@ -1103,7 +1105,16 @@ function bindGlobalActions() {
     await selectDetailSymbol(trigger.dataset.graphSymbol, { jump: false, page: "map" });
   });
 
+  document.querySelector("#openCompanyMapExplorerButton")?.addEventListener("click", () => {
+    toggleCompanyMapExplorer(true, "overview");
+  });
+
   document.querySelector("#section-company-map")?.addEventListener("click", async (event) => {
+    const explorerTrigger = event.target instanceof Element ? event.target.closest("[data-open-company-map-explorer]") : null;
+    if (explorerTrigger?.dataset.openCompanyMapExplorer) {
+      toggleCompanyMapExplorer(true, explorerTrigger.dataset.openCompanyMapExplorer);
+      return;
+    }
     const trigger = event.target instanceof Element ? event.target.closest("[data-company-map-symbol]") : null;
     if (!trigger?.dataset.companyMapSymbol) {
       return;
@@ -1227,6 +1238,35 @@ function bindGlobalActions() {
     await selectDetailSymbol(symbolTrigger.dataset.sectorSymbol, { jump: true, page: "research" });
   });
 
+  document.querySelector("#closeCompanyMapExplorerButton")?.addEventListener("click", () => {
+    toggleCompanyMapExplorer(false);
+  });
+
+  document.querySelector("#companyMapExplorerOverlay")?.addEventListener("click", async (event) => {
+    const closeTrigger = event.target instanceof Element ? event.target.closest("[data-close-company-map-explorer='true']") : null;
+    if (closeTrigger) {
+      toggleCompanyMapExplorer(false);
+      return;
+    }
+    const focusTrigger = event.target instanceof Element ? event.target.closest("[data-company-map-explorer-focus]") : null;
+    if (focusTrigger?.dataset.companyMapExplorerFocus) {
+      state.companyMapExplorerFocus = normalizeCompanyMapExplorerFocus(focusTrigger.dataset.companyMapExplorerFocus);
+      renderCompanyMapExplorer(state.companyMap, state.companyMapExplorerFocus);
+      focusCompanyMapExplorerSection(state.companyMapExplorerFocus);
+      return;
+    }
+    const graphTrigger = event.target instanceof Element ? event.target.closest("[data-graph-symbol]") : null;
+    if (graphTrigger?.dataset.graphSymbol) {
+      await selectDetailSymbol(graphTrigger.dataset.graphSymbol, { jump: false, page: "map" });
+      return;
+    }
+    const symbolTrigger = event.target instanceof Element ? event.target.closest("[data-company-map-symbol]") : null;
+    if (!symbolTrigger?.dataset.companyMapSymbol) {
+      return;
+    }
+    await selectDetailSymbol(symbolTrigger.dataset.companyMapSymbol, { jump: false, page: "map" });
+  });
+
   document.addEventListener("keydown", async (event) => {
     const target = event.target;
     const editable = target instanceof HTMLElement && (target.closest("input, textarea, select") || target.isContentEditable);
@@ -1280,6 +1320,12 @@ function bindGlobalActions() {
     if (state.sectorOverflowOpen && event.key === "Escape") {
       event.preventDefault();
       toggleSectorOverflowModal(false);
+      return;
+    }
+
+    if (state.companyMapExplorerOpen && event.key === "Escape") {
+      event.preventDefault();
+      toggleCompanyMapExplorer(false);
       return;
     }
 
@@ -1487,6 +1533,9 @@ function setActivePage(pageId, options = {}) {
   }
   if (state.preferences.activePage !== "sectors" && state.sectorOverflowOpen) {
     toggleSectorOverflowModal(false);
+  }
+  if (state.preferences.activePage !== "map" && state.companyMapExplorerOpen) {
+    toggleCompanyMapExplorer(false);
   }
   applyPanelLayout();
   rerenderPageScopedPanels();
@@ -1950,6 +1999,16 @@ async function loadCompanyMap(symbol, force = false) {
   try {
     const payload = await fetchCompanyMap(clean, force);
     state.companyMap = payload;
+    const supplierPreview = (payload.suppliers ?? []).slice(0, 8);
+    const customerPreview = (payload.customers ?? []).slice(0, 8);
+    const interlockPreview = (payload.boardInterlocks?.summary ?? []).slice(0, 6);
+    const acquisitionPreview = (payload.acquisitionsTimeline ?? []).slice(0, 6);
+    const indexTimelinePreview = (payload.indexTimeline ?? []).slice(0, 6);
+    const competitorPreview = (payload.competitors ?? []).slice(0, 8);
+    const holderPreview = (payload.holders ?? []).slice(0, 8);
+    const boardPreview = (payload.board ?? []).slice(0, 8);
+    const insiderHolderPreview = (payload.insiderHolders ?? []).slice(0, 6);
+    const insiderTransactionPreview = (payload.insiderTransactions ?? []).slice(0, 4);
     document.querySelector("#companyMapSymbol").value = clean;
     if (document.querySelector("#companyMapCompareSymbol")) {
       document.querySelector("#companyMapCompareSymbol").value = state.preferences.companyMapCompareSymbol ?? "";
@@ -1970,26 +2029,26 @@ async function loadCompanyMap(symbol, force = false) {
       .join("") || renderIntelEmpty("No company-map coverage notes are available.");
     document.querySelector("#companyMapIndices").innerHTML = renderCompanyMapIndices(payload.indices ?? []);
     document.querySelector("#companyMapSuppliers").innerHTML = renderCompanyMapRelations(
-      payload.suppliers ?? [],
+      supplierPreview,
       "No supplier or upstream public links are available.",
     );
     document.querySelector("#companyMapCustomers").innerHTML = renderCompanyMapRelations(
-      payload.customers ?? [],
+      customerPreview,
       "No downstream or customer-side public links are available.",
     );
-    document.querySelector("#companyMapBoardInterlockList").innerHTML = renderCompanyMapInterlocks(payload.boardInterlocks?.summary ?? []);
+    document.querySelector("#companyMapBoardInterlockList").innerHTML = renderCompanyMapInterlocks(interlockPreview);
     document.querySelector("#companyMapAcquisitions").innerHTML = renderCompanyMapTimeline(
-      payload.acquisitionsTimeline ?? [],
+      acquisitionPreview,
       "No acquisition or corporate-event timeline rows are available.",
     );
     document.querySelector("#companyMapIndexTimeline").innerHTML = renderCompanyMapTimeline(
-      payload.indexTimeline ?? [],
+      indexTimelinePreview,
       "No current index-presence timeline rows are available.",
     );
-    document.querySelector("#companyMapCompetitorBody").innerHTML = renderCompanyMapCompetitors(payload.competitors ?? []);
-    document.querySelector("#companyMapHoldersBody").innerHTML = renderCompanyMapHolders(payload.holders ?? []);
-    document.querySelector("#companyMapBoard").innerHTML = renderCompanyMapBoard(payload.board ?? []);
-    document.querySelector("#companyMapInsiders").innerHTML = renderCompanyMapInsiders(payload.insiderHolders ?? [], payload.insiderTransactions ?? []);
+    document.querySelector("#companyMapCompetitorBody").innerHTML = renderCompanyMapCompetitors(competitorPreview);
+    document.querySelector("#companyMapHoldersBody").innerHTML = renderCompanyMapHolders(holderPreview);
+    document.querySelector("#companyMapBoard").innerHTML = renderCompanyMapBoard(boardPreview);
+    document.querySelector("#companyMapInsiders").innerHTML = renderCompanyMapInsiders(insiderHolderPreview, insiderTransactionPreview);
     mountIntelGraph(document.querySelector("#companyMapGraph"), payload.graph, payload.symbol);
     mountIntelGraph(
       document.querySelector("#companyMapBoardInterlocks"),
@@ -2008,6 +2067,9 @@ async function loadCompanyMap(symbol, force = false) {
       valueFormatter: (value) => `${formatNumber(value, 2)}${value > 20 ? "%" : ""}`,
       labelFormatter: (label) => label,
     });
+    if (state.companyMapExplorerOpen) {
+      renderCompanyMapExplorer(payload, state.companyMapExplorerFocus);
+    }
     await loadCompanyMapComparison(payload, force);
     markFeedHeartbeat("Live");
   } catch (error) {
@@ -4272,6 +4334,347 @@ function renderSectorOverflowModal(items, sectorLabel) {
   document.querySelector("#sectorOverflowGrid").innerHTML = renderSectorOverflowTiles(state.sectorOverflowItems);
 }
 
+function normalizeCompanyMapExplorerFocus(focus) {
+  const clean = String(focus ?? "")
+    .trim()
+    .toLowerCase();
+  return [
+    "overview",
+    "suppliers",
+    "customers",
+    "corporate",
+    "competition",
+    "ownership",
+    "board",
+    "indices",
+    "timeline",
+    "geography",
+  ].includes(clean)
+    ? clean
+    : "overview";
+}
+
+function companyMapExplorerSectionId(focus) {
+  return `companyMapExplorerSection-${normalizeCompanyMapExplorerFocus(focus)}`;
+}
+
+function toggleCompanyMapExplorer(open, focus = "overview") {
+  state.companyMapExplorerOpen = open;
+  state.companyMapExplorerFocus = normalizeCompanyMapExplorerFocus(focus);
+  const overlay = document.querySelector("#companyMapExplorerOverlay");
+  const modal = document.querySelector("#companyMapExplorerModal");
+  if (!overlay || !modal) {
+    return;
+  }
+  overlay.hidden = !open;
+  modal.hidden = !open;
+  overlay.classList.toggle("open", open);
+  modal.classList.toggle("open", open);
+  document.body.classList.toggle("company-map-explorer-open", open);
+  if (open) {
+    renderCompanyMapExplorer(state.companyMap, state.companyMapExplorerFocus);
+    document.querySelector("#closeCompanyMapExplorerButton")?.focus();
+    requestAnimationFrame(() => focusCompanyMapExplorerSection(state.companyMapExplorerFocus));
+  }
+}
+
+function focusCompanyMapExplorerSection(focus) {
+  const target = document.querySelector(`#${companyMapExplorerSectionId(focus)}`);
+  const body = document.querySelector("#companyMapExplorerModal");
+  if (!target || !body) {
+    return;
+  }
+  target.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+function renderCompanyMapExplorer(payload, focus = "overview") {
+  const nav = document.querySelector("#companyMapExplorerNav");
+  const summary = document.querySelector("#companyMapExplorerSummary");
+  const body = document.querySelector("#companyMapExplorerBody");
+  if (!nav || !summary || !body) {
+    return;
+  }
+
+  if (!payload) {
+    setText("#companyMapExplorerTitle", "Expanded company map");
+    summary.innerHTML = "";
+    nav.innerHTML = "";
+    body.innerHTML = `<article class="subpanel"><div class="list-stack">${renderIntelEmpty("Load a symbol on the Map page to open the full relationship explorer.")}</div></article>`;
+    return;
+  }
+
+  state.companyMapExplorerFocus = normalizeCompanyMapExplorerFocus(focus);
+  setText("#companyMapExplorerTitle", `${payload.symbol} relationship explorer`);
+  summary.innerHTML = renderCompanyMapSummary(payload);
+  nav.innerHTML = renderCompanyMapExplorerNav(state.companyMapExplorerFocus);
+  body.innerHTML = renderCompanyMapExplorerBody(payload);
+
+  mountIntelGraph(document.querySelector("#companyMapExplorerGraph"), payload.graph, payload.symbol);
+  mountIntelGraph(
+    document.querySelector("#companyMapExplorerInterlocksGraph"),
+    payload.boardInterlocks ?? { nodes: [{ id: payload.symbol, label: payload.symbol, kind: "issuer", symbol: payload.symbol }], edges: [] },
+    payload.symbol,
+  );
+  mountGeoExposureChart(document.querySelector("#companyMapExplorerGeo"), payload.geography);
+  mountBarChart(document.querySelector("#companyMapExplorerOwnershipTrend"), {
+    title: "Ownership Signal",
+    subtitle: "Institutional report dates and insider activity",
+    points: (payload.ownershipTrend ?? []).map((item) => ({
+      label: formatDateShort(item.date),
+      value: item.institutionPercent != null ? item.institutionPercent * 100 : item.insiderEvents ?? 0,
+      meta: item.note ?? "public ownership",
+    })),
+    valueFormatter: (value) => `${formatNumber(value, 2)}${value > 20 ? "%" : ""}`,
+    labelFormatter: (label) => label,
+  });
+}
+
+function renderCompanyMapExplorerNav(activeFocus) {
+  const buttons = [
+    ["overview", "Overview"],
+    ["suppliers", "Suppliers"],
+    ["customers", "Customers"],
+    ["corporate", "Corporate"],
+    ["competition", "Competition"],
+    ["ownership", "Ownership"],
+    ["board", "Board"],
+    ["indices", "Indices"],
+    ["timeline", "Timeline"],
+    ["geography", "Geography"],
+  ];
+
+  return buttons
+    .map(
+      ([value, label]) => `
+        <button
+          type="button"
+          class="command-pill${value === activeFocus ? " active" : ""}"
+          data-company-map-explorer-focus="${value}"
+        >
+          ${escapeHtml(label)}
+        </button>
+      `,
+    )
+    .join("");
+}
+
+function renderCompanyMapExplorerBody(payload) {
+  const corporateRows = [
+    ...(payload.corporate?.tree ?? []).map((item) =>
+      renderIntelListItem(item.type ?? "Corporate", item.name ?? "n/a", item.description ?? "Public corporate linkage"),
+    ),
+    ...(payload.corporate?.relations ?? []).map((item) =>
+      renderIntelListItem(item.relation ?? "Relation", item.target ?? "n/a", item.label ?? ""),
+    ),
+  ];
+
+  return `
+    <section id="${companyMapExplorerSectionId("overview")}" class="company-map-explorer-top-grid">
+      <article class="subpanel company-map-explorer-overview-panel">
+        <div class="subpanel-header compact-header">
+          <div>
+            <p class="section-label">${escapeHtml(payload.market?.sector ?? "Company Map")}</p>
+            <h3>${escapeHtml(payload.companyName ?? payload.symbol)}</h3>
+          </div>
+          <div class="terminal-price-stack">
+            <strong>${formatMoney(payload.quote?.price)}</strong>
+            <div class="meta ${tone(payload.quote?.changePercent)}">${formatPercent(payload.quote?.changePercent)}</div>
+          </div>
+        </div>
+        <div class="company-map-explorer-copy">
+          <p>${escapeHtml(payload.summary ?? "No company relationship summary is available from the current public sources.")}</p>
+        </div>
+        <div class="company-map-explorer-note-grid">
+          <article class="subpanel">
+            <div class="subpanel-header compact-header">
+              <h4>Coverage Notes</h4>
+              <div class="muted">${escapeHtml(`${payload.coverage?.notes?.length ?? 0} notes`)}</div>
+            </div>
+            <div class="list-stack">${(payload.coverage?.notes ?? []).map((note, index) => renderIntelNote(note, index)).join("") || renderIntelEmpty("No company-map coverage notes are available.")}</div>
+          </article>
+          <article class="subpanel">
+            <div class="subpanel-header compact-header">
+              <h4>Snapshot</h4>
+              <div class="muted">full available public map</div>
+            </div>
+            <div class="company-map-explorer-stat-grid">
+              ${renderTerminalStat("Suppliers", String(payload.suppliers?.length ?? 0), "upstream links")}
+              ${renderTerminalStat("Customers", String(payload.customers?.length ?? 0), "demand channels")}
+              ${renderTerminalStat("Corporate", String((payload.corporate?.tree?.length ?? 0) + (payload.corporate?.relations?.length ?? 0)), "tree + relations")}
+              ${renderTerminalStat("Competitors", String(payload.competitors?.length ?? 0), "public comps")}
+              ${renderTerminalStat("Holders", String(payload.holders?.length ?? 0), "public owners")}
+              ${renderTerminalStat("Board", String(payload.board?.length ?? 0), "officers / directors")}
+            </div>
+          </article>
+        </div>
+      </article>
+      <article class="subpanel company-map-explorer-graph-panel">
+        <div class="subpanel-header compact-header">
+          <div>
+            <h3>Graph View</h3>
+            <div class="muted">expanded supplier, customer, corporate, and ecosystem map</div>
+          </div>
+          <div class="terminal-price-stack">
+            <strong>${escapeHtml(payload.symbol)}</strong>
+            <div class="meta">click nodes to route deeper</div>
+          </div>
+        </div>
+        <div id="companyMapExplorerGraph" class="chart-card intel-graph-card company-map-explorer-chart"></div>
+      </article>
+    </section>
+
+    <section class="company-map-explorer-grid">
+      <article id="${companyMapExplorerSectionId("suppliers")}" class="subpanel company-map-explorer-section">
+        <div class="subpanel-header compact-header">
+          <h3>Suppliers & Partners</h3>
+          <div class="muted">${escapeHtml(`${payload.suppliers?.length ?? 0} upstream links`)}</div>
+        </div>
+        <div class="list-stack company-map-explorer-list">${renderCompanyMapRelations(payload.suppliers ?? [], "No supplier or upstream public links are available.")}</div>
+      </article>
+
+      <article id="${companyMapExplorerSectionId("customers")}" class="subpanel company-map-explorer-section">
+        <div class="subpanel-header compact-header">
+          <h3>Customers & Demand Channels</h3>
+          <div class="muted">${escapeHtml(`${payload.customers?.length ?? 0} downstream links`)}</div>
+        </div>
+        <div class="list-stack company-map-explorer-list">${renderCompanyMapRelations(payload.customers ?? [], "No downstream or customer-side public links are available.")}</div>
+      </article>
+
+      <article id="${companyMapExplorerSectionId("corporate")}" class="subpanel company-map-explorer-section">
+        <div class="subpanel-header compact-header">
+          <h3>Corporate Tree & Deals</h3>
+          <div class="muted">${escapeHtml(`${payload.corporate?.tree?.length ?? 0} tree nodes · ${payload.corporate?.relations?.length ?? 0} relations`)}</div>
+        </div>
+        <div class="list-stack company-map-explorer-list">${corporateRows.join("") || renderIntelEmpty("No corporate tree or transaction rows are available.")}</div>
+      </article>
+
+      <article id="${companyMapExplorerSectionId("competition")}" class="subpanel company-map-explorer-section">
+        <div class="subpanel-header compact-header">
+          <h3>Competitors</h3>
+          <div class="muted">${escapeHtml(`${payload.competitors?.length ?? 0} public comps`)}</div>
+        </div>
+        <div class="table-wrap compact terminal-table-wrap company-map-explorer-table-wrap">
+          <table class="terminal-table intel-table">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Company</th>
+                <th>Last</th>
+                <th>% Change</th>
+              </tr>
+            </thead>
+            <tbody>${renderCompanyMapCompetitors(payload.competitors ?? [])}</tbody>
+          </table>
+        </div>
+      </article>
+
+      <article id="${companyMapExplorerSectionId("ownership")}" class="subpanel company-map-explorer-section">
+        <div class="subpanel-header compact-header">
+          <h3>Ownership</h3>
+          <div class="muted">${escapeHtml(`${payload.holders?.length ?? 0} holders · ${(payload.insiderHolders?.length ?? 0) + (payload.insiderTransactions?.length ?? 0)} insider rows`)}</div>
+        </div>
+        <div class="company-map-explorer-subgrid">
+          <article class="subpanel">
+            <div class="subpanel-header compact-header">
+              <h4>Top Holders</h4>
+              <div class="muted">public institutions and filings</div>
+            </div>
+            <div class="table-wrap compact terminal-table-wrap company-map-explorer-table-wrap">
+              <table class="terminal-table intel-table">
+                <thead>
+                  <tr>
+                    <th>Holder</th>
+                    <th>% Held</th>
+                    <th>Shares</th>
+                  </tr>
+                </thead>
+                <tbody>${renderCompanyMapHolders(payload.holders ?? [])}</tbody>
+              </table>
+            </div>
+          </article>
+          <article class="subpanel">
+            <div class="subpanel-header compact-header">
+              <h4>Ownership Trend</h4>
+              <div class="muted">institutional report dates and insider activity</div>
+            </div>
+            <div id="companyMapExplorerOwnershipTrend" class="chart-card small"></div>
+          </article>
+          <article class="subpanel company-map-explorer-full-span">
+            <div class="subpanel-header compact-header">
+              <h4>Insider Ownership & Transactions</h4>
+              <div class="muted">reported holdings and trade activity</div>
+            </div>
+            <div class="list-stack company-map-explorer-list">${renderCompanyMapInsiders(payload.insiderHolders ?? [], payload.insiderTransactions ?? [])}</div>
+          </article>
+        </div>
+      </article>
+
+      <article id="${companyMapExplorerSectionId("board")}" class="subpanel company-map-explorer-section">
+        <div class="subpanel-header compact-header">
+          <h3>Board, Officers, and Interlocks</h3>
+          <div class="muted">${escapeHtml(`${payload.board?.length ?? 0} officer rows · ${payload.boardInterlocks?.summary?.length ?? 0} interlocks`)}</div>
+        </div>
+        <div class="company-map-explorer-subgrid">
+          <article class="subpanel">
+            <div class="subpanel-header compact-header">
+              <h4>Board & Officers</h4>
+              <div class="muted">public officer / director listing</div>
+            </div>
+            <div class="list-stack company-map-explorer-list">${renderCompanyMapBoard(payload.board ?? [])}</div>
+          </article>
+          <article class="subpanel">
+            <div class="subpanel-header compact-header">
+              <h4>Board Interlock Graph</h4>
+              <div class="muted">career and network ties</div>
+            </div>
+            <div id="companyMapExplorerInterlocksGraph" class="chart-card small"></div>
+            <div class="list-stack company-map-explorer-list">${renderCompanyMapInterlocks(payload.boardInterlocks?.summary ?? [])}</div>
+          </article>
+        </div>
+      </article>
+
+      <article id="${companyMapExplorerSectionId("indices")}" class="subpanel company-map-explorer-section">
+        <div class="subpanel-header compact-header">
+          <h3>Index Membership</h3>
+          <div class="muted">${escapeHtml(`${payload.indices?.length ?? 0} benchmark links`)}</div>
+        </div>
+        <div class="company-map-explorer-subgrid">
+          <article class="subpanel">
+            <div class="subpanel-header compact-header">
+              <h4>Current Index Membership</h4>
+              <div class="muted">major public benchmarks</div>
+            </div>
+            <div class="list-stack company-map-explorer-list">${renderCompanyMapIndices(payload.indices ?? [])}</div>
+          </article>
+          <article class="subpanel">
+            <div class="subpanel-header compact-header">
+              <h4>Index Timeline</h4>
+              <div class="muted">benchmark presence verification</div>
+            </div>
+            <div class="list-stack company-map-explorer-list">${renderCompanyMapTimeline(payload.indexTimeline ?? [], "No current index-presence timeline rows are available.")}</div>
+          </article>
+        </div>
+      </article>
+
+      <article id="${companyMapExplorerSectionId("timeline")}" class="subpanel company-map-explorer-section">
+        <div class="subpanel-header compact-header">
+          <h3>Corporate Timeline</h3>
+          <div class="muted">${escapeHtml(`${payload.acquisitionsTimeline?.length ?? 0} mapped events`)}</div>
+        </div>
+        <div class="list-stack company-map-explorer-list">${renderCompanyMapTimeline(payload.acquisitionsTimeline ?? [], "No acquisition or corporate-event timeline rows are available.")}</div>
+      </article>
+
+      <article id="${companyMapExplorerSectionId("geography")}" class="subpanel company-map-explorer-section">
+        <div class="subpanel-header compact-header">
+          <h3>Geography</h3>
+          <div class="muted">revenue mix, manufacturing footprint, and supply regions</div>
+        </div>
+        <div id="companyMapExplorerGeo" class="chart-card small"></div>
+      </article>
+    </section>
+  `;
+}
+
 function renderEarningsDrawer(payload, errorMessage = null) {
   document.querySelector("#earningsDrawerTitle").textContent = payload?.notApplicable
     ? `${payload?.companyName ?? payload?.symbol ?? "Instrument"} issuer context`
@@ -5675,9 +6078,9 @@ function renderCompanyMapInsiders(holders, transactions) {
         item.positionDirect != null
           ? `Direct ${formatCompact(item.positionDirect)} shares`
           : item.transactionDescription ?? "Public insider holding",
-      ),
+        ),
     ),
-    ...(transactions ?? []).slice(0, 6).map((item) =>
+    ...(transactions ?? []).map((item) =>
       renderIntelListItem(
         item.position ?? "Insider trade",
         item.insider ?? "n/a",

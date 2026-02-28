@@ -644,6 +644,7 @@
                 <button id="clearCompanyMapCompareButton" type="button" class="secondary">Solo</button>
               </form>
               <button id="refreshCompanyMapButton" type="button" class="secondary">Refresh</button>
+              <button id="openCompanyMapExplorerButton" type="button" class="secondary">Expand</button>
             </div>
           </div>
           <div id="companyMapSummary" class="watchlist-summary-grid"></div>
@@ -652,6 +653,13 @@
           <div id="companyMapCompareShell" class="company-map-compare-shell"></div>
           <div class="company-map-shell">
             <article class="subpanel company-map-hero-panel">
+              <div class="subpanel-header compact-header">
+                <div>
+                  <h3>Overview</h3>
+                  <div class="muted">issuer summary and graph preview</div>
+                </div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="overview">Expand</button>
+              </div>
               <div id="companyMapHeadline" class="intel-headline"></div>
               <div id="companyMapCoverage" class="list-stack"></div>
               <div id="companyMapGraph" class="chart-card intel-graph-card"></div>
@@ -660,11 +668,13 @@
               <div class="subpanel-header">
                 <h3>Index Membership</h3>
                 <div class="muted">major public benchmarks</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="indices">Expand</button>
               </div>
               <div id="companyMapIndices" class="list-stack"></div>
               <div class="subpanel-header">
                 <h3>Geography</h3>
                 <div class="muted">public mix and footprint</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="geography">Expand</button>
               </div>
               <div id="companyMapGeo" class="chart-card small"></div>
             </article>
@@ -672,6 +682,7 @@
               <div class="subpanel-header">
                 <h3>Supplier Network</h3>
                 <div class="muted">who sells into the company</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="suppliers">Expand</button>
               </div>
               <div id="companyMapSuppliers" class="list-stack"></div>
             </article>
@@ -679,6 +690,7 @@
               <div class="subpanel-header">
                 <h3>Customer / Output Network</h3>
                 <div class="muted">who receives output or drives demand</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="customers">Expand</button>
               </div>
               <div id="companyMapCustomers" class="list-stack"></div>
             </article>
@@ -686,6 +698,7 @@
               <div class="subpanel-header">
                 <h3>Board Interlocks</h3>
                 <div class="muted">career and network ties</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="board">Expand</button>
               </div>
               <div id="companyMapBoardInterlocks" class="chart-card small"></div>
               <div id="companyMapBoardInterlockList" class="list-stack"></div>
@@ -694,6 +707,7 @@
               <div class="subpanel-header">
                 <h3>Ownership Trend</h3>
                 <div class="muted">public ownership signal timeline</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="ownership">Expand</button>
               </div>
               <div id="companyMapOwnershipTrend" class="chart-card small"></div>
             </article>
@@ -701,6 +715,7 @@
               <div class="subpanel-header">
                 <h3>Acquisition Timeline</h3>
                 <div class="muted">corporate events and filings</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="timeline">Expand</button>
               </div>
               <div id="companyMapAcquisitions" class="list-stack"></div>
             </article>
@@ -708,6 +723,7 @@
               <div class="subpanel-header">
                 <h3>Index Presence Timeline</h3>
                 <div class="muted">current benchmark verification</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="indices">Expand</button>
               </div>
               <div id="companyMapIndexTimeline" class="list-stack"></div>
             </article>
@@ -715,6 +731,7 @@
               <div class="subpanel-header">
                 <h3>Competitors</h3>
                 <div class="muted">closest public comps</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="competition">Expand</button>
               </div>
               <div class="table-wrap compact terminal-table-wrap">
                 <table class="terminal-table intel-table">
@@ -734,6 +751,7 @@
               <div class="subpanel-header">
                 <h3>Top Holders</h3>
                 <div class="muted">largest public owners</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="ownership">Expand</button>
               </div>
               <div class="table-wrap compact terminal-table-wrap">
                 <table class="terminal-table intel-table">
@@ -752,6 +770,7 @@
               <div class="subpanel-header">
                 <h3>Board & Officers</h3>
                 <div class="muted">public officer / board listing</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="board">Expand</button>
               </div>
               <div id="companyMapBoard" class="list-stack"></div>
             </article>
@@ -759,6 +778,7 @@
               <div class="subpanel-header">
                 <h3>Insider Ownership</h3>
                 <div class="muted">reported insider positions</div>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="ownership">Expand</button>
               </div>
               <div id="companyMapInsiders" class="list-stack"></div>
             </article>
@@ -1340,6 +1360,22 @@
         </div>
         <div id="sectorOverflowSummary" class="watchlist-summary-grid"></div>
         <div id="sectorOverflowGrid" class="sector-board-tiles sector-overflow-grid"></div>
+      </aside>
+    </div>
+
+    <div id="companyMapExplorerOverlay" class="company-map-explorer-overlay" hidden>
+      <div class="company-map-explorer-backdrop" data-close-company-map-explorer="true"></div>
+      <aside id="companyMapExplorerModal" class="company-map-explorer-modal" role="dialog" aria-modal="true" aria-label="Expanded company map explorer" hidden>
+        <div class="panel-header compact-header company-map-explorer-header">
+          <div>
+            <p class="section-label">Company Relationship Explorer</p>
+            <h3 id="companyMapExplorerTitle">Expanded company map</h3>
+          </div>
+          <button id="closeCompanyMapExplorerButton" type="button" class="secondary">Close</button>
+        </div>
+        <div id="companyMapExplorerSummary" class="watchlist-summary-grid"></div>
+        <div id="companyMapExplorerNav" class="command-bar compact-toolbar"></div>
+        <div id="companyMapExplorerBody" class="company-map-explorer-body"></div>
       </aside>
     </div>
 

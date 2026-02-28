@@ -4310,10 +4310,129 @@ body.sector-overflow-open {
   gap: 6px;
 }
 
+.compact-chip {
+  padding: 6px 10px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .sector-overflow-grid {
   grid-template-columns: repeat(16, minmax(0, 1fr));
   grid-auto-rows: minmax(74px, auto);
   padding-bottom: 2px;
+}
+
+.company-map-explorer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 64;
+}
+
+.company-map-explorer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+}
+
+.company-map-explorer-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(1420px, calc(100vw - 36px));
+  max-height: calc(100vh - 42px);
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 12px;
+  background: #070707;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 32px 96px rgba(0, 0, 0, 0.55);
+  overflow: auto;
+  transform: translate(-50%, -48%);
+}
+
+.company-map-explorer-modal.open {
+  transform: translate(-50%, -50%);
+}
+
+body.company-map-explorer-open {
+  overflow: hidden;
+}
+
+.company-map-explorer-header {
+  position: sticky;
+  top: -12px;
+  z-index: 2;
+}
+
+.company-map-explorer-modal #companyMapExplorerSummary {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.company-map-explorer-body {
+  display: grid;
+  gap: 10px;
+}
+
+.company-map-explorer-top-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.company-map-explorer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.company-map-explorer-overview-panel,
+.company-map-explorer-graph-panel,
+.company-map-explorer-section {
+  align-content: start;
+}
+
+.company-map-explorer-copy {
+  color: #d6e0ef;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.company-map-explorer-note-grid,
+.company-map-explorer-subgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+.company-map-explorer-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.company-map-explorer-full-span {
+  grid-column: 1 / -1;
+}
+
+.company-map-explorer-list,
+.company-map-explorer-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.company-map-explorer-chart {
+  min-height: 560px;
+}
+
+.company-map-explorer-section .chart-card.small {
+  min-height: 260px;
 }
 
 .stacked-form {
@@ -4708,6 +4827,11 @@ th {
   .quote-monitor-shell,
   .calendar-day-grid,
   .company-map-shell,
+  .company-map-explorer-top-grid,
+  .company-map-explorer-grid,
+  .company-map-explorer-note-grid,
+  .company-map-explorer-subgrid,
+  .company-map-explorer-stat-grid,
   .company-map-compare-shell,
   .company-map-compare-mini-grid,
   .intel-console-grid {
@@ -4732,6 +4856,10 @@ th {
   }
 
   .ai-idea-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .company-map-explorer-modal #companyMapExplorerSummary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
