@@ -220,20 +220,20 @@ const PAGE_PANEL_ORDERS = {
 const PAGE_PANEL_COLUMNS = {
   research: {
     "section-research-rail": "1 / span 3",
-    "section-workbench": "4 / -1",
-    "section-intelligence": "4 / -1",
-    "section-events": "4 / -1",
-    "section-screening": "4 / -1",
+    "section-workbench": "4 / span 5",
+    "section-intelligence": "9 / span 4",
+    "section-events": "4 / span 5",
+    "section-screening": "9 / span 4",
   },
 };
 
 const PAGE_PANEL_ROWS = {
   research: {
-    "section-research-rail": "1 / span 4",
+    "section-research-rail": "1 / span 2",
     "section-workbench": "1",
-    "section-intelligence": "2",
-    "section-events": "3",
-    "section-screening": "4",
+    "section-intelligence": "1",
+    "section-events": "2",
+    "section-screening": "2",
   },
 };
 
@@ -1464,7 +1464,7 @@ async function loadSectorBoard(force = false) {
     const payload = await api(`/api/sector-board?sector=${encodeURIComponent(sector)}${force ? "&force=1" : ""}`);
     state.sectorBoard = payload;
     state.preferences.sectorFocus = payload.sector ?? sector;
-    syncSectorSelector(state.heatmap?.sectors ?? [], payload.sector);
+    syncSectorSelector(payload.sectors?.length ? payload.sectors : state.heatmap?.sectors ?? [], payload.sector);
     document.querySelector("#sectorBoardSummary").innerHTML = renderSectorBoardSummary(payload);
     document.querySelector("#sectorBoardWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
     document.querySelector("#sectorBoardTitle").textContent = `${payload.sector ?? "Sector"} board`;
@@ -1540,7 +1540,10 @@ async function loadFlow(force = false) {
     const payload = await api(`/api/flow?symbols=${encodeURIComponent(symbols.join(","))}${force ? "&force=1" : ""}`);
     state.flow = payload;
     document.querySelector("#flowSummary").innerHTML = renderFlowSummary(payload.summary ?? {});
-    document.querySelector("#flowWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
+    document.querySelector("#flowWarnings").innerHTML = renderStatusStrip(
+      payload.warnings ?? [],
+      "Flow monitor loaded from current public share, short-interest, and options feeds.",
+    );
     document.querySelector("#flowBody").innerHTML = renderFlowRows(payload.rows ?? []);
     markFeedHeartbeat("Live");
   } catch (error) {
@@ -1793,7 +1796,10 @@ async function loadDeskCalendar(force = false) {
       grouped: normalizePage(state.preferences.activePage) === "calendar",
     });
     if (document.querySelector("#calendarWarnings")) {
-      document.querySelector("#calendarWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
+      document.querySelector("#calendarWarnings").innerHTML = renderStatusStrip(
+        payload.warnings ?? [],
+        "Calendar feeds loaded from current public earnings, Fed, and macro sources.",
+      );
     }
     markFeedHeartbeat("Live");
   } catch (error) {
@@ -2434,15 +2440,15 @@ function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFo
 
 function heatmapSectorSpan(weight) {
   if (!Number.isFinite(weight)) {
-    return 2;
-  }
-  if (weight >= 24) {
-    return 4;
-  }
-  if (weight >= 14) {
     return 3;
   }
-  return 2;
+  if (weight >= 24) {
+    return 5;
+  }
+  if (weight >= 14) {
+    return 4;
+  }
+  return 3;
 }
 
 function startHudClock() {
@@ -3684,7 +3690,7 @@ function renderNewsPanel(items) {
 }
 
 function renderMarketEventsPanel(events) {
-  const pageState = paginateItems(events, state.marketEventsPage, 8);
+  const pageState = paginateItems(events, state.marketEventsPage, 6);
   state.marketEventsPage = pageState.page;
   const list = document.querySelector("#marketEventsList");
   const meta = document.querySelector("#marketEventsPageMeta");
@@ -3711,7 +3717,7 @@ function renderCalendarSummary(events, windowDays) {
   return [
     renderTerminalStat("Window", `${windowDays}d`, "browse horizon"),
     renderTerminalStat("Events", String(filtered.length), "scheduled"),
-    renderTerminalStat("Earnings", String(earnings), "watchlist"),
+    renderTerminalStat("Earnings", String(earnings), "Nasdaq live"),
     renderTerminalStat("Macro", String(macro), "policy + econ"),
     renderTerminalStat("Next", nextEvent ? compactLabel(nextEvent.title, 18) : "n/a", nextEvent ? formatDateTime(nextEvent.date) : "none"),
   ].join("");
@@ -4018,6 +4024,16 @@ function renderHeatmapWarnings(warnings) {
     .join("");
 }
 
+function renderStatusStrip(warnings, okMessage) {
+  if (!warnings.length) {
+    return `<div class="panel-status-chip">${escapeHtml(okMessage)}</div>`;
+  }
+  return warnings
+    .slice(0, 3)
+    .map((warning) => `<div class="panel-status-chip warn">${escapeHtml(warning)}</div>`)
+    .join("");
+}
+
 function renderHeatmapTiles(payload) {
   const tiles = payload?.tiles ?? [];
   if (!tiles.length) {
@@ -4035,7 +4051,7 @@ function renderHeatmapTiles(payload) {
         weight: sum(items.map((item) => item.weight)),
       };
       const sectorSpan = heatmapSectorSpan(sector.weight);
-      const visibleCount = sector.weight >= 20 ? 10 : sector.weight >= 10 ? 8 : 6;
+      const visibleCount = sector.weight >= 20 ? 18 : sector.weight >= 10 ? 14 : 10;
       const visibleItems = items.slice(0, visibleCount);
       const hiddenCount = Math.max(items.length - visibleItems.length, 0);
 
@@ -4234,8 +4250,12 @@ function renderFlowSummary(summary) {
   return [
     renderTerminalStat("Symbols", String(summary.symbols ?? 0), "watchlist coverage"),
     renderTerminalStat("Shares", formatCompact(summary.shareVolume), "aggregate tape"),
-    renderTerminalStat("Options", formatCompact(summary.optionsVolume), "calls + puts"),
-    renderTerminalStat("P/C", formatRatio(summary.averagePutCall), "watchlist mean"),
+    renderTerminalStat(
+      "Options",
+      Number.isFinite(summary.optionsVolume) && (summary.optionsCoverage ?? 0) > 0 ? formatCompact(summary.optionsVolume) : "Partial",
+      `${summary.optionsCoverage ?? 0} / ${summary.symbols ?? 0} names`,
+    ),
+    renderTerminalStat("P/C", formatRatio(summary.averagePutCall), (summary.optionsCoverage ?? 0) > 0 ? "watchlist mean" : "options source limited"),
     renderTerminalStat("Elevated", String(summary.elevated ?? 0), "high rel-vol / short"),
   ].join("");
 }
@@ -4269,12 +4289,12 @@ function renderFlowRows(rows) {
           <td>${formatRatio(row.relativeVolume)}</td>
           <td>
             <div class="terminal-price-stack">
-              <strong>${formatCompact(row.callVolume)} / ${formatCompact(row.putVolume)}</strong>
+              <strong>${row.optionsAvailable ? `${formatCompact(row.callVolume)} / ${formatCompact(row.putVolume)}` : "No chain"}</strong>
               <div class="meta">last ${formatMoney(row.price)}</div>
             </div>
           </td>
-          <td>${formatRatio(row.putCallRatio)}</td>
-          <td>${formatCompact(row.openInterest)}</td>
+          <td>${row.optionsAvailable ? formatRatio(row.putCallRatio) : "n/a"}</td>
+          <td>${row.optionsAvailable ? formatCompact(row.openInterest) : "n/a"}</td>
           <td>
             <div class="terminal-price-stack">
               <strong>${formatNumber(row.shortRatio, 2)}</strong>
@@ -4557,7 +4577,9 @@ function renderCompanyMapInsiders(holders, transactions) {
       renderIntelListItem(
         item.relation ?? "Insider holder",
         item.name ?? "n/a",
-        item.positionDirect != null ? `Direct ${formatCompact(item.positionDirect)} shares` : "Public insider holding",
+        item.positionDirect != null
+          ? `Direct ${formatCompact(item.positionDirect)} shares`
+          : item.transactionDescription ?? "Public insider holding",
       ),
     ),
     ...(transactions ?? []).slice(0, 6).map((item) =>
@@ -5241,16 +5263,18 @@ function mountGeoExposureChart(container, geography) {
         .map(
           (group) => `
             <section class="geo-column">
-              <div class="geo-column-title">${escapeHtml(group.title)}</div>
+              <div class="geo-column-title">${escapeHtml(group.title)} <span class="geo-column-kicker">score / 5</span></div>
               <div class="geo-column-body">
                 ${group.items
+                  .slice()
+                  .sort((left, right) => (Number.isFinite(right.weight) ? right.weight : 0) - (Number.isFinite(left.weight) ? left.weight : 0))
                   .slice(0, 4)
                   .map(
                     (item) => `
                       <button type="button" class="geo-row">
                         <div class="geo-row-head">
                           <strong>${escapeHtml(item.label)}</strong>
-                          <span>${escapeHtml(String(item.weight))}</span>
+                          <span>${escapeHtml(formatGeoScore(item.weight))}</span>
                         </div>
                         <div class="geo-row-bar"><span style="width:${clamp(item.weight * 20, 12, 100)}%"></span></div>
                         <div class="geo-row-note">${escapeHtml(item.commentary ?? "")}</div>
@@ -5264,6 +5288,7 @@ function mountGeoExposureChart(container, geography) {
         )
         .join("")}
     </div>
+    <div class="geo-board-note">Scores are relative public-exposure signals, not exact revenue percentages.</div>
   `;
 }
 
@@ -5541,6 +5566,15 @@ function formatCompact(value) {
 
 function formatRatio(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)}x` : "n/a";
+}
+
+function formatGeoScore(value) {
+  if (!Number.isFinite(value)) {
+    return "n/a";
+  }
+  const rounded = clamp(Math.round(value), 1, 5);
+  const label = rounded >= 5 ? "Very high" : rounded >= 4 ? "High" : rounded >= 3 ? "Moderate" : rounded >= 2 ? "Light" : "Low";
+  return `${rounded}/5 ${label}`;
 }
 
 function formatBasisPoints(value) {

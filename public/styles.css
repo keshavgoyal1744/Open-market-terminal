@@ -1770,26 +1770,31 @@ button:hover {
   grid-column: 1 / -1;
 }
 
+#dashboardGrid[data-page="sectors"] .sector-board-shell {
+  grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
+  align-items: start;
+}
+
 #dashboardGrid[data-page="research"] #section-workbench {
-  grid-column: span 9;
+  grid-column: span 5;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence {
-  grid-column: span 9;
+  grid-column: span 4;
 }
 
 #dashboardGrid[data-page="research"] #section-screening {
-  grid-column: span 9;
+  grid-column: span 4;
 }
 
 #dashboardGrid[data-page="research"] #section-events {
-  grid-column: span 9;
+  grid-column: span 5;
 }
 
 #dashboardGrid[data-page="research"] #section-research-rail {
   grid-column: span 3;
   order: 0;
-  grid-row: 1 / span 4;
+  grid-row: 1 / span 2;
   align-self: start;
 }
 
@@ -1798,7 +1803,6 @@ button:hover {
 #dashboardGrid[data-page="research"] #section-screening,
 #dashboardGrid[data-page="research"] #section-events {
   order: 1;
-  grid-column: 4 / -1;
 }
 
 #dashboardGrid[data-page="research"] {
@@ -1990,16 +1994,16 @@ button:hover {
 
 .sp500-heatmap {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 3px;
   align-content: start;
 }
 
 .heatmap-sector {
   display: grid;
-  gap: 5px;
-  min-height: 132px;
-  padding: 7px;
+  gap: 4px;
+  min-height: 116px;
+  padding: 6px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -2046,8 +2050,8 @@ button:hover {
 
 .heatmap-sector-grid {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  grid-auto-rows: 20px;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-auto-rows: 18px;
   gap: 3px;
 }
 
@@ -2055,10 +2059,10 @@ button:hover {
   position: relative;
   display: grid;
   align-content: space-between;
-  gap: 4px;
+  gap: 3px;
   min-height: 100%;
   width: 100%;
-  padding: 5px;
+  padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.018);
   text-align: left;
@@ -2124,18 +2128,18 @@ button:hover {
 }
 
 .heatmap-tile strong {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 0.95;
 }
 
 .heatmap-name {
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1.2;
   color: rgba(255, 255, 255, 0.78);
 }
 
 .heatmap-move {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1;
 }
@@ -2171,11 +2175,11 @@ button:hover {
 }
 
 .heatmap-tile[data-size="2"] strong {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .heatmap-tile[data-size="2"] .heatmap-move {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .heatmap-more-tile {
@@ -2758,7 +2762,7 @@ textarea:focus {
   grid-template-columns: 88px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: start;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
   background: #0b0b0b;
 }
@@ -2777,6 +2781,12 @@ textarea:focus {
   display: grid;
   gap: 4px;
   align-content: start;
+}
+
+#section-market-events .calendar-list {
+  max-height: 430px;
+  overflow: auto;
+  padding-top: 8px;
 }
 
 .news-item-head {
@@ -3001,6 +3011,12 @@ textarea:focus {
   text-transform: uppercase;
 }
 
+.geo-column-kicker {
+  color: #7f8fa6;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
 .geo-column-body {
   display: grid;
   gap: 8px;
@@ -3037,6 +3053,12 @@ textarea:focus {
   color: #94a6bf;
   font-size: 11px;
   line-height: 1.45;
+}
+
+.geo-board-note {
+  padding: 4px 2px 0;
+  color: #8f9fb3;
+  font-size: 11px;
 }
 
 .graph-network {

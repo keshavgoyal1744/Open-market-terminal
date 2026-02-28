@@ -1,6 +1,7 @@
 import { fetchJson } from "../http.mjs";
 
 const BASE_URL = "https://query1.finance.yahoo.com";
+const ALTERNATE_BASE_URL = "https://query2.finance.yahoo.com";
 const YAHOO_HEADERS = {
   Origin: "https://finance.yahoo.com",
   Referer: "https://finance.yahoo.com/",
@@ -81,91 +82,28 @@ export async function getHistory(symbol, range = "1mo", interval = "1d") {
 }
 
 export async function getOptions(symbol, expiration) {
-  const url = new URL(`/v7/finance/options/${encodeURIComponent(symbol)}`, BASE_URL);
-  if (expiration) {
-    url.searchParams.set("date", expiration);
+  try {
+    return await fetchOptionsFromBase(symbol, expiration, BASE_URL);
+  } catch (error) {
+    if (!shouldUseChartFallback(error)) {
+      throw error;
+    }
   }
 
-  const payload = await fetchYahooJson(url);
-  const result = payload?.optionChain?.result?.[0];
-  if (!result) {
-    throw new Error(`No options data found for ${symbol}.`);
-  }
-
-  const options = result.options?.[0] ?? { calls: [], puts: [] };
-  return {
-    symbol: result.underlyingSymbol ?? symbol.toUpperCase(),
-    expirations: result.expirationDates ?? [],
-    quote: result.quote ? normalizeQuote(result.quote) : null,
-    calls: options.calls?.slice(0, 30).map(normalizeOption) ?? [],
-    puts: options.puts?.slice(0, 30).map(normalizeOption) ?? [],
-  };
+  return fetchOptionsFromBase(symbol, expiration, ALTERNATE_BASE_URL);
 }
 
 export async function getCompanyOverview(symbol) {
-  const url = new URL(`/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`, BASE_URL);
-  url.searchParams.set(
-    "modules",
-    [
-      "price",
-      "summaryDetail",
-      "defaultKeyStatistics",
-      "financialData",
-      "assetProfile",
-      "calendarEvents",
-      "majorHoldersBreakdown",
-      "fundOwnership",
-      "institutionOwnership",
-      "insiderTransactions",
-      "insiderHolders",
-    ].join(","),
-  );
+  try {
+    return await fetchCompanyOverviewFromBase(symbol, BASE_URL);
+  } catch (error) {
+    if (!shouldUseChartFallback(error)) {
+      throw error;
+    }
+  }
 
   try {
-    const payload = await fetchYahooJson(url);
-    const result = payload?.quoteSummary?.result?.[0];
-    if (!result) {
-      throw new Error(`No company overview found for ${symbol}.`);
-    }
-
-    return {
-      symbol: result.price?.symbol ?? symbol.toUpperCase(),
-      shortName: result.price?.shortName ?? null,
-      exchange: result.price?.exchangeName ?? null,
-      sector: result.assetProfile?.sector ?? null,
-      industry: result.assetProfile?.industry ?? null,
-      website: result.assetProfile?.website ?? null,
-      businessSummary: result.assetProfile?.longBusinessSummary ?? null,
-      marketCap: unwrapFormatted(result.summaryDetail?.marketCap),
-      trailingPe: unwrapFormatted(result.summaryDetail?.trailingPE),
-      forwardPe: unwrapFormatted(result.summaryDetail?.forwardPE),
-      dividendYield: unwrapFormatted(result.summaryDetail?.dividendYield),
-      beta: unwrapFormatted(result.summaryDetail?.beta),
-      fiftyTwoWeekHigh: unwrapFormatted(result.summaryDetail?.fiftyTwoWeekHigh),
-      fiftyTwoWeekLow: unwrapFormatted(result.summaryDetail?.fiftyTwoWeekLow),
-      totalRevenue: unwrapFormatted(result.financialData?.totalRevenue),
-      grossMargins: unwrapFormatted(result.financialData?.grossMargins),
-      operatingMargins: unwrapFormatted(result.financialData?.operatingMargins),
-      profitMargins: unwrapFormatted(result.financialData?.profitMargins),
-      freeCashflow: unwrapFormatted(result.financialData?.freeCashflow),
-      debtToEquity: unwrapFormatted(result.financialData?.debtToEquity),
-      returnOnEquity: unwrapFormatted(result.financialData?.returnOnEquity),
-      currentRatio: unwrapFormatted(result.financialData?.currentRatio),
-      analystRating: result.financialData?.recommendationKey ?? null,
-      earningsStart: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.[0]),
-      earningsEnd: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.at(-1)),
-      institutionPercentHeld: unwrapFormatted(result.majorHoldersBreakdown?.institutionsPercentHeld),
-      insiderPercentHeld: unwrapFormatted(result.majorHoldersBreakdown?.insidersPercentHeld),
-      floatShares: unwrapFormatted(result.defaultKeyStatistics?.floatShares),
-      sharesShort: unwrapFormatted(result.defaultKeyStatistics?.sharesShort),
-      sharesShortPriorMonth: unwrapFormatted(result.defaultKeyStatistics?.sharesShortPriorMonth),
-      shortRatio: unwrapFormatted(result.defaultKeyStatistics?.shortRatio),
-      companyOfficers: normalizeOfficers(result.assetProfile?.companyOfficers),
-      topInstitutionalHolders: normalizeOwnershipList(result.institutionOwnership),
-      topFundHolders: normalizeOwnershipList(result.fundOwnership),
-      insiderHolders: normalizeInsiderHolders(result.insiderHolders),
-      insiderTransactions: normalizeInsiderTransactions(result.insiderTransactions),
-    };
+    return await fetchCompanyOverviewFromBase(symbol, ALTERNATE_BASE_URL);
   } catch (error) {
     if (!shouldUseChartFallback(error)) {
       throw error;
@@ -214,38 +152,16 @@ export async function getCompanyOverview(symbol) {
 }
 
 export async function getEarningsDetails(symbol) {
-  const url = new URL(`/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`, BASE_URL);
-  url.searchParams.set(
-    "modules",
-    [
-      "price",
-      "calendarEvents",
-      "earningsHistory",
-      "earningsTrend",
-      "financialData",
-    ].join(","),
-  );
+  try {
+    return await fetchEarningsDetailsFromBase(symbol, BASE_URL);
+  } catch (error) {
+    if (!shouldUseChartFallback(error)) {
+      throw error;
+    }
+  }
 
   try {
-    const payload = await fetchYahooJson(url);
-    const result = payload?.quoteSummary?.result?.[0];
-    if (!result) {
-      throw new Error(`No earnings data found for ${symbol}.`);
-    }
-
-    return {
-      symbol: result.price?.symbol ?? symbol.toUpperCase(),
-      shortName: result.price?.shortName ?? null,
-      earningsStart: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.[0]),
-      earningsEnd: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.at(-1)),
-      history: normalizeEarningsHistory(result.earningsHistory?.history),
-      trend: normalizeEarningsTrend(result.earningsTrend?.trend),
-      earningsAverage: unwrapFormatted(result.financialData?.earningsAverage),
-      earningsLow: unwrapFormatted(result.financialData?.earningsLow),
-      earningsHigh: unwrapFormatted(result.financialData?.earningsHigh),
-      revenueEstimate: unwrapFormatted(result.financialData?.revenueEstimate),
-      recommendation: result.financialData?.recommendationKey ?? null,
-    };
+    return await fetchEarningsDetailsFromBase(symbol, ALTERNATE_BASE_URL);
   } catch (error) {
     if (!shouldUseChartFallback(error)) {
       throw error;
@@ -302,6 +218,127 @@ async function fetchQuoteBatch(symbols) {
   const payload = await fetchYahooJson(url);
   const results = payload?.quoteResponse?.result ?? [];
   return results.map(normalizeQuote);
+}
+
+async function fetchOptionsFromBase(symbol, expiration, baseUrl) {
+  const url = new URL(`/v7/finance/options/${encodeURIComponent(symbol)}`, baseUrl);
+  if (expiration) {
+    url.searchParams.set("date", expiration);
+  }
+
+  const payload = await fetchYahooJson(url);
+  const result = payload?.optionChain?.result?.[0];
+  if (!result) {
+    throw new Error(`No options data found for ${symbol}.`);
+  }
+
+  const options = result.options?.[0] ?? { calls: [], puts: [] };
+  return {
+    symbol: result.underlyingSymbol ?? symbol.toUpperCase(),
+    expirations: result.expirationDates ?? [],
+    quote: result.quote ? normalizeQuote(result.quote) : null,
+    calls: options.calls?.slice(0, 30).map(normalizeOption) ?? [],
+    puts: options.puts?.slice(0, 30).map(normalizeOption) ?? [],
+  };
+}
+
+async function fetchCompanyOverviewFromBase(symbol, baseUrl) {
+  const url = new URL(`/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`, baseUrl);
+  url.searchParams.set(
+    "modules",
+    [
+      "price",
+      "summaryDetail",
+      "defaultKeyStatistics",
+      "financialData",
+      "assetProfile",
+      "calendarEvents",
+      "majorHoldersBreakdown",
+      "fundOwnership",
+      "institutionOwnership",
+      "insiderTransactions",
+      "insiderHolders",
+    ].join(","),
+  );
+
+  const payload = await fetchYahooJson(url);
+  const result = payload?.quoteSummary?.result?.[0];
+  if (!result) {
+    throw new Error(`No company overview found for ${symbol}.`);
+  }
+
+  return {
+    symbol: result.price?.symbol ?? symbol.toUpperCase(),
+    shortName: result.price?.shortName ?? null,
+    exchange: result.price?.exchangeName ?? null,
+    sector: result.assetProfile?.sector ?? null,
+    industry: result.assetProfile?.industry ?? null,
+    website: result.assetProfile?.website ?? null,
+    businessSummary: result.assetProfile?.longBusinessSummary ?? null,
+    marketCap: unwrapFormatted(result.summaryDetail?.marketCap),
+    trailingPe: unwrapFormatted(result.summaryDetail?.trailingPE),
+    forwardPe: unwrapFormatted(result.summaryDetail?.forwardPE),
+    dividendYield: unwrapFormatted(result.summaryDetail?.dividendYield),
+    beta: unwrapFormatted(result.summaryDetail?.beta),
+    fiftyTwoWeekHigh: unwrapFormatted(result.summaryDetail?.fiftyTwoWeekHigh),
+    fiftyTwoWeekLow: unwrapFormatted(result.summaryDetail?.fiftyTwoWeekLow),
+    totalRevenue: unwrapFormatted(result.financialData?.totalRevenue),
+    grossMargins: unwrapFormatted(result.financialData?.grossMargins),
+    operatingMargins: unwrapFormatted(result.financialData?.operatingMargins),
+    profitMargins: unwrapFormatted(result.financialData?.profitMargins),
+    freeCashflow: unwrapFormatted(result.financialData?.freeCashflow),
+    debtToEquity: unwrapFormatted(result.financialData?.debtToEquity),
+    returnOnEquity: unwrapFormatted(result.financialData?.returnOnEquity),
+    currentRatio: unwrapFormatted(result.financialData?.currentRatio),
+    analystRating: result.financialData?.recommendationKey ?? null,
+    earningsStart: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.[0]),
+    earningsEnd: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.at(-1)),
+    institutionPercentHeld: unwrapFormatted(result.majorHoldersBreakdown?.institutionsPercentHeld),
+    insiderPercentHeld: unwrapFormatted(result.majorHoldersBreakdown?.insidersPercentHeld),
+    floatShares: unwrapFormatted(result.defaultKeyStatistics?.floatShares),
+    sharesShort: unwrapFormatted(result.defaultKeyStatistics?.sharesShort),
+    sharesShortPriorMonth: unwrapFormatted(result.defaultKeyStatistics?.sharesShortPriorMonth),
+    shortRatio: unwrapFormatted(result.defaultKeyStatistics?.shortRatio),
+    companyOfficers: normalizeOfficers(result.assetProfile?.companyOfficers),
+    topInstitutionalHolders: normalizeOwnershipList(result.institutionOwnership),
+    topFundHolders: normalizeOwnershipList(result.fundOwnership),
+    insiderHolders: normalizeInsiderHolders(result.insiderHolders),
+    insiderTransactions: normalizeInsiderTransactions(result.insiderTransactions),
+  };
+}
+
+async function fetchEarningsDetailsFromBase(symbol, baseUrl) {
+  const url = new URL(`/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`, baseUrl);
+  url.searchParams.set(
+    "modules",
+    [
+      "price",
+      "calendarEvents",
+      "earningsHistory",
+      "earningsTrend",
+      "financialData",
+    ].join(","),
+  );
+
+  const payload = await fetchYahooJson(url);
+  const result = payload?.quoteSummary?.result?.[0];
+  if (!result) {
+    throw new Error(`No earnings data found for ${symbol}.`);
+  }
+
+  return {
+    symbol: result.price?.symbol ?? symbol.toUpperCase(),
+    shortName: result.price?.shortName ?? null,
+    earningsStart: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.[0]),
+    earningsEnd: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.at(-1)),
+    history: normalizeEarningsHistory(result.earningsHistory?.history),
+    trend: normalizeEarningsTrend(result.earningsTrend?.trend),
+    earningsAverage: unwrapFormatted(result.financialData?.earningsAverage),
+    earningsLow: unwrapFormatted(result.financialData?.earningsLow),
+    earningsHigh: unwrapFormatted(result.financialData?.earningsHigh),
+    revenueEstimate: unwrapFormatted(result.financialData?.revenueEstimate),
+    recommendation: result.financialData?.recommendationKey ?? null,
+  };
 }
 
 async function fetchQuoteFromChart(symbol) {

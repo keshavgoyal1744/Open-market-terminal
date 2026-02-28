@@ -463,7 +463,40 @@ export class MarketDataService {
         const holders = dedupeHolders([
           ...(company.market.topInstitutionalHolders ?? []),
           ...(company.market.topFundHolders ?? []),
-        ]).slice(0, 16);
+        ]);
+        const resolvedHolders = (holders.length
+          ? holders
+          : [
+              company.market.institutionPercentHeld != null
+                ? {
+                    holder: "Institutions (aggregate)",
+                    shares: null,
+                    pctHeld: company.market.institutionPercentHeld,
+                  }
+                : null,
+              company.market.insiderPercentHeld != null
+                ? {
+                    holder: "Insiders (aggregate)",
+                    shares: null,
+                    pctHeld: company.market.insiderPercentHeld,
+                  }
+                : null,
+            ].filter(Boolean)
+        ).slice(0, 16);
+        const resolvedInsiderHolders = (
+          company.market.insiderHolders?.length
+            ? company.market.insiderHolders
+            : company.market.insiderPercentHeld != null
+              ? [
+                  {
+                    name: "Reported insiders",
+                    relation: "Aggregate insider ownership",
+                    positionDirect: null,
+                    transactionDescription: `${roundTo(company.market.insiderPercentHeld * 100, 2)}% held by insiders`,
+                  },
+                ]
+              : []
+        ).slice(0, 12);
 
         return {
           symbol: upper,
@@ -485,9 +518,19 @@ export class MarketDataService {
           suppliers: normalizeMapRelations(intel.supplyChain?.suppliers ?? []),
           customers: normalizeMapCustomers(intel),
           competitors: normalizeCompetitors(intel.competitors ?? []),
-          holders,
-          board: (company.market.companyOfficers ?? []).slice(0, 16),
-          insiderHolders: (company.market.insiderHolders ?? []).slice(0, 12),
+          holders: resolvedHolders,
+          board: (
+            company.market.companyOfficers?.length
+              ? company.market.companyOfficers
+              : (intel.executives ?? []).map((item) => ({
+                  name: item.name ?? null,
+                  title: item.role ?? null,
+                  age: null,
+                  yearBorn: null,
+                  totalPay: item.compensation ?? null,
+                }))
+          ).slice(0, 16),
+          insiderHolders: resolvedInsiderHolders,
           insiderTransactions: (company.market.insiderTransactions ?? []).slice(0, 12),
           corporate: {
             tree: intel.corporate?.tree ?? [],
@@ -749,34 +792,60 @@ export class MarketDataService {
           .sort((left, right) => (numeric(right.weight) ?? 0) - (numeric(left.weight) ?? 0))
           .map((item, index) => ({ ...item, rank: index + 1 }));
 
-        const leaders = [...items]
+        const missingCapSymbols = items
+          .filter((item) => !Number.isFinite(item.marketCap))
+          .slice(0, 24)
+          .map((item) => item.symbol);
+        const marketCapMap = new Map();
+        if (missingCapSymbols.length) {
+          const companies = await Promise.all(
+            missingCapSymbols.map(async (symbol) => {
+              try {
+                return await this.getCompany(symbol);
+              } catch {
+                return null;
+              }
+            }),
+          );
+          for (const company of companies.filter(Boolean)) {
+            marketCapMap.set(company.symbol, company.market?.marketCap ?? null);
+          }
+        }
+
+        const hydratedItems = items.map((item) => ({
+          ...item,
+          marketCap: item.marketCap ?? marketCapMap.get(item.symbol) ?? null,
+        }));
+
+        const leaders = [...hydratedItems]
           .filter((item) => Number.isFinite(item.changePercent))
           .sort((left, right) => right.changePercent - left.changePercent)
           .slice(0, 6);
-        const laggards = [...items]
+        const laggards = [...hydratedItems]
           .filter((item) => Number.isFinite(item.changePercent))
           .sort((left, right) => left.changePercent - right.changePercent)
           .slice(0, 6);
-        const topSymbols = items.slice(0, 10).map((item) => item.symbol);
+        const topSymbols = hydratedItems.slice(0, 10).map((item) => item.symbol);
         const news = topSymbols.length
           ? await this.getDeskNews(topSymbols, topSymbols[0] ?? null, matchedSector).catch(() => ({ items: [] }))
           : { items: [] };
 
         return {
           sector: matchedSector,
+          sectors: availableSectors,
           asOf: heatmap.asOf,
           source: heatmap.source,
           warnings: heatmap.warnings ?? [],
           summary: {
-            names: items.length,
-            averageMove: average(items.map((item) => item.changePercent)),
-            weight: sum(items.map((item) => item.weight)),
-            aggregateVolume: sum(items.map((item) => item.volume)),
-            aggregateCap: sum(items.map((item) => item.marketCap)),
+            names: hydratedItems.length,
+            averageMove: average(hydratedItems.map((item) => item.changePercent)),
+            weight: sum(hydratedItems.map((item) => item.weight)),
+            aggregateVolume: sum(hydratedItems.map((item) => item.volume)),
+            aggregateCap: sum(hydratedItems.map((item) => item.marketCap)),
           },
           leaders,
           laggards,
-          items: items.slice(0, 48),
+          items: hydratedItems.slice(0, 48),
           news: (news.items ?? []).slice(0, 12),
         };
       },
@@ -807,6 +876,8 @@ export class MarketDataService {
             const openInterest = sum(
               [...(options.calls ?? []), ...(options.puts ?? [])].map((contract) => numeric(contract.openInterest)),
             );
+            const optionsWarning = normalizeFlowWarning(options?.warning);
+            const optionsAvailable = Number.isFinite(callVolume) || Number.isFinite(putVolume) || Number.isFinite(openInterest);
 
             return {
               symbol,
@@ -828,10 +899,11 @@ export class MarketDataService {
                   ? putVolume / callVolume
                   : null,
               openInterest,
+              optionsAvailable,
               shortRatio: company?.market?.shortRatio ?? null,
               sharesShort: company?.market?.sharesShort ?? null,
               analystRating: company?.market?.analystRating ?? null,
-              warnings: [...new Set([...(company?.warnings ?? []), options?.warning].filter(Boolean))].slice(0, 3),
+              warnings: [...new Set([...(company?.warnings ?? []), optionsWarning].filter(Boolean))].slice(0, 3),
             };
           }),
         );
@@ -851,12 +923,13 @@ export class MarketDataService {
             shareVolume: sum(ranked.map((row) => row.shareVolume)),
             optionsVolume: sum(ranked.map((row) => row.optionsVolume)),
             averagePutCall: average(ranked.map((row) => row.putCallRatio)),
+            optionsCoverage: ranked.filter((row) => row.optionsAvailable).length,
             elevated: ranked.filter(
               (row) => (numeric(row.relativeVolume) ?? 0) >= 1.5 || (numeric(row.shortRatio) ?? 0) >= 3,
             ).length,
           },
           rows: ranked,
-          warnings: ranked.flatMap((row) => row.warnings.map((warning) => `${row.symbol}: ${warning}`)).slice(0, 6),
+          warnings: buildFlowWarnings(ranked),
         };
       },
       { ttlMs: config.quoteTtlMs * 2, staleMs: config.quoteTtlMs * 6 },
@@ -1744,6 +1817,29 @@ function emptyOptions(symbol, error) {
     puts: [],
     warning: error?.message ?? null,
   };
+}
+
+function normalizeFlowWarning(warning) {
+  const message = String(warning ?? "").trim();
+  if (!message) {
+    return null;
+  }
+  if (/invalid crumb|unauthorized|unable to access this feature/i.test(message)) {
+    return null;
+  }
+  return message;
+}
+
+function buildFlowWarnings(rows = []) {
+  const warnings = rows.flatMap((row) => row.warnings.map((warning) => `${row.symbol}: ${warning}`)).slice(0, 6);
+  if (warnings.length) {
+    return warnings;
+  }
+  const optionsCoverage = rows.filter((row) => row.optionsAvailable).length;
+  if (!rows.length || optionsCoverage === rows.length) {
+    return [];
+  }
+  return ["Options flow is partially unavailable from the current free upstream source. Share volume and short-interest signals are still live."];
 }
 
 function emptyEarningsIntel(symbol) {
