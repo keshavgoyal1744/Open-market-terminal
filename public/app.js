@@ -21,6 +21,7 @@ const DEFAULT_PANEL_SIZES = {
   "section-heatmap": 12,
   "section-market-events": 12,
   "section-watchlist": 5,
+  "section-research-rail": 3,
   "section-workbench": 7,
   "section-intelligence": 12,
   "section-macro": 3,
@@ -42,6 +43,7 @@ const DEFAULT_PANEL_LAYOUT = [
   "section-heatmap",
   "section-market-events",
   "section-watchlist",
+  "section-research-rail",
   "section-workbench",
   "section-intelligence",
   "section-macro",
@@ -86,6 +88,7 @@ const PAGE_DEFINITIONS = {
       "Use this page for single-name work, filings, price history, options, supply-chain links, competitor maps, and custom screens.",
     tags: ["Workbench", "Intel", "Options", "Screening"],
     sections: [
+      "section-research-rail",
       "section-workbench",
       "section-intelligence",
       "section-screening",
@@ -108,6 +111,35 @@ const PAGE_DEFINITIONS = {
       "section-crypto",
       "section-limitations",
     ],
+  },
+};
+
+const PAGE_PANEL_SPANS = {
+  overview: {
+    "section-market-pulse": 4,
+    "section-market-events": 7,
+    "section-watchlist": 5,
+    "section-heatmap": 12,
+    "section-events": 12,
+    "section-macro": 3,
+    "section-calendar": 3,
+    "section-news": 6,
+  },
+  research: {
+    "section-research-rail": 3,
+    "section-workbench": 9,
+    "section-intelligence": 9,
+    "section-screening": 9,
+  },
+  ops: {
+    "section-portfolio": 4,
+    "section-alerts": 4,
+    "section-crypto": 4,
+    "section-intel-ops": 6,
+    "section-activity": 6,
+    "section-workspaces": 3,
+    "section-notes": 3,
+    "section-limitations": 12,
   },
 };
 
@@ -164,6 +196,7 @@ const SECTION_COMMANDS = [
   { id: "section-market-pulse", label: "Jump to Market Pulse", meta: "cross-asset pulse board" },
   { id: "section-heatmap", label: "Jump to S&P 500 Heatmap", meta: "live breadth and hover reasons" },
   { id: "section-watchlist", label: "Jump to Watchlist", meta: "tracked market quotes" },
+  { id: "section-research-rail", label: "Jump to Research Rail", meta: "symbol stack and focus list" },
   { id: "section-workbench", label: "Jump to Security Workbench", meta: "detail, filings, and options" },
   { id: "section-market-events", label: "Jump to Market Events", meta: "ranked event timeline" },
   { id: "section-intelligence", label: "Jump to Relationship Console", meta: "ownership and supply chains" },
@@ -195,6 +228,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderAlerts();
   renderDestinations();
   renderDigests();
+  renderResearchRail();
   renderNotes();
   renderWorkspaces();
   renderActivity();
@@ -266,6 +300,7 @@ function bindForms() {
       renderAlerts();
       renderDestinations();
       renderDigests();
+      renderResearchRail();
       renderNotes();
       renderWorkspaces();
       renderActivity();
@@ -796,6 +831,11 @@ function applyPageState() {
   const pageId = normalizePage(state.preferences.activePage);
   state.preferences.activePage = pageId;
   const page = PAGE_DEFINITIONS[pageId];
+  const dashboard = document.querySelector("#dashboardGrid");
+
+  if (dashboard) {
+    dashboard.dataset.page = pageId;
+  }
 
   document.querySelectorAll("#dashboardGrid > section.panel").forEach((panel) => {
     panel.hidden = SECTION_TO_PAGE[panel.id] !== pageId;
@@ -855,6 +895,11 @@ function normalizePanelSizes(panelSizes) {
 }
 
 function panelSpan(panelId) {
+  const activePage = normalizePage(state.preferences.activePage);
+  const pageSpan = PAGE_PANEL_SPANS[activePage]?.[panelId];
+  if (Number.isFinite(pageSpan)) {
+    return pageSpan;
+  }
   return normalizePanelSizes(state.preferences.panelSizes)[panelId] ?? DEFAULT_PANEL_SIZES[panelId] ?? 3;
 }
 
@@ -937,6 +982,7 @@ async function loadSession(reloadUserData = false) {
     renderAlerts();
     renderDestinations();
     renderDigests();
+    renderResearchRail();
     renderNotes();
     renderWorkspaces();
     renderActivity();
@@ -965,6 +1011,7 @@ function teardownAuthenticatedState() {
   toggleEarningsDrawer(false);
   applyPanelLayout();
   applyPreferencesToInputs();
+  renderResearchRail();
   disconnectActivity();
   renderHud();
 }
@@ -1064,7 +1111,7 @@ async function loadHeatmap(force = false) {
     document.querySelector("#heatmapSource").innerHTML = payload.source?.url
       ? `<a href="${safeUrl(payload.source.url)}" target="_blank" rel="noreferrer">${escapeHtml(payload.source.label ?? "Source")}</a>`
       : escapeHtml(payload.source?.label ?? "Public universe");
-    document.querySelector("#sp500Heatmap").innerHTML = renderHeatmapTiles(payload.tiles ?? []);
+    document.querySelector("#sp500Heatmap").innerHTML = renderHeatmapTiles(payload);
     markFeedHeartbeat("Live");
 
     const preferredSymbol = (payload.tiles ?? []).some((tile) => tile.symbol === state.preferences.detailSymbol)
@@ -1139,6 +1186,7 @@ async function loadWatchlist(symbols) {
 
     document.querySelector("#watchlistStatus").textContent = `Tracking ${payload.quotes.length} symbols.`;
     renderSymbolRibbon();
+    renderResearchRail();
     renderPortfolio();
     renderHud();
   } catch (error) {
@@ -1208,8 +1256,10 @@ async function loadDetail(symbol) {
     const warnings = [
       ...(company.warnings ?? []),
       historyResult.status === "rejected" ? `Price history unavailable for ${symbol}.` : null,
-      options.warning ?? null,
-    ].filter(Boolean);
+    ]
+      .map((message) => normalizeWorkbenchWarning(message))
+      .filter(Boolean)
+      .filter((message, index, all) => all.indexOf(message) === index);
 
     const quote = quotePayload.quotes[0] ?? null;
     if (quote) {
@@ -1218,19 +1268,28 @@ async function loadDetail(symbol) {
     state.currentDetailQuote = quote ?? null;
     state.currentCompany = company;
     state.currentOptions = options;
+    configureEarningsInterface(quote, company);
 
+    renderWorkbenchIdentity(quote, company.market);
     renderDetailMetrics(quote, company.market);
     document.querySelector("#workbenchSummary").innerHTML = renderWorkbenchSummary(quote, company, history.points);
     renderDetailWarnings(warnings);
     renderPriceChart(history.points, symbol);
-    renderOverview(company);
-    renderCompanyFacts(company);
+    renderOverview(company, quote);
+    renderCompanyFacts(company, quote);
     renderFilings(company.sec.filings);
-    renderOptions(options.calls, options.puts);
-    document.querySelector("#optionsSummary").innerHTML = renderOptionsSummary(options.calls, options.puts);
+    renderOptions(options, quote);
+    document.querySelector("#optionsSummary").innerHTML = renderOptionsSummary(options, quote);
     renderSymbolRibbon();
+    renderResearchRail();
     renderPortfolio();
-    await Promise.all([loadIntelligence(symbol), loadEarningsIntel(symbol)]);
+    if (supportsEarningsIntel(quote, company)) {
+      await Promise.all([loadIntelligence(symbol), loadEarningsIntel(symbol)]);
+    } else {
+      state.currentEarnings = buildNotApplicableEarningsPayload(quote, company);
+      renderEarningsDrawer(state.currentEarnings);
+      await loadIntelligence(symbol);
+    }
     renderHud();
   } catch (error) {
     setFeedStatus("Degraded");
@@ -1265,7 +1324,7 @@ async function loadDeskNews(force = false) {
     const payload = await api(
       `/api/news?symbols=${encodeURIComponent(symbols.join(","))}&focusSymbol=${encodeURIComponent(focusSymbol)}${force ? "&force=1" : ""}`,
     );
-    state.newsItems = payload.items ?? [];
+    state.newsItems = (payload.items ?? []).slice(0, 12);
     document.querySelector("#newsList").innerHTML = renderNewsFeed(state.newsItems);
     markFeedHeartbeat("Live");
   } catch (error) {
@@ -1674,10 +1733,88 @@ function renderSymbolRibbon() {
     .join("");
 }
 
+function renderResearchRail() {
+  const summary = document.querySelector("#researchRailSummary");
+  const list = document.querySelector("#researchRailList");
+  if (!summary || !list) {
+    return;
+  }
+
+  const symbols = state.preferences.watchlistSymbols.slice(0, 18);
+  const focusQuote = state.latestQuotes.get(state.preferences.detailSymbol) ?? state.currentDetailQuote ?? null;
+
+  summary.innerHTML = `
+    <div class="panel-status-chip">${escapeHtml(state.preferences.detailSymbol)} focus</div>
+    <div class="panel-status-chip">${escapeHtml(humanizeInstrumentType(focusQuote))}</div>
+    <div class="panel-status-chip">${escapeHtml(focusQuote?.exchange ?? state.feedStatus)}</div>
+  `;
+
+  list.innerHTML = symbols.length
+    ? symbols
+        .map((symbol, index) => {
+          const quote = state.latestQuotes.get(symbol);
+          return `
+            <button
+              type="button"
+              class="research-rail-item ${tone(quote?.changePercent)}${symbol === state.preferences.detailSymbol ? " active" : ""}"
+              data-research-symbol="${escapeHtml(symbol)}"
+            >
+              <div class="research-rail-rank">${String(index + 1).padStart(2, "0")}</div>
+              <div class="research-rail-main">
+                <div class="research-rail-head">
+                  <strong>${escapeHtml(symbol)}</strong>
+                  <span class="terminal-chip ${tone(quote?.changePercent)}">${formatPercent(quote?.changePercent)}</span>
+                </div>
+                <div class="research-rail-meta">
+                  <span>${escapeHtml(truncateText(quote?.shortName ?? "watchlist symbol", 26))}</span>
+                  <span>${formatMoney(quote?.price)}</span>
+                </div>
+              </div>
+            </button>
+          `;
+        })
+        .join("")
+    : renderIntelEmpty("Add symbols to the watchlist to populate the research rail.");
+
+  list.querySelectorAll("[data-research-symbol]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await selectDetailSymbol(button.dataset.researchSymbol, { jump: false });
+    });
+  });
+}
+
 function highlightHeatmapFocus() {
   document.querySelectorAll("[data-heatmap-symbol]").forEach((node) => {
     node.classList.toggle("active", node.dataset.heatmapSymbol === state.heatmapFocusSymbol);
   });
+}
+
+function groupHeatmapTiles(tiles) {
+  return [...tiles.reduce((map, tile) => {
+    const key = tile.sector ?? "Unclassified";
+    const bucket = map.get(key) ?? [];
+    bucket.push(tile);
+    map.set(key, bucket);
+    return map;
+  }, new Map()).entries()]
+    .map(([sector, items]) => [
+      sector,
+      [...items].sort((left, right) => (right.weight ?? 0) - (left.weight ?? 0)),
+    ])
+    .sort((left, right) => (sum(right[1].map((item) => item.weight)) ?? 0) - (sum(left[1].map((item) => item.weight)) ?? 0));
+}
+
+function heatmapSectorSpan(weight) {
+  if (!Number.isFinite(weight)) {
+    return 2;
+  }
+  if (weight >= 24) {
+    return 5;
+  }
+  if (weight >= 14) {
+    return 3;
+  }
+  return 2;
 }
 
 function startHudClock() {
@@ -2036,6 +2173,7 @@ function applyPreferencesToInputs() {
   document.querySelector("#compareSymbolsInput").value = state.preferences.watchlistSymbols.join(",");
   applyCryptoPreferences();
   renderSymbolRibbon();
+  renderResearchRail();
   renderHud();
 }
 
@@ -2385,8 +2523,14 @@ function renderDetailMetrics(quote, market) {
   document.querySelector("#detailMetrics").innerHTML = [
     metric("Last", formatMoney(quote?.price)),
     metric("Daily Move", formatPercent(quote?.changePercent), tone(quote?.changePercent)),
-    metric("P/E", formatNumber(market?.trailingPe, 2)),
-    metric("Market Cap", formatCompact(market?.marketCap)),
+    metric(
+      Number.isFinite(market?.trailingPe) ? "P/E" : "Instrument",
+      Number.isFinite(market?.trailingPe) ? formatNumber(market?.trailingPe, 2) : humanizeInstrumentType(quote),
+    ),
+    metric(
+      Number.isFinite(market?.marketCap) ? "Market Cap" : "Avg Volume",
+      Number.isFinite(market?.marketCap) ? formatCompact(market?.marketCap) : formatCompact(quote?.averageVolume ?? quote?.volume),
+    ),
   ].join("");
 }
 
@@ -2394,7 +2538,43 @@ function renderDetailWarnings(messages) {
   const container = document.querySelector("#detailWarnings");
   container.innerHTML = messages.length
     ? messages.map((message) => `<div class="panel-status-chip warn">${escapeHtml(message)}</div>`).join("")
-    : `<div class="panel-status-chip">All currently available workbench feeds loaded.</div>`;
+    : `<div class="panel-status-chip">Workbench feeds loaded with current public-source coverage.</div>`;
+}
+
+function renderWorkbenchIdentity(quote, market) {
+  const container = document.querySelector("#workbenchIdentity");
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="workbench-kicker">
+      <strong>${escapeHtml(quote?.symbol ?? market?.symbol ?? state.preferences.detailSymbol)}</strong>
+      <span>${escapeHtml(humanizeInstrumentType(quote))}</span>
+    </div>
+    <div class="workbench-meta-row">
+      <span>${escapeHtml(market?.shortName ?? quote?.shortName ?? state.preferences.detailSymbol)}</span>
+      <span>${escapeHtml(quote?.exchange ?? market?.exchange ?? "Public market")}</span>
+      <span>${escapeHtml(quote?.currency ?? "USD")}</span>
+      <span>${formatTimestampShort(quote?.timestamp)}</span>
+    </div>
+  `;
+}
+
+function configureEarningsInterface(quote, company) {
+  const button = document.querySelector("#toggleEarningsDrawerButton");
+  if (!button) {
+    return;
+  }
+
+  if (supportsEarningsIntel(quote, company)) {
+    button.disabled = false;
+    button.textContent = "Earnings Intel";
+    return;
+  }
+
+  button.disabled = false;
+  button.textContent = "Issuer Intel";
 }
 
 function toggleEarningsDrawer(open) {
@@ -2410,14 +2590,26 @@ function toggleEarningsDrawer(open) {
 function renderEarningsDrawer(payload, errorMessage = null) {
   document.querySelector("#earningsDrawerTitle").textContent = payload?.companyName ?? payload?.symbol ?? "Earnings detail";
   document.querySelector("#earningsWarning").innerHTML = errorMessage || payload?.warning
-    ? `<div class="panel-status-chip warn">${escapeHtml(errorMessage ?? payload.warning)}</div>`
-    : `<div class="panel-status-chip">Public earnings modules loaded for the current symbol.</div>`;
+    ? `<div class="panel-status-chip warn">${escapeHtml(normalizeWorkbenchWarning(errorMessage ?? payload.warning))}</div>`
+    : `<div class="panel-status-chip">${escapeHtml(payload?.notApplicable ? "This instrument does not report corporate earnings in the usual issuer format." : "Public earnings modules loaded for the current symbol.")}</div>`;
 
   if (!payload) {
     document.querySelector("#earningsSummary").innerHTML = "";
     document.querySelector("#earningsTrendList").innerHTML = renderIntelEmpty("No earnings intelligence available.");
     document.querySelector("#earningsHistoryBody").innerHTML = `<tr><td colspan="4" class="muted">No earnings history available.</td></tr>`;
     document.querySelector("#peerEarningsList").innerHTML = renderIntelEmpty("No peer earnings windows mapped.");
+    return;
+  }
+
+  if (payload.notApplicable) {
+    document.querySelector("#earningsSummary").innerHTML = [
+      renderTerminalStat("Coverage", "Not Applicable", "fund / index / macro-linked instrument"),
+      renderTerminalStat("Instrument", humanizeInstrumentType(state.currentDetailQuote), "security type"),
+      renderTerminalStat("Alternative", "Use Events", "filings, macro, and market context"),
+    ].join("");
+    document.querySelector("#earningsTrendList").innerHTML = renderIntelEmpty(payload.explanation ?? "Corporate earnings data is not applicable for this instrument.");
+    document.querySelector("#earningsHistoryBody").innerHTML = `<tr><td colspan="4" class="muted">No issuer earnings history is expected for this instrument.</td></tr>`;
+    document.querySelector("#peerEarningsList").innerHTML = renderIntelEmpty("Peer earnings windows are not shown for non-operating fund/index instruments.");
     return;
   }
 
@@ -2473,27 +2665,45 @@ function renderEarningsDrawer(payload, errorMessage = null) {
     .join("") || renderIntelEmpty("No peer earnings windows are near this date.");
 }
 
-function renderOverview(company) {
+function renderOverview(company, quote) {
+  const type = humanizeInstrumentType(quote);
   document.querySelector("#companyOverview").innerHTML = `
-    <div>
-      <p class="section-label">${escapeHtml(company.market.exchange ?? "Market profile")}</p>
-      <h3>${escapeHtml(company.market.shortName ?? company.symbol)}</h3>
+    <div class="overview-header">
+      <div>
+        <p class="section-label">${escapeHtml(company.market.exchange ?? quote?.exchange ?? "Market profile")}</p>
+        <h3>${escapeHtml(company.market.shortName ?? company.symbol)}</h3>
+      </div>
+      <div class="overview-tags">
+        <span class="terminal-chip">${escapeHtml(type)}</span>
+        <span class="terminal-chip">${escapeHtml(quote?.currency ?? "USD")}</span>
+      </div>
     </div>
-    <p>${escapeHtml(company.market.businessSummary ?? "No business summary was returned by the current data source.")}</p>
+    <p>${escapeHtml(company.market.businessSummary ?? fallbackBusinessSummary(quote, company))}</p>
     <p><strong>Sector:</strong> ${escapeHtml(company.market.sector ?? "n/a")} | <strong>Industry:</strong> ${escapeHtml(company.market.industry ?? "n/a")}</p>
     <p><strong>Website:</strong> ${company.market.website ? `<a href="${safeUrl(company.market.website)}" target="_blank" rel="noreferrer">${escapeHtml(company.market.website)}</a>` : "n/a"}</p>
   `;
 }
 
-function renderCompanyFacts(company) {
-  document.querySelector("#companyFacts").innerHTML = [
-    secFact("Revenue", company.sec.facts.revenue),
-    secFact("Net Income", company.sec.facts.netIncome),
-    secFact("Assets", company.sec.facts.assets),
-    secFact("Cash", company.sec.facts.cash),
-    secFact("Shares Out", company.sec.facts.sharesOutstanding),
-    fact("Analyst Rating", company.market.analystRating ?? "n/a", company.market.exchange),
-  ].join("");
+function renderCompanyFacts(company, quote) {
+  const filings = company.sec.filings ?? [];
+  const cards = isFundLike(quote)
+    ? [
+        fact("Instrument", humanizeInstrumentType(quote), company.market.exchange ?? quote?.exchange ?? "market"),
+        secFact("Assets", company.sec.facts.assets),
+        secFact("Shares Out", company.sec.facts.sharesOutstanding),
+        fact("Latest Filing", filings[0]?.form ?? "n/a", filings[0]?.filingDate ?? "no recent filing"),
+        fact("Analyst Rating", company.market.analystRating ?? "n/a", company.market.exchange ?? quote?.exchange ?? "market"),
+      ]
+    : [
+        secFact("Revenue", company.sec.facts.revenue),
+        secFact("Net Income", company.sec.facts.netIncome),
+        secFact("Assets", company.sec.facts.assets),
+        secFact("Cash", company.sec.facts.cash),
+        secFact("Shares Out", company.sec.facts.sharesOutstanding),
+        fact("Analyst Rating", company.market.analystRating ?? "n/a", company.market.exchange ?? quote?.exchange ?? "market"),
+      ];
+
+  document.querySelector("#companyFacts").innerHTML = cards.join("");
 }
 
 async function loadIntelligence(symbol) {
@@ -2624,14 +2834,30 @@ function renderFilings(filings) {
             <strong>${escapeHtml(filing.form ?? "n/a")}</strong>
             <div class="meta">${escapeHtml(filing.primaryDocument ?? "Document")} | filed ${escapeHtml(filing.filingDate ?? "n/a")}</div>
           </div>
-          <div class="muted">${escapeHtml(filing.reportDate ?? "")}</div>
+          <div class="action-row">
+            <div class="muted">${escapeHtml(filing.reportDate ?? "")}</div>
+            ${filing.filingUrl || filing.filingIndexUrl ? `<a class="event-link" href="${safeUrl(filing.filingUrl ?? filing.filingIndexUrl)}" target="_blank" rel="noreferrer">Open</a>` : ""}
+          </div>
         </div>
       `,
     )
     .join("");
 }
 
-function renderOptions(calls, puts) {
+function renderOptions(options, quote) {
+  const calls = options?.calls ?? [];
+  const puts = options?.puts ?? [];
+  const status = document.querySelector("#optionsStatus");
+  if (status) {
+    status.innerHTML = options?.warning
+      ? `<div class="panel-status-chip warn">${escapeHtml(normalizeWorkbenchWarning(options.warning))}</div>`
+      : `<div class="panel-status-chip">${escapeHtml(isFundLike(quote) ? "Listed options may be partial or delayed for fund-like instruments." : "Current listed options snapshot loaded.")}</div>`;
+  }
+
+  const emptyMessage = options?.warning
+    ? "Public options feed unavailable right now."
+    : "No listed contracts were returned for this snapshot.";
+
   document.querySelector("#callsBody").innerHTML = calls.length
     ? calls
     .slice(0, 12)
@@ -2654,7 +2880,7 @@ function renderOptions(calls, puts) {
       `,
     )
     .join("")
-    : `<tr><td colspan="4" class="muted">No call data available.</td></tr>`;
+    : `<tr><td colspan="4" class="muted">${escapeHtml(emptyMessage)}</td></tr>`;
   document.querySelector("#putsBody").innerHTML = puts.length
     ? puts
     .slice(0, 12)
@@ -2677,7 +2903,7 @@ function renderOptions(calls, puts) {
       `,
     )
     .join("")
-    : `<tr><td colspan="4" class="muted">No put data available.</td></tr>`;
+    : `<tr><td colspan="4" class="muted">${escapeHtml(emptyMessage)}</td></tr>`;
 }
 
 function renderPriceChart(points, symbol) {
@@ -2837,31 +3063,58 @@ function renderHeatmapWarnings(warnings) {
     .join("");
 }
 
-function renderHeatmapTiles(tiles) {
+function renderHeatmapTiles(payload) {
+  const tiles = payload?.tiles ?? [];
   if (!tiles.length) {
     return renderIntelEmpty("No heatmap tiles are available right now.");
   }
 
-  return tiles
-    .map((tile) => {
-      const intensity = Math.min(Math.abs(tile.changePercent ?? 0) / 4, 1);
+  const sectorMeta = new Map((payload?.sectors ?? []).map((sector) => [sector.sector, sector]));
+  const groups = groupHeatmapTiles(tiles);
+
+  return groups
+    .map(([sectorName, items]) => {
+      const sector = sectorMeta.get(sectorName) ?? {
+        sector: sectorName,
+        averageMove: average(items.map((item) => item.changePercent)),
+        weight: sum(items.map((item) => item.weight)),
+      };
+      const sectorSpan = heatmapSectorSpan(sector.weight);
+
       return `
-        <button
-          type="button"
-          class="heatmap-tile ${tone(tile.changePercent)}${tile.symbol === state.heatmapFocusSymbol ? " active" : ""}"
-          data-heatmap-symbol="${escapeHtml(tile.symbol)}"
-          data-size="${tile.columnSpan}"
-          style="grid-column: span ${tile.columnSpan}; grid-row: span ${tile.rowSpan}; --heat-opacity: ${0.16 + intensity * 0.42};"
-        >
-          <div class="heatmap-tile-top">
-            <span class="heatmap-sector-label">${escapeHtml(compactLabel(tile.sector ?? "sector"))}</span>
-            <span class="heatmap-weight">${formatPercent(tile.weight)}</span>
+        <section class="heatmap-sector ${tone(sector.averageMove)}" style="grid-column: span ${sectorSpan};">
+          <header class="heatmap-sector-header">
+            <div>
+              <h3>${escapeHtml(sector.sector ?? "Sector")}</h3>
+              <span>${escapeHtml(String(items.length))} names</span>
+            </div>
+            <strong class="${tone(sector.averageMove)}">${formatPercent(sector.averageMove)}</strong>
+          </header>
+          <div class="heatmap-sector-grid">
+            ${items
+              .map((tile) => {
+                const intensity = Math.min(Math.abs(tile.changePercent ?? 0) / 4, 1);
+                return `
+                  <button
+                    type="button"
+                    class="heatmap-tile ${tone(tile.changePercent)}${tile.symbol === state.heatmapFocusSymbol ? " active" : ""}"
+                    data-heatmap-symbol="${escapeHtml(tile.symbol)}"
+                    data-size="${tile.columnSpan}"
+                    style="grid-column: span ${tile.columnSpan}; grid-row: span ${tile.rowSpan}; --heat-opacity: ${0.18 + intensity * 0.46};"
+                  >
+                    <div class="heatmap-tile-top">
+                      <span class="heatmap-industry">${escapeHtml(truncateText(tile.name ?? tile.symbol, 24))}</span>
+                      <span class="heatmap-weight">${formatPercent(tile.weight)}</span>
+                    </div>
+                    <strong>${escapeHtml(tile.symbol)}</strong>
+                    <div class="heatmap-price">${formatMoney(tile.price)}</div>
+                    <div class="heatmap-move ${tone(tile.changePercent)}">${formatPercent(tile.changePercent)}</div>
+                  </button>
+                `;
+              })
+              .join("")}
           </div>
-          <strong>${escapeHtml(tile.symbol)}</strong>
-          <div class="heatmap-name">${escapeHtml(compactLabel(tile.name ?? tile.symbol, 4))}</div>
-          <div class="heatmap-price">${formatMoney(tile.price)}</div>
-          <div class="heatmap-move ${tone(tile.changePercent)}">${formatPercent(tile.changePercent)}</div>
-        </button>
+        </section>
       `;
     })
     .join("");
@@ -2897,7 +3150,7 @@ function renderHeatmapContext(payload) {
       (reference) => `
         <tr class="intel-row">
           <td>
-            <a href="${safeUrl(reference.url)}" target="_blank" rel="noreferrer">${escapeHtml(compactLabel(reference.label, 10))}</a>
+            <a class="reference-link" href="${safeUrl(reference.url)}" target="_blank" rel="noreferrer">${escapeHtml(truncateText(reference.label, 92))}</a>
           </td>
           <td>${escapeHtml(reference.source ?? reference.kind ?? "Source")}</td>
           <td>${escapeHtml(reference.publishedAt ? formatTimeAgo(reference.publishedAt) : "live")}</td>
@@ -3090,22 +3343,27 @@ function renderTerminalStat(label, value, meta) {
 function renderWorkbenchSummary(quote, company, points) {
   const closes = (points ?? []).map((point) => point.close).filter(Number.isFinite);
   const trend = closes.length >= 2 ? closes.at(-1) - closes[0] : null;
+  const rangeLabel = historyRangeLabel(state.currentHistoryRange);
+  const ratingValue = company?.market?.analystRating ?? humanizeInstrumentType(quote);
+  const ratingMeta = company?.market?.analystRating ? (company?.market?.exchange ?? "market") : "security type";
   return [
     renderTerminalStat("Last", formatMoney(quote?.price), "current print"),
-    renderTerminalStat("1M Trend", formatSignedMoney(trend), "window move"),
+    renderTerminalStat(`${rangeLabel} Trend`, formatSignedMoney(trend), "window move"),
     renderTerminalStat("52W Range", `${formatMoney(company?.market?.fiftyTwoWeekLow)} / ${formatMoney(company?.market?.fiftyTwoWeekHigh)}`, "low / high"),
-    renderTerminalStat("Rating", company?.market?.analystRating ?? "n/a", company?.market?.exchange ?? "market"),
+    renderTerminalStat(company?.market?.analystRating ? "Rating" : "Instrument", ratingValue, ratingMeta),
   ].join("");
 }
 
-function renderOptionsSummary(calls, puts) {
-  const frontCall = calls?.[0] ?? null;
-  const frontPut = puts?.[0] ?? null;
+function renderOptionsSummary(options, quote) {
+  const calls = options?.calls ?? [];
+  const puts = options?.puts ?? [];
+  const frontCall = calls[0] ?? null;
+  const frontPut = puts[0] ?? null;
   return [
     renderTerminalStat("Calls", String(calls?.length ?? 0), "visible contracts"),
     renderTerminalStat("Puts", String(puts?.length ?? 0), "visible contracts"),
-    renderTerminalStat("Front Call IV", formatPercent((frontCall?.impliedVolatility ?? NaN) * 100), "top-of-book"),
-    renderTerminalStat("Front Put IV", formatPercent((frontPut?.impliedVolatility ?? NaN) * 100), "top-of-book"),
+    renderTerminalStat("Front Call IV", formatPercent((frontCall?.impliedVolatility ?? NaN) * 100), frontCall ? "top-of-book" : humanizeInstrumentType(quote)),
+    renderTerminalStat("Front Put IV", formatPercent((frontPut?.impliedVolatility ?? NaN) * 100), frontPut ? "top-of-book" : options?.warning ? "feed blocked" : "no contract"),
   ].join("");
 }
 
@@ -3414,6 +3672,13 @@ function formatTimeAgo(value) {
   return `${Math.round(diffHours / 24)}d ago`;
 }
 
+function formatTimestampShort(value) {
+  if (!value) {
+    return "live";
+  }
+  return new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 function tone(value) {
   if (!Number.isFinite(value)) {
     return "";
@@ -3467,6 +3732,75 @@ function sum(values) {
   return valid.reduce((total, value) => total + value, 0);
 }
 
+function normalizeWorkbenchWarning(message) {
+  const text = String(message ?? "").trim();
+  if (!text) {
+    return null;
+  }
+  if (text.includes("Invalid Crumb")) {
+    return "Yahoo blocked this module request. Showing degraded public-source coverage.";
+  }
+  if (text.includes("Unauthorized")) {
+    return "An upstream public market-data endpoint denied this request. Showing fallback coverage.";
+  }
+  if (text === "fetch failed") {
+    return "An upstream public data feed is temporarily unavailable.";
+  }
+  return text;
+}
+
+function historyRangeLabel(range) {
+  return {
+    "1mo": "1M",
+    "3mo": "3M",
+    "6mo": "6M",
+    "1y": "1Y",
+  }[range] ?? "Window";
+}
+
+function isFundLike(quote) {
+  const type = String(quote?.type ?? "").toUpperCase();
+  return ["ETF", "MUTUALFUND", "INDEX", "CURRENCY", "CRYPTOCURRENCY", "FUTURE", "COMMODITY"].includes(type);
+}
+
+function supportsEarningsIntel(quote, company) {
+  if (isFundLike(quote)) {
+    return false;
+  }
+  const symbol = String(quote?.symbol ?? company?.symbol ?? "").toUpperCase();
+  if (symbol.includes("=") || symbol.startsWith("^")) {
+    return false;
+  }
+  return true;
+}
+
+function buildNotApplicableEarningsPayload(quote, company) {
+  return {
+    symbol: quote?.symbol ?? company?.symbol ?? state.preferences.detailSymbol,
+    companyName: company?.market?.shortName ?? company?.symbol ?? state.preferences.detailSymbol,
+    notApplicable: true,
+    explanation: `Corporate earnings estimate and surprise modules are usually not applicable for ${humanizeInstrumentType(quote).toLowerCase()} instruments like this one.`,
+  };
+}
+
+function humanizeInstrumentType(quote) {
+  const raw = String(quote?.type ?? "").trim();
+  if (!raw) {
+    return "Security";
+  }
+  return raw
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function fallbackBusinessSummary(quote, company) {
+  if (isFundLike(quote)) {
+    return `${company.market.shortName ?? quote?.shortName ?? company.symbol} is a ${humanizeInstrumentType(quote).toLowerCase()} instrument. Public corporate fundamentals and earnings coverage can be limited or not applicable compared with an operating company.`;
+  }
+  return "No business summary was returned by the current data source.";
+}
+
 function compactLabel(value, maxWords = 2) {
   return String(value ?? "")
     .replaceAll(/[_-]+/g, " ")
@@ -3475,6 +3809,14 @@ function compactLabel(value, maxWords = 2) {
     .slice(0, maxWords)
     .map((entry) => entry.slice(0, 4))
     .join(" ");
+}
+
+function truncateText(value, limit = 72) {
+  const text = String(value ?? "").trim();
+  if (text.length <= limit) {
+    return text;
+  }
+  return `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
 }
 
 function intelDomain(label, description = "") {

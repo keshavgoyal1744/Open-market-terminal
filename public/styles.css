@@ -1725,11 +1725,139 @@ button:hover {
   grid-column: span 7;
 }
 
+#dashboardGrid[data-page="overview"] #section-market-pulse {
+  grid-column: span 4;
+}
+
+#dashboardGrid[data-page="overview"] #section-market-events {
+  grid-column: span 7;
+}
+
+#dashboardGrid[data-page="overview"] #section-watchlist {
+  grid-column: span 5;
+}
+
+#dashboardGrid[data-page="overview"] #section-heatmap,
+#dashboardGrid[data-page="overview"] #section-events {
+  grid-column: 1 / -1;
+}
+
+#dashboardGrid[data-page="overview"] #section-macro,
+#dashboardGrid[data-page="overview"] #section-calendar {
+  grid-column: span 3;
+}
+
+#dashboardGrid[data-page="overview"] #section-news {
+  grid-column: span 6;
+}
+
+#dashboardGrid[data-page="research"] #section-workbench {
+  grid-column: span 9;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence {
+  grid-column: span 9;
+}
+
+#dashboardGrid[data-page="research"] #section-screening {
+  grid-column: span 9;
+}
+
+#dashboardGrid[data-page="research"] #section-research-rail {
+  grid-column: span 3;
+  order: 0;
+}
+
+#dashboardGrid[data-page="research"] #section-workbench,
+#dashboardGrid[data-page="research"] #section-intelligence,
+#dashboardGrid[data-page="research"] #section-screening {
+  order: 1;
+}
+
+#dashboardGrid[data-page="ops"] #section-portfolio,
+#dashboardGrid[data-page="ops"] #section-alerts,
+#dashboardGrid[data-page="ops"] #section-crypto {
+  grid-column: span 4;
+}
+
+#dashboardGrid[data-page="ops"] #section-intel-ops,
+#dashboardGrid[data-page="ops"] #section-activity {
+  grid-column: span 6;
+}
+
+#dashboardGrid[data-page="ops"] #section-workspaces,
+#dashboardGrid[data-page="ops"] #section-notes {
+  grid-column: span 3;
+}
+
+#dashboardGrid[data-page="ops"] #section-limitations {
+  grid-column: 1 / -1;
+}
+
 .heatmap-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(0, 1.9fr) minmax(340px, 0.85fr);
   gap: 8px;
   padding: 10px;
+}
+
+.panel-research-rail {
+  min-height: 100%;
+  position: sticky;
+  top: 10px;
+  align-self: start;
+}
+
+.research-rail-list {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.research-rail-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #0b0b0b;
+  text-align: left;
+}
+
+.research-rail-item:hover,
+.research-rail-item.active {
+  border-color: #8fb8ff;
+  background: #101723;
+}
+
+.research-rail-rank {
+  min-width: 26px;
+  font-size: 10px;
+  color: #8f8f8f;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.research-rail-main,
+.research-rail-head,
+.research-rail-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.research-rail-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.research-rail-meta {
+  color: #9ea7b4;
+  font-size: 10px;
+}
+
+.research-rail-meta span:last-child {
+  color: #f0f0f0;
 }
 
 .subpanel-header {
@@ -1746,10 +1874,53 @@ button:hover {
 
 .sp500-heatmap {
   display: grid;
-  grid-template-columns: repeat(24, minmax(0, 1fr));
-  grid-auto-rows: 28px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 6px;
   align-content: start;
+}
+
+.heatmap-sector {
+  display: grid;
+  gap: 6px;
+  min-height: 220px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+}
+
+.heatmap-sector-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.heatmap-sector-header h3 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #f0f0f0;
+}
+
+.heatmap-sector-header span {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: #8f8f8f;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.heatmap-sector-header strong {
+  font-size: 11px;
+}
+
+.heatmap-sector-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: 28px;
+  gap: 3px;
 }
 
 .heatmap-tile {
@@ -1759,9 +1930,9 @@ button:hover {
   gap: 4px;
   min-height: 100%;
   width: 100%;
-  padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.02);
+  padding: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.015);
   text-align: left;
   overflow: hidden;
 }
@@ -1784,6 +1955,15 @@ button:hover {
 .heatmap-tile:focus-visible {
   border-color: #d0d0d0;
   z-index: 1;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.heatmap-sector.negative .heatmap-sector-header strong {
+  color: #ff8f9a;
+}
+
+.heatmap-sector.positive .heatmap-sector-header strong {
+  color: #7be27f;
 }
 
 .heatmap-tile > * {
@@ -1800,6 +1980,7 @@ button:hover {
 }
 
 .heatmap-sector-label,
+.heatmap-industry,
 .heatmap-weight {
   font-size: 9px;
   text-transform: uppercase;
@@ -1808,7 +1989,7 @@ button:hover {
 }
 
 .heatmap-tile strong {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
 }
 
@@ -1821,6 +2002,10 @@ button:hover {
 
 .heatmap-name {
   color: rgba(255, 255, 255, 0.72);
+}
+
+.heatmap-price {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .heatmap-move.positive {
@@ -1848,6 +2033,11 @@ button:hover {
 .heatmap-detail-panel .terminal-table a {
   color: #d7e6ff;
   text-decoration: none;
+}
+
+.reference-link {
+  display: inline-block;
+  line-height: 1.35;
 }
 
 .heatmap-detail-panel .terminal-table a:hover {
@@ -2019,6 +2209,11 @@ textarea:focus {
   padding: 10px;
 }
 
+.news-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
 .calendar-item,
 .news-item {
   display: grid;
@@ -2030,6 +2225,11 @@ textarea:focus {
 
 .calendar-item {
   grid-template-columns: 84px minmax(0, 1fr);
+}
+
+.news-item {
+  align-content: start;
+  min-height: 118px;
 }
 
 .calendar-time {
@@ -2069,13 +2269,25 @@ textarea:focus {
 }
 
 .news-item a {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   color: #f2f2f2;
   text-decoration: none;
   line-height: 1.5;
+  min-height: 3.8em;
 }
 
 .news-item a:hover {
   color: #8fb8ff;
+}
+
+.news-item .muted {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .event-link {
@@ -2197,6 +2409,19 @@ textarea:focus {
   padding: 10px;
 }
 
+#section-workbench .detail-grid {
+  grid-template-columns: 1.2fr 0.95fr;
+  align-items: start;
+}
+
+#section-workbench .detail-grid > .subpanel:nth-child(1) {
+  grid-row: span 2;
+}
+
+#section-workbench .detail-grid > .subpanel:nth-child(4) {
+  grid-column: 1 / -1;
+}
+
 .table-wrap {
   background: #090909;
 }
@@ -2279,6 +2504,74 @@ th {
 
 .overview {
   color: #c2c2c2;
+}
+
+.workbench-identity {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.workbench-kicker,
+.workbench-meta-row,
+.overview-header,
+.overview-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workbench-kicker strong {
+  font-size: 15px;
+  color: #f4f4f4;
+}
+
+.workbench-kicker span,
+.workbench-meta-row span {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8f8f8f;
+}
+
+.workbench-meta-row span {
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #0d0d0d;
+}
+
+.compact-status {
+  padding: 0 0 8px;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.compact-status .panel-status-chip {
+  min-height: 22px;
+}
+
+.overview {
+  display: grid;
+  gap: 10px;
+}
+
+.overview-header {
+  justify-content: space-between;
+}
+
+.overview p {
+  margin: 0;
+}
+
+.overview a {
+  color: #d7e6ff;
+  text-decoration: none;
+}
+
+.overview a:hover {
+  color: #ffffff;
 }
 
 .command-bar {
@@ -2426,6 +2719,14 @@ th {
   .heatmap-shell {
     grid-template-columns: 1fr;
   }
+
+  .news-list {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-research-rail {
+    position: static;
+  }
 }
 
 @media (max-width: 980px) {
@@ -2474,7 +2775,11 @@ th {
   }
 
   .sp500-heatmap {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-auto-rows: 34px;
+    grid-template-columns: 1fr;
+  }
+
+  .heatmap-sector-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-auto-rows: 32px;
   }
 }
