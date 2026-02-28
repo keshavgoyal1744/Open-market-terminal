@@ -305,7 +305,7 @@ const PAGE_PANEL_COLUMNS = {
     "section-research-rail": "1",
     "section-workbench": "2",
     "section-intelligence": "3",
-    "section-screening": "3",
+    "section-screening": "2 / span 2",
     "section-events": "2 / span 2",
   },
   quote: {
@@ -337,7 +337,7 @@ const PAGE_PANEL_ROWS = {
   },
   research: {
     "section-research-rail": "1 / span 3",
-    "section-workbench": "1 / span 2",
+    "section-workbench": "1",
     "section-intelligence": "1",
     "section-screening": "2",
     "section-events": "3",
@@ -5513,16 +5513,18 @@ function buildIntelConsoleView(payload, holders, view) {
         title: "Ownership",
         meta: intelCommandLabel(payload, view),
         detailHtml:
-          renderIntelSection("Top Holders", holdersTable, `${holders.length} named institutions`) +
-          renderIntelSection(
-            "Ownership Snapshot",
-            `<div class="metric-strip intel-inline-metrics">
-              ${metric("Inst. Held", formatPercentScaled(payload.ownership.institutionPercentHeld))}
-              ${metric("Insider Held", formatPercentScaled(payload.ownership.insiderPercentHeld))}
-              ${metric("Float", formatCompact(payload.ownership.floatShares))}
-              ${metric("Short Int", formatCompact(payload.ownership.sharesShort))}
-            </div>`,
-          ),
+          `<div class="intel-ownership-shell">
+            ${renderIntelSection("Top Holders", holdersTable, `${holders.length} named institutions`)}
+            ${renderIntelSection(
+              "Ownership Snapshot",
+              `<div class="metric-strip intel-inline-metrics">
+                ${metric("Inst. Held", formatPercentScaled(payload.ownership.institutionPercentHeld))}
+                ${metric("Insider Held", formatPercentScaled(payload.ownership.insiderPercentHeld))}
+                ${metric("Float", formatCompact(payload.ownership.floatShares))}
+                ${metric("Short Int", formatCompact(payload.ownership.sharesShort))}
+              </div>`,
+            )}
+          </div>`,
         secondaryTitle: "Coverage Notes",
         secondaryMeta: `${payload.coverage.notes?.length ?? 0} notes`,
         secondaryHtml: `<div class="list-stack">${coverageRows}</div>`,
@@ -6454,14 +6456,22 @@ function renderIntelGraphNetwork(graph, symbol) {
     market: nodes.filter((node) => ["competitor", "ecosystem"].includes(String(node.kind))),
   };
 
-  const width = 860;
-  const height = 460;
+  const width = Math.max(880, 320 + Math.max(lanes.corporate.length, lanes.market.length, 4) * 96);
+  const height = Math.max(500, 220 + Math.max(lanes.supply.length, lanes.customer.length, 4) * 56);
   const hub = { x: width / 2, y: height / 2 };
+  const topY = 82;
+  const bottomY = height - 86;
+  const leftX = 108;
+  const rightX = width - 108;
+  const laneXFrom = 190;
+  const laneXTo = width - 190;
+  const laneYFrom = 162;
+  const laneYTo = height - 148;
   const positioned = [
-    ...layoutGraphLane(lanes.corporate, { xFrom: 170, xTo: 690, y: 72 }),
-    ...layoutGraphLane(lanes.supply, { xFrom: 84, xTo: 84, yFrom: 146, yTo: 370 }),
-    ...layoutGraphLane(lanes.customer, { xFrom: 776, xTo: 776, yFrom: 146, yTo: 370 }),
-    ...layoutGraphLane(lanes.market, { xFrom: 170, xTo: 690, y: 396 }),
+    ...layoutGraphLane(lanes.corporate, { xFrom: laneXFrom, xTo: laneXTo, y: topY }),
+    ...layoutGraphLane(lanes.supply, { xFrom: leftX, xTo: leftX, yFrom: laneYFrom, yTo: laneYTo }),
+    ...layoutGraphLane(lanes.customer, { xFrom: rightX, xTo: rightX, yFrom: laneYFrom, yTo: laneYTo }),
+    ...layoutGraphLane(lanes.market, { xFrom: laneXFrom, xTo: laneXTo, y: bottomY }),
   ];
   const nodeMap = new Map(positioned.map((node) => [node.id, node]));
 
@@ -6478,7 +6488,7 @@ function renderIntelGraphNetwork(graph, symbol) {
     .join("");
 
   return `
-    <div class="graph-network">
+    <div class="graph-network" style="width:${width}px; min-height:${height}px; height:${height}px;">
       <div class="graph-network-legend">
         <span class="graph-legend-item supply">Supply / Partner</span>
         <span class="graph-legend-item customer">Customer</span>
@@ -6520,7 +6530,7 @@ function renderIntelGraphNetwork(graph, symbol) {
 }
 
 function layoutGraphLane(nodes, spec) {
-  const list = nodes.slice(0, 10);
+  const list = nodes.slice();
   if (!list.length) {
     return [];
   }

@@ -1339,6 +1339,8 @@ svg {
   .orderbook-grid,
   .limits-grid,
   .options-grid,
+  .screening-shell,
+  .intel-ownership-shell,
   .stacked-form,
   .screen-form,
   .crypto-board,
@@ -2057,7 +2059,8 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence #intelGraph {
-  min-height: 228px;
+  min-height: 360px;
+  overflow: auto;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .intel-detail-body .list-stack {
@@ -2082,6 +2085,11 @@ button:hover {
   gap: 7px;
 }
 
+#dashboardGrid[data-page="research"] #section-screening .screening-shell {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
 #dashboardGrid[data-page="research"] #section-screening .screen-form {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
@@ -2098,7 +2106,7 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] #section-screening .table-wrap {
-  max-height: 220px;
+  max-height: 320px;
   overflow: auto;
 }
 
@@ -2144,6 +2152,10 @@ button:hover {
 
 #dashboardGrid[data-page="research"] .intel-supply-summary {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#dashboardGrid[data-page="research"] .intel-ownership-shell {
+  grid-template-columns: minmax(0, 1.15fr) minmax(180px, 0.85fr);
 }
 
 #dashboardGrid[data-page="ops"] {
@@ -3594,7 +3606,7 @@ textarea:focus {
   background:
     radial-gradient(circle at center, rgba(53, 240, 210, 0.08), transparent 26%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
-  overflow: hidden;
+  overflow: visible;
 }
 
 .graph-network-lines {
@@ -3694,6 +3706,26 @@ textarea:focus {
 
 .graph-network-node-market {
   border-color: rgba(255, 108, 134, 0.24);
+}
+
+.intel-ownership-shell,
+.screening-shell {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.screening-column {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.screening-column .table-wrap,
+.intel-ownership-shell .terminal-table-wrap {
+  max-height: 260px;
+  overflow: auto;
 }
 
 .graph-network-legend {

@@ -1115,51 +1115,61 @@
               <h2>Custom universes and peer tables</h2>
             </div>
           </div>
-          <form id="screenForm" class="screen-form">
-            <textarea id="screenSymbols"></textarea>
-            <input id="screenMaxPe" type="number" step="any" placeholder="Max P/E" />
-            <input id="screenMinCap" type="number" step="any" placeholder="Min Market Cap" />
-            <input id="screenMinVolume" type="number" step="any" placeholder="Min Volume" />
-            <input id="screenMinChange" type="number" step="any" placeholder="Min % Change" />
-            <button type="submit">Run Screen</button>
-          </form>
-          <div class="table-wrap compact">
-            <table>
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Last</th>
-                  <th>% Change</th>
-                  <th>P/E</th>
-                  <th>Volume</th>
-                  <th>Market Cap</th>
-                </tr>
-              </thead>
-              <tbody id="screenBody"></tbody>
-            </table>
-          </div>
-          <div class="panel-header compare-header">
-            <h3>Compare Symbols</h3>
-            <form id="compareForm" class="inline-form">
-              <input id="compareSymbolsInput" type="text" />
-              <button type="submit">Compare</button>
-            </form>
-          </div>
-          <div class="table-wrap compact">
-            <table>
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Last</th>
-                  <th>% Change</th>
-                  <th>P/E</th>
-                  <th>Fwd P/E</th>
-                  <th>Sector</th>
-                  <th>Rating</th>
-                </tr>
-              </thead>
-              <tbody id="compareBody"></tbody>
-            </table>
+          <div class="screening-shell">
+            <article class="subpanel screening-column">
+              <div class="subpanel-header">
+                <h3>Screen Universe</h3>
+                <div class="muted">filter custom baskets</div>
+              </div>
+              <form id="screenForm" class="screen-form">
+                <textarea id="screenSymbols"></textarea>
+                <input id="screenMaxPe" type="number" step="any" placeholder="Max P/E" />
+                <input id="screenMinCap" type="number" step="any" placeholder="Min Market Cap" />
+                <input id="screenMinVolume" type="number" step="any" placeholder="Min Volume" />
+                <input id="screenMinChange" type="number" step="any" placeholder="Min % Change" />
+                <button type="submit">Run Screen</button>
+              </form>
+              <div class="table-wrap compact">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Last</th>
+                      <th>% Change</th>
+                      <th>P/E</th>
+                      <th>Volume</th>
+                      <th>Market Cap</th>
+                    </tr>
+                  </thead>
+                  <tbody id="screenBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel screening-column">
+              <div class="subpanel-header compare-header">
+                <h3>Compare Symbols</h3>
+                <form id="compareForm" class="inline-form">
+                  <input id="compareSymbolsInput" type="text" />
+                  <button type="submit">Compare</button>
+                </form>
+              </div>
+              <div class="table-wrap compact">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Last</th>
+                      <th>% Change</th>
+                      <th>P/E</th>
+                      <th>Fwd P/E</th>
+                      <th>Sector</th>
+                      <th>Rating</th>
+                    </tr>
+                  </thead>
+                  <tbody id="compareBody"></tbody>
+                </table>
+              </div>
+            </article>
           </div>
         </section>
 
