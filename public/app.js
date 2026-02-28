@@ -1767,9 +1767,10 @@ async function loadHeatmap(force = false) {
 async function loadSectorBoard(force = false) {
   const sector = String(state.preferences.sectorFocus ?? "").trim();
   try {
+    const selectedSector = sanitizeSectorFocus(sector, [...(state.heatmap?.sectors ?? []), ...DEFAULT_SECTORS]);
     if (state.heatmap?.tiles?.length) {
       renderSectorBoardPanel({
-        sector,
+        sector: selectedSector,
         sectors: state.heatmap.sectors ?? DEFAULT_SECTORS,
         items: state.heatmap.tiles,
         news: [],
@@ -1778,10 +1779,13 @@ async function loadSectorBoard(force = false) {
       });
     }
     const payload = await api(`/api/sector-board?sector=${encodeURIComponent(sector)}${force ? "&force=1" : ""}`);
-    state.sectorBoard = payload;
-    state.preferences.sectorFocus = payload.sector ?? sector;
+    state.preferences.sectorFocus = selectedSector;
+    state.sectorBoard = {
+      ...payload,
+      sector: selectedSector,
+    };
     state.sectorBoardPage = 1;
-    renderSectorBoardPanel(payload);
+    renderSectorBoardPanel(state.sectorBoard);
     markFeedHeartbeat("Live");
   } catch (error) {
     document.querySelector("#sectorBoardWarnings").innerHTML =
@@ -2903,6 +2907,8 @@ function sanitizeSectorFocus(value, sectors = DEFAULT_SECTORS) {
 
 function resolveSectorBoardSector(payload) {
   const sectors = [
+    ...(state.heatmap?.sectors ?? []).map((item) => (typeof item === "string" ? item : item?.sector)).filter(Boolean),
+    ...(state.heatmap?.tiles ?? []).map((item) => item?.sector).filter(Boolean),
     ...(payload?.sectors ?? []).map((item) => (typeof item === "string" ? item : item?.sector)).filter(Boolean),
     ...(payload?.items ?? []).map((item) => item?.sector).filter(Boolean),
     ...DEFAULT_SECTORS,
@@ -2925,6 +2931,19 @@ function resolveSectorBoardSector(payload) {
     }
   }
   return candidates[0] ?? "Technology";
+}
+
+function activeSectorSelection(payload) {
+  return sanitizeSectorFocus(
+    document.querySelector("#sectorBoardSelect")?.value
+      || state.preferences.sectorFocus
+      || payload?.sector,
+    [
+      ...(state.heatmap?.sectors ?? []),
+      ...(payload?.sectors ?? []),
+      ...DEFAULT_SECTORS,
+    ],
+  );
 }
 
 function filterSectorBoardItems(items, selectedSector) {
@@ -4818,7 +4837,7 @@ function renderHeatmapContext(payload) {
 }
 
 function renderSectorBoardSummary(payload) {
-  const sectorLabel = resolveSectorBoardSector(payload);
+  const sectorLabel = activeSectorSelection(payload);
   const items = deriveSectorBoardItems(payload, sectorLabel);
   const summary = summarizeSectorBoardItems(items);
   return [
@@ -4901,7 +4920,7 @@ function renderSectorBoardPanel(payload) {
   if (!payload) {
     return;
   }
-  const sectorLabel = resolveSectorBoardSector(payload);
+  const sectorLabel = activeSectorSelection(payload);
   const filteredItems = deriveSectorBoardItems(payload, sectorLabel);
   const sortedItems = [...filteredItems].sort((left, right) => (Number(right.weight) || 0) - (Number(left.weight) || 0));
   const summary = summarizeSectorBoardItems(sortedItems);
