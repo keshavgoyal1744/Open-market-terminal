@@ -2009,16 +2009,16 @@ async function loadCompanyMap(symbol, force = false) {
   try {
     const payload = await fetchCompanyMap(clean, force);
     state.companyMap = payload;
-    const supplierPreview = (payload.suppliers ?? []).slice(0, 8);
-    const customerPreview = (payload.customers ?? []).slice(0, 8);
-    const interlockPreview = (payload.boardInterlocks?.summary ?? []).slice(0, 6);
-    const acquisitionPreview = (payload.acquisitionsTimeline ?? []).slice(0, 6);
-    const indexTimelinePreview = (payload.indexTimeline ?? []).slice(0, 6);
-    const competitorPreview = (payload.competitors ?? []).slice(0, 8);
-    const holderPreview = (payload.holders ?? []).slice(0, 8);
-    const boardPreview = (payload.board ?? []).slice(0, 8);
-    const insiderHolderPreview = (payload.insiderHolders ?? []).slice(0, 6);
-    const insiderTransactionPreview = (payload.insiderTransactions ?? []).slice(0, 4);
+    const supplierPreview = (payload.suppliers ?? []).slice(0, 12);
+    const customerPreview = (payload.customers ?? []).slice(0, 12);
+    const interlockPreview = (payload.boardInterlocks?.summary ?? []).slice(0, 10);
+    const acquisitionPreview = (payload.acquisitionsTimeline ?? []).slice(0, 10);
+    const indexTimelinePreview = (payload.indexTimeline ?? []).slice(0, 8);
+    const competitorPreview = (payload.competitors ?? []).slice(0, 12);
+    const holderPreview = (payload.holders ?? []).slice(0, 12);
+    const boardPreview = (payload.board ?? []).slice(0, 12);
+    const insiderHolderPreview = (payload.insiderHolders ?? []).slice(0, 10);
+    const insiderTransactionPreview = (payload.insiderTransactions ?? []).slice(0, 8);
     document.querySelector("#companyMapSymbol").value = clean;
     if (document.querySelector("#companyMapCompareSymbol")) {
       document.querySelector("#companyMapCompareSymbol").value = state.preferences.companyMapCompareSymbol ?? "";
@@ -5836,6 +5836,7 @@ function renderCompanyMapSummary(payload) {
     renderTerminalStat("Last", formatMoney(payload.quote?.price), payload.quote?.exchange ?? "public quote"),
     renderTerminalStat("Suppliers", String(payload.suppliers?.length ?? 0), "upstream links"),
     renderTerminalStat("Customers", String(payload.customers?.length ?? 0), "downstream links"),
+    renderTerminalStat("Peers", String(payload.competitors?.length ?? 0), "sector / market map"),
     renderTerminalStat("Indices", String(payload.indices?.length ?? 0), "major benchmarks"),
     renderTerminalStat("Holders", String(payload.holders?.length ?? 0), "public owners"),
     renderTerminalStat("Board", String(payload.board?.length ?? 0), "officers / directors"),

@@ -13,6 +13,10 @@ const cache = {
 };
 
 class StubMarketDataService extends MarketDataService {
+  async getPublicPeerUniverse() {
+    return ["NVDA", "AMD", "AVGO"];
+  }
+
   async getCompany(symbol) {
     const upper = symbol.toUpperCase();
     return {
@@ -111,6 +115,8 @@ test("company map fallback builds named supplier, ownership, and corporate rows 
   assert.equal(payload.holders.some((item) => item.holder === "BlackRock"), true);
   assert.equal(payload.corporate.relations.some((item) => item.target === "Jane Doe"), true);
   assert.equal(payload.corporate.relations.some((item) => item.target === "Beneficial ownership filings"), true);
+  assert.equal(payload.competitors.some((item) => item.symbol === "NVDA"), true);
   assert.equal(payload.graph.nodes.some((item) => item.label === "Institutional base"), true);
   assert.equal(payload.graph.nodes.some((item) => item.label === "Beneficial ownership filings"), true);
+  assert.equal(payload.graph.nodes.some((item) => item.symbol === "NVDA"), true);
 });

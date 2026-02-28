@@ -345,12 +345,14 @@ export class MarketDataService {
           Promise.resolve(getCuratedIntelligence(upper)),
         ]);
 
+        const publicPeerUniverse = await this.getPublicPeerUniverse(upper, company).catch(() => []);
         const derived = buildDerivedRelationshipIntel(upper, company);
-        const competitorUniverse = [...new Set([...(curated.peerSymbols ?? []), ...(curated.competitorSymbols ?? []), ...(derived.peerSymbols ?? [])])]
+        const competitorUniverse = [...new Set([...(curated.peerSymbols ?? []), ...(curated.competitorSymbols ?? []), ...(derived.peerSymbols ?? []), ...publicPeerUniverse])]
           .filter((entry) => entry && entry !== upper)
-          .slice(0, 8);
+          .slice(0, 12);
         const competitorQuotes = competitorUniverse.length ? await this.getQuotes(competitorUniverse).catch(() => []) : [];
         const competitorMap = new Map(competitorQuotes.map((quote) => [quote.symbol, quote]));
+        const peerOverlay = buildPublicPeerOverlay(upper, company, competitorUniverse, competitorMap);
 
         return {
           symbol: upper,
@@ -358,7 +360,7 @@ export class MarketDataService {
           summary: company.market.businessSummary ?? curated.headline,
           coverage: {
             curated: curated.curated,
-            notes: [...(curated.coverageNotes ?? []), ...(derived.coverageNotes ?? []), ...(company.warnings ?? [])].slice(0, 8),
+            notes: [...(curated.coverageNotes ?? []), ...(derived.coverageNotes ?? []), ...(peerOverlay.coverageNotes ?? []), ...(company.warnings ?? [])].slice(0, 10),
             supportedSymbols: listSupportedIntelligenceSymbols(),
           },
           commands: [
@@ -389,7 +391,7 @@ export class MarketDataService {
               derived.supplyChain.suppliers,
             ),
             customers: mergeRelationshipLists(curated.customers, derived.customers),
-            ecosystem: mergeRelationshipLists(curated.ecosystemRelations, derived.ecosystemRelations),
+            ecosystem: mergeRelationshipLists(curated.ecosystemRelations, [...derived.ecosystemRelations, ...(peerOverlay.relations ?? [])]),
           },
           corporate: {
             relations: mergeRelationshipLists(curated.corporateRelations, derived.corporateRelations),
@@ -398,8 +400,8 @@ export class MarketDataService {
           customerConcentration: mergeNamedLists(curated.customerConcentration, derived.customerConcentration),
           geography: mergeGeography(curated.geography, derived.geography),
           ecosystems: mergeNamedLists(curated.ecosystems, derived.ecosystems),
-          eventChains: mergeNamedLists(curated.eventChains, derived.eventChains),
-          graph: mergeGraphs(curated.graph, derived.graph),
+          eventChains: mergeNamedLists(curated.eventChains, [...derived.eventChains, ...(peerOverlay.eventChains ?? [])]),
+          graph: mergeGraphs(mergeGraphs(curated.graph, derived.graph), peerOverlay.graph),
           competitors: competitorUniverse.map((entry) => ({
             symbol: entry,
             companyName: competitorMap.get(entry)?.shortName ?? null,
@@ -407,6 +409,27 @@ export class MarketDataService {
             changePercent: competitorMap.get(entry)?.changePercent ?? null,
           })),
         };
+      },
+      { ttlMs: config.companyTtlMs, staleMs: config.companyTtlMs * 2 },
+    );
+  }
+
+  async getPublicPeerUniverse(symbol, company, limit = 12) {
+    const upper = String(symbol ?? "").trim().toUpperCase();
+    const sectorKey = comparisonKey(company?.market?.sector);
+    if (!upper || !sectorKey) {
+      return [];
+    }
+
+    return this.cache.getOrSet(
+      `public-peers:${upper}:${sectorKey}`,
+      async () => {
+        const universe = await getSp500Universe();
+        const sameSector = (universe.constituents ?? [])
+          .filter((item) => item.symbol && item.symbol !== upper && comparisonKey(item.sector) === sectorKey)
+          .sort((left, right) => numeric(right.sourceWeight) - numeric(left.sourceWeight))
+          .slice(0, limit);
+        return sameSector.map((item) => item.symbol);
       },
       { ttlMs: config.companyTtlMs, staleMs: config.companyTtlMs * 2 },
     );
@@ -545,6 +568,10 @@ export class MarketDataService {
         const indexTimeline = buildIndexTimeline(indexMemberships);
         const ownershipTrend = buildOwnershipTrend(company.market, resolvedHolders, company.market.insiderTransactions ?? []);
         const boardInterlocks = buildBoardInterlocks(upper, intel.executives ?? [], company.market.companyOfficers ?? []);
+        const graphWithIndices = mergeGraphs(
+          intel.graph ?? { nodes: [], edges: [] },
+          buildIndexMembershipGraph(upper, indexMemberships),
+        );
 
         return {
           symbol: upper,
@@ -588,7 +615,7 @@ export class MarketDataService {
             tree: intel.corporate?.tree ?? [],
             relations: normalizeMapRelations(intel.corporate?.relations ?? []),
           },
-          graph: intel.graph ?? { nodes: [], edges: [] },
+          graph: graphWithIndices,
           geography: intel.geography ?? { revenueMix: [], manufacturing: [], supplyRegions: [] },
         };
       },
@@ -2116,6 +2143,82 @@ function compactQuantity(value) {
   return `${roundTo(amount, 2)}`;
 }
 
+function comparisonKey(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildPublicPeerOverlay(symbol, company, peerSymbols = [], competitorMap = new Map()) {
+  const market = company?.market ?? {};
+  const sector = market.sector ?? "Public sector";
+  const industry = market.industry ?? sector;
+  const peers = peerSymbols
+    .map((entry) => competitorMap.get(entry))
+    .filter(Boolean)
+    .slice(0, 10);
+
+  if (!peers.length) {
+    return {
+      coverageNotes: [],
+      relations: [],
+      eventChains: [],
+      graph: { nodes: [], edges: [] },
+    };
+  }
+
+  const nodes = [];
+  const edges = [];
+  const relations = [];
+
+  for (const peer of peers) {
+    const label = peer.shortName ?? peer.symbol;
+    nodes.push({
+      id: `peer:${peer.symbol}`,
+      label,
+      kind: "competitor",
+      symbol: peer.symbol,
+    });
+    edges.push({
+      source: symbol,
+      target: `peer:${peer.symbol}`,
+      relation: comparisonKey(industry) && comparisonKey(peer.shortName) ? "sector peer" : "peer",
+      domain: "competition",
+      label: [
+        sector,
+        peer.changePercent != null ? `${roundTo(peer.changePercent, 2)}% today` : null,
+      ].filter(Boolean).join(" | "),
+      weight: 2,
+    });
+    relations.push(
+      relation(
+        label,
+        "sector peer",
+        "ecosystem",
+        `${sector} public peer basket${peer.changePercent != null ? ` | ${roundTo(peer.changePercent, 2)}% today` : ""}`,
+        2,
+        peer.symbol,
+      ),
+    );
+  }
+
+  return {
+    coverageNotes: [`Public peer overlay adds ${peers.length} same-sector S&P 500 names to broaden fallback relationship coverage.`],
+    relations,
+    eventChains: [
+      impact(`${sector} peer basket move`, [
+        `${symbol} rerates with same-sector leaders and laggards`,
+        "Relative valuation and sentiment shift across the peer set",
+        "Second-order suppliers, customers, and owners can react with the basket",
+      ]),
+    ],
+    graph: { nodes, edges },
+  };
+}
+
 function emptyCompanyMapIntel(symbol) {
   return {
     symbol,
@@ -3395,6 +3498,37 @@ function buildBoardInterlocks(symbol, executives = [], officers = []) {
       .slice(0, 10)
       .map(([name, count]) => ({ name, count, symbol: inferTickerFromText(name) ?? null })),
   };
+}
+
+function buildIndexMembershipGraph(symbol, indices = []) {
+  const nodes = [];
+  const edges = [];
+
+  for (const item of indices ?? []) {
+    const label = item?.label ?? null;
+    if (!label) {
+      continue;
+    }
+    const id = `index:${templateKey(label)}`;
+    if (!nodes.find((node) => node.id === id)) {
+      nodes.push({
+        id,
+        label,
+        kind: "ecosystem",
+        symbol: item.vehicle ?? undefined,
+      });
+    }
+    edges.push({
+      source: symbol,
+      target: id,
+      relation: "index membership",
+      domain: "ecosystem",
+      label: item.note ?? `Current membership via ${item.source ?? "public source"}`,
+      weight: 2,
+    });
+  }
+
+  return { nodes, edges };
 }
 
 function summarizeMacroDashboard(macro, yieldCurve) {
