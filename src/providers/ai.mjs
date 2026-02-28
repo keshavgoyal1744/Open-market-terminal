@@ -13,12 +13,13 @@ export async function generateHostedIdeas({ prompt, primaryProvider, fallbackPro
       if (provider === "groq" && config.groqApiKey) {
         return await callGroq(prompt);
       }
+      failures.push(`${provider}: not configured`);
     } catch (error) {
-      failures.push(`${provider}: ${error.message}`);
+      failures.push(`${provider}: ${normalizeProviderError(error)}`);
     }
   }
 
-  throw new Error(failures[0] ?? "No hosted AI provider is configured.");
+  throw new Error(failures.join(" | ") || "No hosted AI provider is configured.");
 }
 
 export function hostedAiProviderStatus() {
@@ -151,4 +152,12 @@ function resolveAiProvider(value) {
     .trim()
     .toLowerCase();
   return ["gemini", "groq"].includes(clean) ? clean : null;
+}
+
+function normalizeProviderError(error) {
+  const message = String(error?.message ?? "provider error").trim();
+  if (/aborted due to timeout/i.test(message) || /abort/i.test(message) || error?.name === "TimeoutError") {
+    return `timed out after ${Math.round(config.aiTimeoutMs / 1000)}s`;
+  }
+  return message;
 }

@@ -13,6 +13,7 @@ const DEFAULT_STATE = {
   destinations: [],
   digests: [],
   activity: [],
+  aiSnapshots: {},
 };
 
 export class JsonStorage {
@@ -163,6 +164,24 @@ export class JsonStorage {
       const now = Date.now();
       state.sessions = state.sessions.filter((session) => Date.parse(session.expiresAt) > now);
       return state.sessions.length;
+    });
+  }
+
+  async getAiSnapshot(key) {
+    const state = await this.readState();
+    return state.aiSnapshots?.[key] ?? null;
+  }
+
+  async saveAiSnapshot(key, snapshot) {
+    return this.transaction((state) => {
+      state.aiSnapshots ??= {};
+      state.aiSnapshots[key] = snapshot;
+
+      const entries = Object.entries(state.aiSnapshots)
+        .sort((left, right) => new Date(right[1]?.asOf ?? 0) - new Date(left[1]?.asOf ?? 0))
+        .slice(0, 45);
+      state.aiSnapshots = Object.fromEntries(entries);
+      return snapshot;
     });
   }
 

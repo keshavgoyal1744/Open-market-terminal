@@ -29,8 +29,9 @@ export function startBackgroundJobs({ storage, market, events, notifier, logger 
   timers.push(setInterval(safely("refresh tracked symbols", () => refreshTrackedSymbols(storage, market)), 45_000));
   timers.push(setInterval(safely("evaluate alerts", () => evaluateAlerts(storage, market, events, notifier)), 60_000));
   timers.push(setInterval(safely("send digests", () => sendDigests(storage, market, events, notifier)), config.digestCheckMs));
+  timers.push(setInterval(safely("refresh ai snapshot", () => refreshAiSnapshot(market)), 5 * 60 * 1000));
 
-  Promise.all([market.getMacro(), market.getYieldCurve(), market.getMarketPulse()]).catch(() => {});
+  Promise.all([market.getMacro(), market.getYieldCurve(), market.getMarketPulse(), refreshAiSnapshot(market)]).catch(() => {});
 
   return {
     stop() {
@@ -166,6 +167,15 @@ async function sendDigests(storage, market, events, notifier) {
       },
     });
   }
+}
+
+async function refreshAiSnapshot(market) {
+  await market.ensureDailyAiSnapshot({
+    universe: "sp500",
+    horizon: "1-4w",
+    bullishCount: 20,
+    bearishCount: 20,
+  });
 }
 
 function isCryptoProduct(symbol) {

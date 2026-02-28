@@ -3,5 +3,11 @@
     "api/[...route].js": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/ai-daily",
+      "schedule": "0 * * * *"
+    }
+  ]
 }

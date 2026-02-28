@@ -1140,18 +1140,6 @@ function bindGlobalActions() {
     await loadDeskNews(true);
   });
 
-  document.querySelector("#aiLabForm")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    state.preferences.aiUniverse = document.querySelector("#aiUniverseSelect")?.value ?? "sp500";
-    state.preferences.aiHorizon = document.querySelector("#aiHorizonSelect")?.value ?? "1-4w";
-    schedulePreferenceSync();
-    await loadAiLab(true);
-  });
-
-  document.querySelector("#refreshAiLabButton")?.addEventListener("click", async () => {
-    await loadAiLab(true);
-  });
-
   document.querySelector("#clearNewsFocusButton")?.addEventListener("click", async () => {
     state.preferences.newsFocus = "";
     state.newsPage = 1;
@@ -3734,12 +3722,12 @@ async function selectSectorFocus(sector, options = {}) {
   await loadSectorBoard(true);
 }
 
-async function loadAiLab(force = false) {
+async function loadAiLab() {
   try {
     const universe = state.preferences.aiUniverse ?? "sp500";
     const horizon = state.preferences.aiHorizon ?? "1-4w";
     const payload = await api(
-      `/api/ai-lab?universe=${encodeURIComponent(universe)}&horizon=${encodeURIComponent(horizon)}&bullishCount=20&bearishCount=20${force ? "&force=1" : ""}`,
+      `/api/ai-lab?universe=${encodeURIComponent(universe)}&horizon=${encodeURIComponent(horizon)}&bullishCount=20&bearishCount=20`,
     );
     state.aiLab = payload;
     renderAiLabPanel(payload);
@@ -6270,21 +6258,20 @@ function renderQuoteMonitorSummary(payload) {
 }
 
 function renderAiLabPanel(payload) {
-  if (document.querySelector("#aiUniverseSelect")) {
-    document.querySelector("#aiUniverseSelect").value = state.preferences.aiUniverse ?? "sp500";
-  }
-  if (document.querySelector("#aiHorizonSelect")) {
-    document.querySelector("#aiHorizonSelect").value = state.preferences.aiHorizon ?? "1-4w";
-  }
   document.querySelector("#aiLabSummary").innerHTML = renderAiLabSummary(payload);
   document.querySelector("#aiLabWarnings").innerHTML = renderStatusStrip(
     payload.warnings ?? [],
-    `${escapeHtml(payload.provider?.used === "rules" ? "Rules engine active" : `${String(payload.provider?.used ?? "Hosted").toUpperCase()} output live`)} for ${escapeHtml(payload.universe ?? "S&P 500")}.`,
+    `${escapeHtml(payload.provider?.used === "rules" ? "Daily rules snapshot active" : `${String(payload.provider?.used ?? "Hosted").toUpperCase()} daily snapshot active`)} for ${escapeHtml(payload.universe ?? "S&P 500")}.`,
   );
   document.querySelector("#aiLabProviderMeta").textContent = [
     payload.provider?.used === "rules" ? "Rules engine" : `${String(payload.provider?.used ?? "Hosted").toUpperCase()} · ${payload.provider?.model ?? "default model"}`,
     payload.provider?.fallback ? `fallback ${String(payload.provider.fallback).toUpperCase()}` : "",
     payload.asOf ? formatTimestampShort(payload.asOf) : "",
+  ].filter(Boolean).join(" · ");
+  document.querySelector("#aiLabSnapshotMeta").textContent = [
+    payload.snapshot?.mode === "shared-daily" ? "Shared daily snapshot" : "Snapshot",
+    payload.snapshot?.timeLabel ?? "",
+    payload.snapshot?.date ?? "",
   ].filter(Boolean).join(" · ");
   document.querySelector("#aiLabMarketView").innerHTML = renderAiMarketView(payload.marketView ?? {});
   document.querySelector("#aiLabMonitor").innerHTML = renderAiMonitorList(payload.marketView?.monitor ?? []);

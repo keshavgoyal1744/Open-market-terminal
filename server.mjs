@@ -30,7 +30,7 @@ const publicDir = path.join(config.appRoot, "public");
 const cache = new TTLCache();
 const events = new UserEventHub();
 const storage = new JsonStorage(config.dataFile);
-const market = new MarketDataService(cache);
+const market = new MarketDataService(cache, storage);
 const notifier = new NotificationService(config);
 const authLimiter = new FixedWindowRateLimiter();
 const cryptoHub = new CoinbaseTickerHub();
@@ -463,6 +463,19 @@ async function handleApi(request, response, url, context) {
     const bearishCount = parseNullableNumber(url.searchParams.get("bearishCount")) ?? 20;
     const force = url.searchParams.get("force") === "1";
     return sendJson(response, 200, await market.getAiIdeas({ universe, horizon, bullishCount, bearishCount, force }));
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/cron/ai-daily") {
+    return sendJson(
+      response,
+      200,
+      await market.ensureDailyAiSnapshot({
+        universe: "sp500",
+        horizon: "1-4w",
+        bullishCount: 20,
+        bearishCount: 20,
+      }),
+    );
   }
 
   if (request.method === "GET" && url.pathname === "/api/quote-monitor") {

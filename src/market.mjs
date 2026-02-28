@@ -12,8 +12,9 @@ import { getYieldCurve } from "./providers/treasury.mjs";
 import { getCompanyOverview, getEarningsDetails, getHistory, getOptions, getQuotes } from "./providers/yahoo.mjs";
 
 export class MarketDataService {
-  constructor(cache) {
+  constructor(cache, storage = null) {
     this.cache = cache;
+    this.storage = storage;
   }
 
   async getQuotes(symbols, options = {}) {
@@ -818,9 +819,18 @@ export class MarketDataService {
     const bullishCount = clampAiIdeaCount(options.bullishCount, 20);
     const bearishCount = clampAiIdeaCount(options.bearishCount, 20);
     const providerStatus = hostedAiProviderStatus();
+    const snapshotDate = options.snapshotDate ?? getVisibleAiSnapshotDate();
+    const snapshotKey = buildAiSnapshotKey({ universe, horizon, bullishCount, bearishCount, snapshotDate });
+
+    if (!options.force && this.storage) {
+      const stored = await this.storage.getAiSnapshot(snapshotKey);
+      if (stored) {
+        return stored;
+      }
+    }
 
     return this.cache.getOrSet(
-      `ai-ideas:${universe}:${horizon}:${bullishCount}:${bearishCount}`,
+      `ai-ideas:${snapshotKey}`,
       async () => {
         const [heatmap, pulse, macro, yieldCurve] = await Promise.all([
           this.getSp500Heatmap(),
@@ -905,8 +915,14 @@ export class MarketDataService {
               warnings[0] ?? "Hosted AI unavailable.",
             );
 
-        return {
+        const payload = {
           asOf: new Date().toISOString(),
+          snapshot: {
+            date: snapshotDate,
+            timeLabel: getAiSnapshotScheduleLabel(),
+            timezone: config.aiDailyTimezone,
+            mode: "shared-daily",
+          },
           universe: universe === "sp500" ? "S&P 500" : universe.toUpperCase(),
           horizon: horizon === "1-4w" ? "1-4 weeks" : horizon,
           provider: {
@@ -930,11 +946,63 @@ export class MarketDataService {
           marketView: normalized.marketView,
           bullish: normalized.bullish,
           bearish: normalized.bearish,
-          warnings: [...(heatmap.warnings ?? []), ...warnings, ...(normalized.warnings ?? [])].filter(Boolean).slice(0, 8),
+          warnings: [...new Set([...(heatmap.warnings ?? []), ...warnings, ...(normalized.warnings ?? [])].filter(Boolean))].slice(0, 8),
         };
+
+        if (this.storage) {
+          await this.storage.saveAiSnapshot(snapshotKey, payload);
+        }
+
+        return payload;
       },
       { ttlMs: config.aiTtlMs, staleMs: config.aiTtlMs * 2, force: Boolean(options.force) },
     );
+  }
+
+  async ensureDailyAiSnapshot(options = {}) {
+    const runDate = options.snapshotDate ?? getScheduledAiRunDate();
+    if (!runDate) {
+      return {
+        ok: true,
+        status: "waiting",
+        next: getAiSnapshotScheduleLabel(),
+      };
+    }
+
+    const universe = normalizeAiUniverse(options.universe);
+    const horizon = normalizeAiHorizon(options.horizon);
+    const bullishCount = clampAiIdeaCount(options.bullishCount, 20);
+    const bearishCount = clampAiIdeaCount(options.bearishCount, 20);
+    const snapshotKey = buildAiSnapshotKey({ universe, horizon, bullishCount, bearishCount, snapshotDate: runDate });
+
+    if (this.storage) {
+      const existing = await this.storage.getAiSnapshot(snapshotKey);
+      if (existing) {
+        return {
+          ok: true,
+          status: "ready",
+          snapshotDate: runDate,
+          asOf: existing.asOf,
+        };
+      }
+    }
+
+    const payload = await this.getAiIdeas({
+      universe,
+      horizon,
+      bullishCount,
+      bearishCount,
+      force: true,
+      snapshotDate: runDate,
+    });
+
+    return {
+      ok: true,
+      status: "generated",
+      snapshotDate: runDate,
+      asOf: payload.asOf,
+      provider: payload.provider?.used ?? "rules",
+    };
   }
 
   async getEarningsIntel(symbol, peerSymbols = []) {
@@ -3039,17 +3107,17 @@ function buildAiMarketContext({ heatmap, pulse, macro, yieldCurve, horizon }) {
   const sectorLeaders = [...(heatmap?.sectors ?? [])]
     .filter((item) => Number.isFinite(item.averageMove))
     .sort((left, right) => right.averageMove - left.averageMove)
-    .slice(0, 3)
+    .slice(0, 2)
     .map((item) => `${item.sector} ${formatSignedPercent(item.averageMove)}`);
   const sectorLaggards = [...(heatmap?.sectors ?? [])]
     .filter((item) => Number.isFinite(item.averageMove))
     .sort((left, right) => left.averageMove - right.averageMove)
-    .slice(0, 3)
+    .slice(0, 2)
     .map((item) => `${item.sector} ${formatSignedPercent(item.averageMove)}`);
-  const pulseLeaders = (pulse?.leaders ?? []).slice(0, 3).map((item) => `${item.symbol} ${formatSignedPercent(item.changePercent)}`);
-  const pulseLaggards = (pulse?.laggards ?? []).slice(0, 3).map((item) => `${item.symbol} ${formatSignedPercent(item.changePercent)}`);
+  const pulseLeaders = (pulse?.leaders ?? []).slice(0, 2).map((item) => `${item.symbol} ${formatSignedPercent(item.changePercent)}`);
+  const pulseLaggards = (pulse?.laggards ?? []).slice(0, 2).map((item) => `${item.symbol} ${formatSignedPercent(item.changePercent)}`);
   const macroCards = (macro?.cards ?? [])
-    .slice(0, 4)
+    .slice(0, 3)
     .map((card) => `${card.label}: ${card.value ?? "n/a"}`);
   const curveSummary = summarizeCurveShape(yieldCurve?.points ?? []);
 
@@ -3068,53 +3136,43 @@ function buildAiMarketContext({ heatmap, pulse, macro, yieldCurve, horizon }) {
 
 function buildAiPrompt({ horizon, context, bullishCandidates, bearishCandidates, bullishCount, bearishCount }) {
   const payload = {
-    task:
-      "You are preparing a public-market idea board for a free terminal product. Use only the supplied data. Do not add facts or symbols.",
-    universe: "S&P 500",
+    task: "Rank S&P 500 long and short ideas using only supplied data.",
     horizon: horizon === "1-4w" ? "1-4 weeks" : horizon,
-    required_output: {
+    output: {
       bullish: bullishCount,
       bearish: bearishCount,
-      fields: ["symbol", "thesis", "reasons[3]", "risk", "confidence"],
-      confidence_values: ["high", "medium", "low"],
+      schema: ["symbol", "thesis", "reasons[3]", "risk", "confidence"],
     },
     rules: [
-      "Use only symbols already present in the bullish_candidates and bearish_candidates arrays.",
+      "Only use symbols from candidate lists.",
       "Keep reasons short and evidence-based.",
       "Return strict JSON only with keys marketView, bullish, bearish.",
-      "marketView must include summary, bullishBias, bearishBias, risks, and monitor.",
     ],
-    market_context: context,
-    bullish_candidates: bullishCandidates.map(compactAiCandidateForPrompt),
-    bearish_candidates: bearishCandidates.map(compactAiCandidateForPrompt),
+    context,
+    bullish: bullishCandidates.map(compactAiCandidateForPrompt),
+    bearish: bearishCandidates.map(compactAiCandidateForPrompt),
   };
 
-  return [
-    "Return strict JSON only.",
-    JSON.stringify(payload, null, 2),
-  ].join("\n\n");
+  return `Return strict JSON only.\n${JSON.stringify(payload)}`;
 }
 
 function compactAiCandidateForPrompt(candidate) {
   return {
     symbol: candidate.symbol,
-    name: candidate.name,
     sector: candidate.sector,
-    industry: candidate.industry,
-    price: candidate.price,
-    dayChangePercent: candidate.dayChangePercent,
-    oneMonthChange: candidate.oneMonthChange,
-    sectorAverageMove: candidate.sectorAverageMove,
+    px: candidate.price,
+    d1: candidate.dayChangePercent,
+    m1: candidate.oneMonthChange,
+    sectorMove: candidate.sectorAverageMove,
     weight: candidate.weight,
-    marketCap: candidate.marketCap,
-    volume: candidate.volume,
-    analystRating: candidate.analystRating,
-    trailingPe: candidate.trailingPe,
-    forwardPe: candidate.forwardPe,
-    shortRatio: candidate.shortRatio,
-    earningsWindow: candidate.earningsWindow,
-    latestFiling: candidate.latestFiling,
-    summary: candidate.summary,
+    cap: candidate.marketCap,
+    vol: candidate.volume,
+    rating: candidate.analystRating,
+    pe: candidate.trailingPe,
+    fpe: candidate.forwardPe,
+    short: candidate.shortRatio,
+    earn: candidate.earningsWindow,
+    filing: candidate.latestFiling,
   };
 }
 
@@ -3330,4 +3388,57 @@ function formatCompactNumber(value) {
     return `${(value / 1_000_000).toFixed(2)}M`;
   }
   return `${value.toFixed(0)}`;
+}
+
+function buildAiSnapshotKey({ universe, horizon, bullishCount, bearishCount, snapshotDate }) {
+  return [snapshotDate, universe, horizon, bullishCount, bearishCount].join(":");
+}
+
+function getVisibleAiSnapshotDate(now = new Date()) {
+  const parts = getZonedDateParts(now, config.aiDailyTimezone);
+  if (parts.hour > config.aiDailyHour || (parts.hour === config.aiDailyHour && parts.minute >= config.aiDailyMinute)) {
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  }
+  const prior = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const priorParts = getZonedDateParts(prior, config.aiDailyTimezone);
+  return `${priorParts.year}-${priorParts.month}-${priorParts.day}`;
+}
+
+function getScheduledAiRunDate(now = new Date()) {
+  const parts = getZonedDateParts(now, config.aiDailyTimezone);
+  if (parts.hour > config.aiDailyHour || (parts.hour === config.aiDailyHour && parts.minute >= config.aiDailyMinute)) {
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  }
+  return null;
+}
+
+function getAiSnapshotScheduleLabel() {
+  const hour = String(config.aiDailyHour).padStart(2, "0");
+  const minute = String(config.aiDailyMinute).padStart(2, "0");
+  return `${hour}:${minute} ${config.aiDailyTimezone}`;
+}
+
+function getZonedDateParts(date, timeZone) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return {
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+  };
 }

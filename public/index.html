@@ -1025,23 +1025,15 @@
           <div class="panel-header">
             <div>
               <p class="section-label">AI Lab</p>
-              <h2>Hosted idea engine with Gemini primary and Groq fallback</h2>
-            </div>
-            <div class="workbench-header-actions">
-              <form id="aiLabForm" class="inline-form compact-inline-form">
-                <select id="aiUniverseSelect">
-                  <option value="sp500">S&amp;P 500</option>
-                </select>
-                <select id="aiHorizonSelect">
-                  <option value="1-4w">1-4 weeks</option>
-                </select>
-                <button type="submit">Run</button>
-              </form>
-              <button id="refreshAiLabButton" type="button" class="secondary">Refresh</button>
+              <h2>Shared daily AI snapshot with Gemini primary and Groq fallback</h2>
             </div>
           </div>
           <div id="aiLabSummary" class="watchlist-summary-grid"></div>
           <div id="aiLabWarnings" class="panel-status-strip"></div>
+          <div class="panel-toolbar compact-toolbar">
+            <div class="muted">Auto-generated once per day at 10:00 AM ET and reused for all viewers.</div>
+            <div id="aiLabSnapshotMeta" class="muted">Shared daily snapshot</div>
+          </div>
           <div class="ai-lab-shell">
             <article class="subpanel ai-lab-context">
               <div class="subpanel-header">
