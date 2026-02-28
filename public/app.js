@@ -6524,7 +6524,7 @@ function renderIntelGraphNetwork(graph, symbol) {
     .join("");
 
   return `
-    <div class="graph-network" style="width:${width}px; min-height:${height}px; height:${height}px;">
+    <div class="graph-network" style="min-height:${height}px; height:${height}px;">
       <div class="graph-network-legend">
         <span class="graph-legend-item supply">Supply / Partner</span>
         <span class="graph-legend-item customer">Customer</span>
@@ -6546,11 +6546,13 @@ function renderIntelGraphNetwork(graph, symbol) {
       ${positioned
         .map((node) => {
           const edge = edgeByTarget.get(node.id);
+          const left = ((node.x / width) * 100).toFixed(2);
+          const top = ((node.y / height) * 100).toFixed(2);
           return `
             <button
               type="button"
               class="graph-network-node graph-network-node-${escapeHtml(graphToneForKind(node.kind))}"
-              style="left:${node.x}px; top:${node.y}px;"
+              style="left:${left}%; top:${top}%;"
               ${node.symbol ? `data-graph-symbol="${escapeHtml(node.symbol)}"` : ""}
               title="${escapeHtml(`${node.label} | ${edge?.relation ?? node.kind}${edge?.label ? ` | ${edge.label}` : ""}`)}"
             >

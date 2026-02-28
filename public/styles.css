@@ -2727,7 +2727,12 @@ button:hover {
 
 .quote-monitor-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.28fr) minmax(280px, 0.72fr) minmax(280px, 0.72fr);
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1.08fr) minmax(320px, 0.9fr);
+  grid-template-areas:
+    "hero hero news"
+    "hero hero news"
+    "filings options timeline"
+    "peers holders timeline";
   gap: 10px;
   padding: 10px;
   align-items: start;
@@ -2738,12 +2743,41 @@ button:hover {
   gap: 6px;
 }
 
+.panel-quote-monitor #quoteMonitorOptionsSummary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
 .quote-monitor-hero {
-  grid-column: 1 / span 2;
+  grid-area: hero;
 }
 
 .quote-monitor-shell .metric-strip {
   grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.quote-monitor-news-panel {
+  grid-area: news;
+}
+
+.quote-monitor-timeline-panel {
+  grid-area: timeline;
+}
+
+.quote-monitor-filings-panel {
+  grid-area: filings;
+}
+
+.quote-monitor-options-panel {
+  grid-area: options;
+}
+
+.quote-monitor-peers-panel {
+  grid-area: peers;
+}
+
+.quote-monitor-holders-panel {
+  grid-area: holders;
 }
 
 .quote-monitor-shell .list-stack,
@@ -2756,6 +2790,24 @@ button:hover {
 .quote-monitor-shell .subpanel,
 .market-boards-grid .subpanel {
   align-content: start;
+}
+
+.quote-monitor-news-panel,
+.quote-monitor-timeline-panel,
+.quote-monitor-filings-panel,
+.quote-monitor-options-panel,
+.quote-monitor-peers-panel,
+.quote-monitor-holders-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.quote-monitor-news-panel #quoteMonitorNews,
+.quote-monitor-timeline-panel #quoteMonitorTimeline,
+.quote-monitor-filings-panel #quoteMonitorFilings {
+  max-height: none;
+  height: 100%;
+  overflow: auto;
 }
 
 .company-map-compare-shell {
