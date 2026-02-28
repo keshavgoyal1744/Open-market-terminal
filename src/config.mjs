@@ -52,6 +52,7 @@ export const config = {
 export function defaultUserPreferences() {
   return {
     watchlistSymbols: [...config.defaultWatchlist],
+    researchPinnedSymbols: [],
     detailSymbol: "AAPL",
     cryptoProducts: [...config.defaultCryptoProducts],
     activePage: "overview",

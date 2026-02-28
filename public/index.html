@@ -14,7 +14,7 @@
           <h1>Global market operations console</h1>
         </div>
         <nav class="topbar-nav">
-          <button type="button" class="topbar-nav-btn" data-page="overview">Overview</button>
+          <button type="button" class="topbar-nav-btn" data-page="overview">Markets</button>
           <button type="button" class="topbar-nav-btn" data-page="research">Research</button>
           <button type="button" class="topbar-nav-btn" data-page="ops">Ops</button>
         </nav>
@@ -179,27 +179,45 @@
                 <div id="heatmapSource" class="muted"></div>
               </div>
               <div id="sp500Heatmap" class="sp500-heatmap"></div>
+              <div class="heatmap-footer">
+                <div class="heatmap-scale">
+                  <span>-3%</span>
+                  <div class="heatmap-scale-dots" aria-hidden="true">
+                    <span class="negative"></span>
+                    <span class="negative"></span>
+                    <span class="negative"></span>
+                    <span class="neutral"></span>
+                    <span class="positive"></span>
+                    <span class="positive"></span>
+                    <span class="positive"></span>
+                  </div>
+                  <span>+3%</span>
+                </div>
+                <div id="heatmapAsOf" class="muted">Awaiting heatmap sync</div>
+              </div>
             </div>
             <div class="subpanel heatmap-detail-panel">
               <div class="subpanel-header">
                 <h3 id="heatmapDetailTitle">Hover a tile</h3>
                 <div id="heatmapDetailMeta" class="muted">Live context rail</div>
               </div>
-              <div id="heatmapDetailSummary" class="intel-empty list-item">
-                <div class="meta">Hover or click a tile to load multi-source scenario context.</div>
-              </div>
-              <div id="heatmapCatalysts" class="list-stack"></div>
-              <div class="table-wrap terminal-table-wrap">
-                <table class="terminal-table">
-                  <thead>
-                    <tr>
-                      <th>Reference</th>
-                      <th>Source</th>
-                      <th>Time</th>
-                    </tr>
-                  </thead>
-                  <tbody id="heatmapReferencesBody"></tbody>
-                </table>
+              <div class="heatmap-context-grid">
+                <div id="heatmapDetailSummary" class="intel-empty list-item">
+                  <div class="meta">Hover or click a tile to load multi-source scenario context.</div>
+                </div>
+                <div id="heatmapCatalysts" class="list-stack"></div>
+                <div class="table-wrap terminal-table-wrap heatmap-reference-wrap">
+                  <table class="terminal-table">
+                    <thead>
+                      <tr>
+                        <th>Reference</th>
+                        <th>Source</th>
+                        <th>Time</th>
+                      </tr>
+                    </thead>
+                    <tbody id="heatmapReferencesBody"></tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -337,43 +355,6 @@
               </div>
             </article>
           </div>
-          <aside id="earningsDrawer" class="earnings-drawer" hidden>
-            <div class="panel-header compact-header">
-              <div>
-                <p class="section-label">Earnings Intel</p>
-                <h3 id="earningsDrawerTitle">Earnings detail</h3>
-              </div>
-              <button id="closeEarningsDrawerButton" type="button" class="secondary">Close</button>
-            </div>
-            <div id="earningsWarning" class="panel-status-strip"></div>
-            <div id="earningsSummary" class="watchlist-summary-grid"></div>
-            <div class="earnings-drawer-grid">
-              <article class="subpanel">
-                <h3>Estimate Trend</h3>
-                <div id="earningsTrendList" class="list-stack"></div>
-              </article>
-              <article class="subpanel">
-                <h3>Surprise History</h3>
-                <div class="table-wrap compact terminal-table-wrap">
-                  <table class="terminal-table intel-table">
-                    <thead>
-                      <tr>
-                        <th>Quarter</th>
-                        <th>Est.</th>
-                        <th>Actual</th>
-                        <th>Surprise</th>
-                      </tr>
-                    </thead>
-                    <tbody id="earningsHistoryBody"></tbody>
-                  </table>
-                </div>
-              </article>
-              <article class="subpanel">
-                <h3>Peer Windows</h3>
-                <div id="peerEarningsList" class="list-stack"></div>
-              </article>
-            </div>
-          </aside>
         </section>
 
         <section id="section-intelligence" class="panel panel-wide intelligence-panel">
@@ -806,6 +787,47 @@
         <input id="commandPaletteInput" type="text" placeholder="Type a symbol, panel, or action..." autocomplete="off" />
         <div id="commandPaletteResults" class="command-palette-results"></div>
       </div>
+    </div>
+
+    <div id="earningsOverlay" class="earnings-overlay" hidden>
+      <div class="earnings-overlay-backdrop" data-close-earnings="true"></div>
+      <aside id="earningsDrawer" class="earnings-drawer" role="dialog" aria-modal="true" aria-label="Earnings intelligence" hidden>
+        <div class="panel-header compact-header earnings-drawer-header">
+          <div>
+            <p class="section-label">Earnings Intel</p>
+            <h3 id="earningsDrawerTitle">Earnings detail</h3>
+          </div>
+          <button id="closeEarningsDrawerButton" type="button" class="secondary">Close</button>
+        </div>
+        <div id="earningsWarning" class="panel-status-strip"></div>
+        <div id="earningsSummary" class="watchlist-summary-grid"></div>
+        <div class="earnings-drawer-grid">
+          <article class="subpanel">
+            <h3>Estimate Trend</h3>
+            <div id="earningsTrendList" class="list-stack"></div>
+          </article>
+          <article class="subpanel">
+            <h3>Surprise History</h3>
+            <div class="table-wrap compact terminal-table-wrap">
+              <table class="terminal-table intel-table">
+                <thead>
+                  <tr>
+                    <th>Quarter</th>
+                    <th>Est.</th>
+                    <th>Actual</th>
+                    <th>Surprise</th>
+                  </tr>
+                </thead>
+                <tbody id="earningsHistoryBody"></tbody>
+              </table>
+            </div>
+          </article>
+          <article class="subpanel">
+            <h3>Peer Windows</h3>
+            <div id="peerEarningsList" class="list-stack"></div>
+          </article>
+        </div>
+      </aside>
     </div>
 
     <div id="statusToast" class="status-toast" hidden></div>

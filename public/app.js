@@ -1,5 +1,6 @@
 const DEFAULT_PREFERENCES = {
   watchlistSymbols: ["AAPL", "MSFT", "NVDA", "SPY", "TLT", "GLD", "EURUSD=X", "^GSPC"],
+  researchPinnedSymbols: [],
   detailSymbol: "AAPL",
   cryptoProducts: ["BTC-USD", "ETH-USD", "SOL-USD"],
   activePage: "overview",
@@ -63,12 +64,12 @@ const DEFAULT_PANEL_LAYOUT = [
 
 const PAGE_DEFINITIONS = {
   overview: {
-    label: "Overview",
-    sectionLabel: "Overview Desk",
-    title: "Live market overview with breadth, catalysts, and scheduled risk.",
+    label: "Markets",
+    sectionLabel: "Markets Desk",
+    title: "Cross-asset market board with breadth, catalysts, and scheduled risk.",
     description:
-      "Heatmap, pulse board, macro dates, ranked market events, watchlists, filings, and live headlines stay on the home page.",
-    tags: ["Heatmap", "Market Pulse", "Events", "Desk News"],
+      "Keep the heatmap, pulse board, ranked events, macro calendar, and live headlines on one cleaner market page.",
+    tags: ["Heatmap", "Pulse", "Calendar", "Headlines"],
     sections: [
       "section-market-pulse",
       "section-heatmap",
@@ -77,7 +78,6 @@ const PAGE_DEFINITIONS = {
       "section-macro",
       "section-calendar",
       "section-news",
-      "section-events",
     ],
   },
   research: {
@@ -86,12 +86,13 @@ const PAGE_DEFINITIONS = {
     title: "Deep security workbench, relationship intelligence, and peer tools.",
     description:
       "Use this page for single-name work, filings, price history, options, supply-chain links, competitor maps, and custom screens.",
-    tags: ["Workbench", "Intel", "Options", "Screening"],
+    tags: ["Workbench", "Intel", "Filings", "Screening"],
     sections: [
       "section-research-rail",
       "section-workbench",
       "section-intelligence",
       "section-screening",
+      "section-events",
     ],
   },
   ops: {
@@ -117,19 +118,19 @@ const PAGE_DEFINITIONS = {
 const PAGE_PANEL_SPANS = {
   overview: {
     "section-market-pulse": 4,
-    "section-market-events": 7,
+    "section-market-events": 8,
     "section-watchlist": 5,
     "section-heatmap": 12,
-    "section-events": 12,
     "section-macro": 3,
-    "section-calendar": 3,
-    "section-news": 6,
+    "section-calendar": 4,
+    "section-news": 12,
   },
   research: {
     "section-research-rail": 3,
     "section-workbench": 9,
     "section-intelligence": 9,
     "section-screening": 9,
+    "section-events": 9,
   },
   ops: {
     "section-portfolio": 4,
@@ -162,6 +163,7 @@ const state = {
   activity: [],
   intelligence: null,
   heatmap: null,
+  researchRailItems: [],
   heatmapFocusSymbol: null,
   heatmapContextCache: new Map(),
   heatmapContextToken: 0,
@@ -240,6 +242,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadHeatmap(),
     loadMarketEvents(),
     loadWatchlist(state.preferences.watchlistSymbols),
+    loadResearchRail(),
     loadDetail(state.preferences.detailSymbol),
     loadMacro(),
     loadYieldCurve(),
@@ -653,6 +656,13 @@ function bindGlobalActions() {
     toggleEarningsDrawer(false);
   });
 
+  document.querySelector("#earningsOverlay")?.addEventListener("click", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-close-earnings='true']") : null;
+    if (trigger) {
+      toggleEarningsDrawer(false);
+    }
+  });
+
   document.addEventListener("keydown", async (event) => {
     const target = event.target;
     const editable = target instanceof HTMLElement && (target.closest("input, textarea, select") || target.isContentEditable);
@@ -688,6 +698,12 @@ function bindGlobalActions() {
           await executePaletteCommand(command);
         }
       }
+      return;
+    }
+
+    if (state.earningsDrawerOpen && event.key === "Escape") {
+      event.preventDefault();
+      toggleEarningsDrawer(false);
       return;
     }
 
@@ -858,6 +874,9 @@ function applyPageState() {
 
 function setActivePage(pageId, options = {}) {
   state.preferences.activePage = normalizePage(pageId);
+  if (state.preferences.activePage !== "research" && state.earningsDrawerOpen) {
+    toggleEarningsDrawer(false);
+  }
   applyPageState();
   schedulePreferenceSync();
   if (options.scroll) {
@@ -1108,6 +1127,7 @@ async function loadHeatmap(force = false) {
     state.heatmap = payload;
     document.querySelector("#heatmapSummary").innerHTML = renderHeatmapSummary(payload);
     document.querySelector("#heatmapWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
+    setText("#heatmapAsOf", payload.asOf ? `Updated ${formatDateTime(payload.asOf)}` : "Awaiting heatmap sync");
     document.querySelector("#heatmapSource").innerHTML = payload.source?.url
       ? `<a href="${safeUrl(payload.source.url)}" target="_blank" rel="noreferrer">${escapeHtml(payload.source.label ?? "Source")}</a>`
       : escapeHtml(payload.source?.label ?? "Public universe");
@@ -1186,11 +1206,28 @@ async function loadWatchlist(symbols) {
 
     document.querySelector("#watchlistStatus").textContent = `Tracking ${payload.quotes.length} symbols.`;
     renderSymbolRibbon();
-    renderResearchRail();
+    void loadResearchRail();
     renderPortfolio();
     renderHud();
   } catch (error) {
     setFeedStatus("Degraded");
+    showStatus(error.message, true);
+  }
+}
+
+async function loadResearchRail(force = false) {
+  const symbols = state.preferences.watchlistSymbols.slice(0, 18);
+  if (!symbols.length) {
+    state.researchRailItems = [];
+    renderResearchRail();
+    return;
+  }
+
+  try {
+    const payload = await api(`/api/research-rail?symbols=${encodeURIComponent(symbols.join(","))}${force ? "&force=1" : ""}`);
+    state.researchRailItems = payload.items ?? [];
+    renderResearchRail();
+  } catch (error) {
     showStatus(error.message, true);
   }
 }
@@ -1740,47 +1777,159 @@ function renderResearchRail() {
     return;
   }
 
-  const symbols = state.preferences.watchlistSymbols.slice(0, 18);
   const focusQuote = state.latestQuotes.get(state.preferences.detailSymbol) ?? state.currentDetailQuote ?? null;
+  const pins = new Set(state.preferences.researchPinnedSymbols ?? []);
+  const items = state.researchRailItems.length
+    ? [...state.researchRailItems]
+    : state.preferences.watchlistSymbols.slice(0, 18).map((symbol) => ({
+        symbol,
+        shortName: state.latestQuotes.get(symbol)?.shortName ?? "watchlist symbol",
+        price: state.latestQuotes.get(symbol)?.price ?? null,
+        changePercent: state.latestQuotes.get(symbol)?.changePercent ?? null,
+        sector: "Unclassified",
+        sparkline: [],
+      }));
+
+  const pinnedItems = items
+    .filter((item) => pins.has(item.symbol))
+    .sort((left, right) => state.preferences.researchPinnedSymbols.indexOf(left.symbol) - state.preferences.researchPinnedSymbols.indexOf(right.symbol));
+  const grouped = [...items
+    .filter((item) => !pins.has(item.symbol))
+    .reduce((map, item) => {
+      const key = item.sector ?? "Unclassified";
+      const bucket = map.get(key) ?? [];
+      bucket.push(item);
+      map.set(key, bucket);
+      return map;
+    }, new Map())
+    .entries()]
+    .map(([sector, bucket]) => [sector, bucket.sort((left, right) => Math.abs(right.changePercent ?? 0) - Math.abs(left.changePercent ?? 0))])
+    .sort((left, right) => left[0].localeCompare(right[0]));
 
   summary.innerHTML = `
     <div class="panel-status-chip">${escapeHtml(state.preferences.detailSymbol)} focus</div>
+    <div class="panel-status-chip">${escapeHtml(String(pins.size))} pinned</div>
     <div class="panel-status-chip">${escapeHtml(humanizeInstrumentType(focusQuote))}</div>
     <div class="panel-status-chip">${escapeHtml(focusQuote?.exchange ?? state.feedStatus)}</div>
   `;
 
-  list.innerHTML = symbols.length
-    ? symbols
-        .map((symbol, index) => {
-          const quote = state.latestQuotes.get(symbol);
-          return `
-            <button
-              type="button"
-              class="research-rail-item ${tone(quote?.changePercent)}${symbol === state.preferences.detailSymbol ? " active" : ""}"
-              data-research-symbol="${escapeHtml(symbol)}"
-            >
-              <div class="research-rail-rank">${String(index + 1).padStart(2, "0")}</div>
-              <div class="research-rail-main">
-                <div class="research-rail-head">
-                  <strong>${escapeHtml(symbol)}</strong>
-                  <span class="terminal-chip ${tone(quote?.changePercent)}">${formatPercent(quote?.changePercent)}</span>
-                </div>
-                <div class="research-rail-meta">
-                  <span>${escapeHtml(truncateText(quote?.shortName ?? "watchlist symbol", 26))}</span>
-                  <span>${formatMoney(quote?.price)}</span>
-                </div>
-              </div>
-            </button>
-          `;
-        })
-        .join("")
+  list.innerHTML = items.length
+    ? [
+        pinnedItems.length
+          ? `
+            <section class="research-rail-group">
+              <header class="research-rail-group-header">
+                <strong>Pinned</strong>
+                <span>${escapeHtml(String(pinnedItems.length))}</span>
+              </header>
+              ${pinnedItems.map((item, index) => renderResearchRailItem(item, index, true)).join("")}
+            </section>
+          `
+          : "",
+        ...grouped.map(([sector, bucket]) => `
+          <section class="research-rail-group">
+            <header class="research-rail-group-header">
+              <strong>${escapeHtml(sector)}</strong>
+              <span>${escapeHtml(String(bucket.length))}</span>
+            </header>
+            ${bucket.map((item, index) => renderResearchRailItem(item, index, false)).join("")}
+          </section>
+        `),
+      ].join("")
     : renderIntelEmpty("Add symbols to the watchlist to populate the research rail.");
 
   list.querySelectorAll("[data-research-symbol]").forEach((button) => {
     button.addEventListener("click", async () => {
       await selectDetailSymbol(button.dataset.researchSymbol, { jump: false });
     });
+    button.addEventListener("keydown", async (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        await selectDetailSymbol(button.dataset.researchSymbol, { jump: false });
+      }
+    });
   });
+
+  list.querySelectorAll("[data-pin-symbol]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleResearchPin(button.dataset.pinSymbol);
+    });
+  });
+}
+
+function renderResearchRailItem(item, index, pinned) {
+  return `
+    <article
+      class="research-rail-item ${tone(item.changePercent)}${item.symbol === state.preferences.detailSymbol ? " active" : ""}"
+      data-research-symbol="${escapeHtml(item.symbol)}"
+      tabindex="0"
+      role="button"
+      aria-label="Open ${escapeHtml(item.symbol)} in research workbench"
+    >
+      <div class="research-rail-rank">${String(index + 1).padStart(2, "0")}</div>
+      <div class="research-rail-main">
+        <div class="research-rail-head">
+          <strong>${escapeHtml(item.symbol)}</strong>
+          <div class="research-rail-actions">
+            <span class="terminal-chip ${tone(item.changePercent)}">${formatPercent(item.changePercent)}</span>
+            <button type="button" class="research-pin-button${pinned ? " pinned" : ""}" data-pin-symbol="${escapeHtml(item.symbol)}" aria-label="${pinned ? "Unpin" : "Pin"} ${escapeHtml(item.symbol)}">${pinned ? "★" : "☆"}</button>
+          </div>
+        </div>
+        <div class="research-rail-meta">
+          <span>${escapeHtml(truncateText(item.shortName ?? "watchlist symbol", 26))}</span>
+          <span>${formatMoney(item.price)}</span>
+        </div>
+        <div class="research-rail-tail">
+          <span>${escapeHtml(item.industry ?? item.sector ?? "Unclassified")}</span>
+          ${renderResearchSparkline(item.sparkline, item.changePercent)}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderResearchSparkline(values, changePercent) {
+  const points = (values ?? []).filter(Number.isFinite);
+  if (points.length < 2) {
+    return `<span class="research-sparkline-empty">${escapeHtml(formatPercent(changePercent))}</span>`;
+  }
+
+  const width = 84;
+  const height = 20;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const path = points
+    .map((value, index) => {
+      const x = (index / Math.max(points.length - 1, 1)) * width;
+      const y = height - ((value - min) / range) * (height - 2) - 1;
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+
+  return `
+    <svg class="research-sparkline ${tone(changePercent)}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+      <path d="${path}"></path>
+    </svg>
+  `;
+}
+
+function toggleResearchPin(symbol) {
+  const clean = String(symbol ?? "").trim().toUpperCase();
+  if (!clean) {
+    return;
+  }
+
+  const pins = new Set(state.preferences.researchPinnedSymbols ?? []);
+  if (pins.has(clean)) {
+    pins.delete(clean);
+  } else {
+    pins.add(clean);
+  }
+  state.preferences.researchPinnedSymbols = [...pins];
+  renderResearchRail();
+  schedulePreferenceSync();
 }
 
 function highlightHeatmapFocus() {
@@ -2204,6 +2353,7 @@ function applyWorkspaceSnapshot(snapshot) {
     loadHeatmap(false),
     loadMarketEvents(),
     loadWatchlist(state.preferences.watchlistSymbols),
+    loadResearchRail(true),
     loadWatchlistEvents(),
     loadDetail(state.preferences.detailSymbol),
     loadDeskCalendar(),
@@ -2217,6 +2367,7 @@ function applyWorkspaceSnapshot(snapshot) {
 function snapshotCurrentWorkspace() {
   return {
     watchlistSymbols: state.preferences.watchlistSymbols,
+    researchPinnedSymbols: state.preferences.researchPinnedSymbols,
     detailSymbol: state.preferences.detailSymbol,
     cryptoProducts: state.preferences.cryptoProducts,
     activePage: state.preferences.activePage,
@@ -2269,6 +2420,7 @@ function scheduleRefresh() {
   setInterval(() => void loadHeatmap(false), 180000);
   setInterval(() => void loadMarketEvents(false), 120000);
   setInterval(() => void loadWatchlist(state.preferences.watchlistSymbols), 30000);
+  setInterval(() => void loadResearchRail(false), 180000);
   setInterval(() => void loadWatchlistEvents(), 120000);
   setInterval(() => void loadIntelligence(state.preferences.detailSymbol), 180000);
   setInterval(() => void loadDeskCalendar(false), 300000);
@@ -2579,19 +2731,28 @@ function configureEarningsInterface(quote, company) {
 
 function toggleEarningsDrawer(open) {
   state.earningsDrawerOpen = open;
+  const overlay = document.querySelector("#earningsOverlay");
   const drawer = document.querySelector("#earningsDrawer");
-  if (!drawer) {
+  if (!overlay || !drawer) {
     return;
   }
+  overlay.hidden = !open;
   drawer.hidden = !open;
+  overlay.classList.toggle("open", open);
   drawer.classList.toggle("open", open);
+  document.body.classList.toggle("earnings-open", open);
+  if (open) {
+    document.querySelector("#closeEarningsDrawerButton")?.focus();
+  }
 }
 
 function renderEarningsDrawer(payload, errorMessage = null) {
-  document.querySelector("#earningsDrawerTitle").textContent = payload?.companyName ?? payload?.symbol ?? "Earnings detail";
+  document.querySelector("#earningsDrawerTitle").textContent = payload?.notApplicable
+    ? `${payload?.companyName ?? payload?.symbol ?? "Instrument"} issuer context`
+    : payload?.companyName ?? payload?.symbol ?? "Earnings detail";
   document.querySelector("#earningsWarning").innerHTML = errorMessage || payload?.warning
     ? `<div class="panel-status-chip warn">${escapeHtml(normalizeWorkbenchWarning(errorMessage ?? payload.warning))}</div>`
-    : `<div class="panel-status-chip">${escapeHtml(payload?.notApplicable ? "This instrument does not report corporate earnings in the usual issuer format." : "Public earnings modules loaded for the current symbol.")}</div>`;
+    : `<div class="panel-status-chip">${escapeHtml(payload?.notApplicable ? "Corporate earnings modules are not the primary lens for this instrument." : "Public earnings modules loaded for the current symbol.")}</div>`;
 
   if (!payload) {
     document.querySelector("#earningsSummary").innerHTML = "";
@@ -2605,7 +2766,7 @@ function renderEarningsDrawer(payload, errorMessage = null) {
     document.querySelector("#earningsSummary").innerHTML = [
       renderTerminalStat("Coverage", "Not Applicable", "fund / index / macro-linked instrument"),
       renderTerminalStat("Instrument", humanizeInstrumentType(state.currentDetailQuote), "security type"),
-      renderTerminalStat("Alternative", "Use Events", "filings, macro, and market context"),
+      renderTerminalStat("Alternative", "Use Research", "filings, holdings, and market context"),
     ].join("");
     document.querySelector("#earningsTrendList").innerHTML = renderIntelEmpty(payload.explanation ?? "Corporate earnings data is not applicable for this instrument.");
     document.querySelector("#earningsHistoryBody").innerHTML = `<tr><td colspan="4" class="muted">No issuer earnings history is expected for this instrument.</td></tr>`;
@@ -2984,14 +3145,19 @@ function renderNewsFeed(items) {
   }
 
   return items
+    .slice(0, 9)
     .map(
-      (item) => `
-        <article class="news-item ${toneByImportance(item.impact)}">
+      (item, index) => `
+        <article class="news-item ${toneByImportance(item.impact)}${index === 0 ? " featured" : ""}">
           <div class="news-item-head">
             <span class="signal-chip">${escapeHtml((item.category ?? "news").toUpperCase())}</span>
-            <span class="muted">${escapeHtml(item.source ?? "News")} | ${formatTimeAgo(item.publishedAt)}</span>
+            <span class="news-time">${escapeHtml(formatTimeAgo(item.publishedAt))}</span>
           </div>
-          <a href="${safeUrl(item.link)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a>
+          <a class="news-headline" href="${safeUrl(item.link)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a>
+          <div class="news-item-foot">
+            <span class="muted">${escapeHtml(item.source ?? "News")}</span>
+            <span class="news-open-link">Open source</span>
+          </div>
         </article>
       `,
     )
@@ -3103,12 +3269,13 @@ function renderHeatmapTiles(payload) {
                     style="grid-column: span ${tile.columnSpan}; grid-row: span ${tile.rowSpan}; --heat-opacity: ${0.18 + intensity * 0.46};"
                   >
                     <div class="heatmap-tile-top">
-                      <span class="heatmap-industry">${escapeHtml(truncateText(tile.name ?? tile.symbol, 24))}</span>
+                      <span class="heatmap-industry">${escapeHtml(truncateText(tile.name ?? tile.symbol, 20))}</span>
                       <span class="heatmap-weight">${formatPercent(tile.weight)}</span>
                     </div>
-                    <strong>${escapeHtml(tile.symbol)}</strong>
-                    <div class="heatmap-price">${formatMoney(tile.price)}</div>
-                    <div class="heatmap-move ${tone(tile.changePercent)}">${formatPercent(tile.changePercent)}</div>
+                    <div class="heatmap-tile-body">
+                      <strong>${escapeHtml(tile.symbol)}</strong>
+                      <div class="heatmap-move ${tone(tile.changePercent)}">${formatPercent(tile.changePercent)}</div>
+                    </div>
                   </button>
                 `;
               })
@@ -3125,9 +3292,18 @@ function renderHeatmapContext(payload) {
   document.querySelector("#heatmapDetailMeta").textContent =
     `${payload.company?.sector ?? "Sector n/a"}${payload.company?.industry ? ` / ${payload.company.industry}` : ""}`;
   document.querySelector("#heatmapDetailSummary").innerHTML = `
-    <div>
-      <strong>${escapeHtml(payload.scenario?.headline ?? `${payload.symbol} live context`)}</strong>
+    <div class="heatmap-context-card">
+      <div class="heatmap-context-head">
+        <strong>${escapeHtml(payload.scenario?.headline ?? `${payload.symbol} live context`)}</strong>
+        <span class="terminal-chip ${tone(payload.quote?.changePercent)}">${formatPercent(payload.quote?.changePercent)}</span>
+      </div>
       <div class="meta">${escapeHtml(payload.scenario?.summary ?? "No summary available.")}</div>
+      <div class="heatmap-context-stats">
+        ${renderTerminalStat("Last", formatMoney(payload.quote?.price), "current print")}
+        ${renderTerminalStat("Sector", payload.company?.sector ?? "n/a", payload.company?.industry ?? "industry")}
+        ${renderTerminalStat("Cap", formatCompact(payload.company?.marketCap), "market value")}
+        ${renderTerminalStat("Street", payload.company?.analystRating ?? "n/a", "public rating")}
+      </div>
     </div>
   `;
 
@@ -3421,6 +3597,9 @@ function mergePreferences(preferences) {
     watchlistSymbols: Array.isArray(preferences?.watchlistSymbols)
       ? preferences.watchlistSymbols
       : [...DEFAULT_PREFERENCES.watchlistSymbols],
+    researchPinnedSymbols: Array.isArray(preferences?.researchPinnedSymbols)
+      ? preferences.researchPinnedSymbols
+      : [...DEFAULT_PREFERENCES.researchPinnedSymbols],
     cryptoProducts: Array.isArray(preferences?.cryptoProducts)
       ? preferences.cryptoProducts
       : [...DEFAULT_PREFERENCES.cryptoProducts],

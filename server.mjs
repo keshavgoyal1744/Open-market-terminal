@@ -402,6 +402,11 @@ async function handleApi(request, response, url, context) {
     return sendJson(response, 200, { events: await market.getWatchlistEvents(symbols) });
   }
 
+  if (request.method === "GET" && url.pathname === "/api/research-rail") {
+    const symbols = splitList(url.searchParams.get("symbols"));
+    return sendJson(response, 200, await market.getResearchRail(symbols));
+  }
+
   if (request.method === "GET" && url.pathname === "/api/calendar") {
     const symbols = splitList(url.searchParams.get("symbols"));
     return sendJson(response, 200, await market.getDeskCalendar(symbols));
@@ -674,6 +679,9 @@ function sanitizePreferencePatch(body) {
     watchlistSymbols: Array.isArray(body.watchlistSymbols)
       ? body.watchlistSymbols.map(cleanSymbol).filter(Boolean).slice(0, 32)
       : undefined,
+    researchPinnedSymbols: Array.isArray(body.researchPinnedSymbols)
+      ? body.researchPinnedSymbols.map(cleanSymbol).filter(Boolean).slice(0, 32)
+      : undefined,
     detailSymbol: typeof body.detailSymbol === "string" ? cleanSymbol(body.detailSymbol) : undefined,
     cryptoProducts: Array.isArray(body.cryptoProducts)
       ? body.cryptoProducts.map(cleanSymbol).filter(Boolean).slice(0, 12)
@@ -727,6 +735,9 @@ function sanitizeWorkspaceSnapshot(snapshot) {
   return {
     watchlistSymbols: Array.isArray(snapshot.watchlistSymbols)
       ? snapshot.watchlistSymbols.map(cleanSymbol).filter(Boolean).slice(0, 32)
+      : [],
+    researchPinnedSymbols: Array.isArray(snapshot.researchPinnedSymbols)
+      ? snapshot.researchPinnedSymbols.map(cleanSymbol).filter(Boolean).slice(0, 32)
       : [],
     detailSymbol: typeof snapshot.detailSymbol === "string" ? cleanSymbol(snapshot.detailSymbol) : "AAPL",
     cryptoProducts: Array.isArray(snapshot.cryptoProducts)

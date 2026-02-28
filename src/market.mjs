@@ -239,6 +239,63 @@ export class MarketDataService {
       .sort((left, right) => new Date(right.filing.filingDate) - new Date(left.filing.filingDate));
   }
 
+  async getResearchRail(symbols) {
+    const universe = [...new Set(symbols.map((symbol) => symbol?.trim().toUpperCase()).filter(Boolean))].slice(0, 18);
+    const key = universe.join(",");
+
+    return this.cache.getOrSet(
+      `research-rail:${key}`,
+      async () => {
+        const quotes = await this.getQuotes(universe).catch(() => []);
+        const quoteMap = new Map(quotes.map((quote) => [quote.symbol, quote]));
+
+        const detailRows = await Promise.all(
+          universe.map(async (symbol) => {
+            const [overview, history] = await Promise.all([
+              this.cache.getOrSet(
+                `overview:${symbol}`,
+                async () => {
+                  try {
+                    return await getCompanyOverview(symbol);
+                  } catch {
+                    return emptyMarketOverview(symbol, symbol, null);
+                  }
+                },
+                { ttlMs: config.companyTtlMs, staleMs: config.companyTtlMs * 4 },
+              ),
+              this.getHistory(symbol, "1mo", "1d").catch(() => []),
+            ]);
+
+            const sparkline = history
+              .map((point) => point.close)
+              .filter(Number.isFinite)
+              .slice(-16);
+
+            const quote = quoteMap.get(symbol) ?? null;
+            return {
+              symbol,
+              shortName: quote?.shortName ?? overview.shortName ?? symbol,
+              price: quote?.price ?? null,
+              changePercent: quote?.changePercent ?? null,
+              change: quote?.change ?? null,
+              sector: overview.sector ?? "Unclassified",
+              industry: overview.industry ?? null,
+              exchange: quote?.exchange ?? overview.exchange ?? null,
+              type: quote?.type ?? null,
+              sparkline,
+            };
+          }),
+        );
+
+        return {
+          asOf: new Date().toISOString(),
+          items: detailRows,
+        };
+      },
+      { ttlMs: config.quoteTtlMs * 2, staleMs: config.quoteTtlMs * 6 },
+    );
+  }
+
   async warmQuotes(symbols) {
     if (!symbols.length) {
       return [];
