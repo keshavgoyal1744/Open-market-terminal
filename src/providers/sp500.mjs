@@ -13,6 +13,16 @@ export async function getSp500Universe() {
     const workbook = await fetchWorkbookBuffer(SPY_HOLDINGS_URL);
     const parsed = parseSpyHoldingsWorkbook(workbook);
     if (parsed.length >= 400) {
+      let normalized = normalizeConstituents(parsed);
+      if (needsSectorBackfill(normalized)) {
+        try {
+          const html = await fetchText(SP500_WIKI_URL);
+          const fallback = normalizeConstituents(parseWikipediaConstituents(html));
+          normalized = applySectorBackfill(normalized, fallback);
+        } catch (error) {
+          warnings.push(`Wikipedia sector backfill unavailable: ${error.message}`);
+        }
+      }
       return {
         asOf: new Date().toISOString(),
         source: {
@@ -21,7 +31,7 @@ export async function getSp500Universe() {
           url: SPY_HOLDINGS_URL,
         },
         warnings,
-        constituents: normalizeConstituents(parsed),
+        constituents: normalized,
       };
     }
     warnings.push(`State Street holdings parser returned only ${parsed.length} rows.`);
@@ -279,7 +289,7 @@ function normalizeConstituents(items) {
     unique.push({
       symbol: item.symbol,
       name: item.name,
-      sector: item.sector ?? null,
+      sector: canonicalSectorLabel(item.sector),
       sourceWeight: item.weight ?? null,
     });
   }
@@ -292,6 +302,55 @@ function normalizeConstituents(items) {
     ...item,
     sourceWeight: Number.isFinite(item.sourceWeight) ? item.sourceWeight * scale : null,
   }));
+}
+
+function needsSectorBackfill(items) {
+  const sectors = [...new Set(items.map((item) => item.sector).filter(Boolean))];
+  const missing = items.filter((item) => !item.sector).length;
+  return sectors.length < 8 || missing > items.length * 0.2;
+}
+
+function applySectorBackfill(primary, fallback) {
+  const fallbackMap = new Map(fallback.map((item) => [item.symbol, item.sector]).filter((entry) => entry[1]));
+  return primary.map((item) => ({
+    ...item,
+    sector: item.sector ?? fallbackMap.get(item.symbol) ?? null,
+  }));
+}
+
+function canonicalSectorLabel(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    "information technology": "Technology",
+    technology: "Technology",
+    financials: "Financial Services",
+    "financial services": "Financial Services",
+    "health care": "Healthcare",
+    healthcare: "Healthcare",
+    "consumer discretionary": "Consumer Cyclical",
+    "consumer cyclical": "Consumer Cyclical",
+    "consumer staples": "Consumer Defensive",
+    "consumer defensive": "Consumer Defensive",
+    materials: "Basic Materials",
+    "basic materials": "Basic Materials",
+    energy: "Energy",
+    utilities: "Utilities",
+    industrials: "Industrials",
+    "communication services": "Communication Services",
+    "real estate": "Real Estate",
+  }[normalized] ?? titleCaseSector(normalized);
+}
+
+function titleCaseSector(value) {
+  return String(value ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function normalizeSymbol(value) {
