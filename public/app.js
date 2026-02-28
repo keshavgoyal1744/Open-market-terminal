@@ -1745,6 +1745,17 @@ async function loadHeatmap(force = false) {
     if (preferredSymbol) {
       await focusHeatmapSymbol(preferredSymbol);
     }
+
+    if (normalizePage(state.preferences.activePage) === "sectors") {
+      renderSectorBoardPanel(state.sectorBoard ?? {
+        sector: state.preferences.sectorFocus,
+        sectors: payload.sectors ?? [],
+        items: payload.tiles ?? [],
+        news: state.sectorBoard?.news ?? [],
+        asOf: payload.asOf,
+        warnings: payload.warnings ?? [],
+      });
+    }
   } catch (error) {
     setFeedStatus("Degraded");
     document.querySelector("#heatmapWarnings").innerHTML =
@@ -1756,6 +1767,16 @@ async function loadHeatmap(force = false) {
 async function loadSectorBoard(force = false) {
   const sector = String(state.preferences.sectorFocus ?? "").trim();
   try {
+    if (state.heatmap?.tiles?.length) {
+      renderSectorBoardPanel({
+        sector,
+        sectors: state.heatmap.sectors ?? DEFAULT_SECTORS,
+        items: state.heatmap.tiles,
+        news: [],
+        asOf: state.heatmap.asOf,
+        warnings: [],
+      });
+    }
     const payload = await api(`/api/sector-board?sector=${encodeURIComponent(sector)}${force ? "&force=1" : ""}`);
     state.sectorBoard = payload;
     state.preferences.sectorFocus = payload.sector ?? sector;
@@ -2917,6 +2938,26 @@ function filterSectorBoardItems(items, selectedSector) {
     return list;
   }
   return sectorAware.filter((item) => normalizeSectorKey(item?.sector) === selectedKey);
+}
+
+function deriveSectorBoardItems(payload, selectedSector) {
+  const liveItems = Array.isArray(state.heatmap?.tiles) ? state.heatmap.tiles : [];
+  const payloadItems = Array.isArray(payload?.items) ? payload.items : [];
+  const primary = liveItems.length ? filterSectorBoardItems(liveItems, selectedSector) : filterSectorBoardItems(payloadItems, selectedSector);
+  const payloadBySymbol = new Map(payloadItems.map((item) => [item.symbol, item]));
+
+  return primary.map((item) => {
+    const hydrated = payloadBySymbol.get(item.symbol);
+    return {
+      ...item,
+      ...(hydrated ?? {}),
+      sector: item.sector ?? hydrated?.sector ?? selectedSector,
+      marketCap: item.marketCap ?? hydrated?.marketCap ?? null,
+      volume: item.volume ?? hydrated?.volume ?? null,
+      price: item.price ?? hydrated?.price ?? null,
+      changePercent: item.changePercent ?? hydrated?.changePercent ?? null,
+    };
+  });
 }
 
 function summarizeSectorBoardItems(items) {
@@ -4778,7 +4819,7 @@ function renderHeatmapContext(payload) {
 
 function renderSectorBoardSummary(payload) {
   const sectorLabel = resolveSectorBoardSector(payload);
-  const items = filterSectorBoardItems(payload?.items ?? [], sectorLabel);
+  const items = deriveSectorBoardItems(payload, sectorLabel);
   const summary = summarizeSectorBoardItems(items);
   return [
     renderTerminalStat("Sector", sectorLabel ?? "n/a", "focus board"),
@@ -4861,7 +4902,7 @@ function renderSectorBoardPanel(payload) {
     return;
   }
   const sectorLabel = resolveSectorBoardSector(payload);
-  const filteredItems = filterSectorBoardItems(payload?.items ?? [], sectorLabel);
+  const filteredItems = deriveSectorBoardItems(payload, sectorLabel);
   const sortedItems = [...filteredItems].sort((left, right) => (Number(right.weight) || 0) - (Number(left.weight) || 0));
   const summary = summarizeSectorBoardItems(sortedItems);
   const leaders = [...sortedItems]
