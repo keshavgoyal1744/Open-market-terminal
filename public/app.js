@@ -6349,7 +6349,7 @@ function renderIntelSignals(payload, holders) {
 function topIntelHolders(payload) {
   return [...(payload?.ownership?.topInstitutionalHolders ?? []), ...(payload?.ownership?.topFundHolders ?? [])]
     .filter((holder, index, all) => holder.holder && all.findIndex((entry) => entry.holder === holder.holder) === index)
-    .slice(0, 12);
+    .slice(0, 16);
 }
 
 function renderIntelHolderRows(holders) {
@@ -6374,6 +6374,55 @@ function renderIntelHolderRows(holders) {
         )
         .join("")
     : `<tr class="intel-row"><td colspan="3"><div class="muted">No public holder rows are available.</div></td></tr>`;
+}
+
+function renderIntelOwnershipSignals(payload) {
+  const filingSignals = payload?.ownership?.filingSignals ?? null;
+  const rows = [
+    ...(payload?.ownership?.insiderHolders ?? []).slice(0, 8).map((item) =>
+      renderIntelListItem(
+        item.relation ?? "insider holder",
+        item.name ?? "n/a",
+        item.positionDirect != null
+          ? `Direct ${formatCompact(item.positionDirect)} shares`
+          : item.transactionDescription ?? "Public insider holder row",
+      )),
+    ...(payload?.ownership?.insiderTransactions ?? []).slice(0, 8).map((item) =>
+      renderIntelListItem(
+        item.position ?? "insider trade",
+        item.insider ?? "n/a",
+        item.transactionText ?? item.ownership ?? "Public insider transaction",
+      )),
+    ...(filingSignals?.ownershipFormCount
+      ? [
+          renderIntelListItem(
+            "ownership filings",
+            "Beneficial ownership forms",
+            `${filingSignals.ownershipFormCount} recent 13D / 13G-style filings`,
+          ),
+        ]
+      : []),
+    ...(filingSignals?.insiderFormCount
+      ? [
+          renderIntelListItem(
+            "insider forms",
+            "Insider filing activity",
+            `${filingSignals.insiderFormCount} recent Form 3 / 4 / 5 rows`,
+          ),
+        ]
+      : []),
+    ...(filingSignals?.dealFormCount
+      ? [
+          renderIntelListItem(
+            "deal filings",
+            "Strategic filing cluster",
+            `${filingSignals.dealFormCount} recent 8-K / S-4 / 425-style deal signals`,
+          ),
+        ]
+      : []),
+  ];
+
+  return rows.join("") || renderIntelEmpty("No insider, filing, or ownership-flow rows are available.");
 }
 
 function renderIntelCompetitorRows(items) {
@@ -6522,10 +6571,19 @@ function buildIntelConsoleView(payload, holders, view) {
                 ${metric("Short Int", formatCompact(payload.ownership.sharesShort))}
               </div>`,
             )}
+            ${renderIntelSection(
+              "Ownership Signals",
+              `<div class="metric-strip intel-inline-metrics">
+                ${renderTerminalStat("Insider Rows", String(payload.ownership.insiderHolders?.length ?? 0), "reported holders")}
+                ${renderTerminalStat("Trade Rows", String(payload.ownership.insiderTransactions?.length ?? 0), "recent insider activity")}
+                ${renderTerminalStat("13D / 13G", String(payload.ownership.filingSignals?.ownershipFormCount ?? 0), "ownership filings")}
+                ${renderTerminalStat("Deal Signals", String(payload.ownership.filingSignals?.dealFormCount ?? 0), "8-K / S-4 / 425")}
+              </div>`,
+            )}
           </div>`,
-        secondaryTitle: "Coverage Notes",
-        secondaryMeta: `${payload.coverage.notes?.length ?? 0} notes`,
-        secondaryHtml: `<div class="list-stack">${coverageRows}</div>`,
+        secondaryTitle: "Insiders + Filings",
+        secondaryMeta: `${(payload.ownership.insiderHolders?.length ?? 0) + (payload.ownership.insiderTransactions?.length ?? 0) + (payload.ownership.filingSignals?.ownershipFormCount ?? 0)} tracked rows`,
+        secondaryHtml: `<div class="list-stack">${renderIntelOwnershipSignals(payload)}</div>`,
       };
     case "BMAP":
       return {

@@ -526,7 +526,7 @@ export class MarketDataService {
               }
             : null,
         ].filter(Boolean);
-        const resolvedHolders = dedupeHolders(holders.length ? holders : ownershipFallbacks);
+        const resolvedHolders = dedupeHolders([...holders, ...ownershipFallbacks]);
         const resolvedInsiderHolders = (
           company.market.insiderHolders?.length
             ? company.market.insiderHolders
@@ -1633,6 +1633,7 @@ function mergeGraphs(primary = { nodes: [], edges: [] }, secondary = { nodes: []
 
 function buildDerivedRelationshipIntel(symbol, company) {
   const market = company?.market ?? {};
+  const secSignals = company?.sec?.relationshipSignals ?? null;
   const issuerName = market.shortName ?? company?.sec?.title ?? symbol;
   const graphNodes = [{ id: symbol, label: issuerName, kind: "issuer", symbol }];
   const graphEdges = [];
@@ -1642,11 +1643,16 @@ function buildDerivedRelationshipIntel(symbol, company) {
   const supplierRelations = [];
   const customerRelations = [];
   const corporate = [];
+  const corporateRelations = [];
   const ecosystems = [];
   const eventChains = [];
   const customerConcentration = [];
   const geography = { revenueMix: [], manufacturing: [], supplyRegions: [] };
   const template = sectorTemplateForMarket(market);
+  const ownershipRows = buildOwnershipRows(market);
+  const insiderRows = (market.insiderHolders ?? []).slice(0, 10);
+  const insiderTransactions = (market.insiderTransactions ?? []).slice(0, 8);
+  const officerRows = (market.companyOfficers ?? []).slice(0, 10);
 
   const addNode = (node) => {
     if (node?.id && !graphNodes.find((entry) => entry.id === node.id)) {
@@ -1658,6 +1664,18 @@ function buildDerivedRelationshipIntel(symbol, company) {
     const key = `${edge.source}:${edge.target}:${edge.relation}:${edge.domain}`;
     if (edge.source && edge.target && !graphEdges.find((entry) => `${entry.source}:${entry.target}:${entry.relation}:${entry.domain}` === key)) {
       graphEdges.push(edge);
+    }
+  };
+
+  const addCorporateRelation = (item) => {
+    if (item?.target) {
+      corporateRelations.push(item);
+    }
+  };
+
+  const addCorporateNode = (item) => {
+    if (item?.name) {
+      corporate.push(item);
     }
   };
 
@@ -1722,27 +1740,163 @@ function buildDerivedRelationshipIntel(symbol, company) {
   ecosystems.push(...template.ecosystems);
   eventChains.push(...template.eventChains);
 
-  for (const holder of [...(market.topInstitutionalHolders ?? []), ...(market.topFundHolders ?? [])].slice(0, 5)) {
+  if (ownershipRows.length) {
+    coverageNotes.push(`Ownership overlay maps ${ownershipRows.length} named institutions and funds from public filings.`);
+  }
+
+  for (const holder of ownershipRows.slice(0, 14)) {
     if (!holder?.holder) {
       continue;
     }
-    const id = `holder:${holder.holder}`;
-    addNode({ id, label: holder.holder, kind: "investment" });
+    const holderSymbol = inferTickerFromText(holder.holder) ?? undefined;
+    const id = `holder:${templateKey(holder.holder)}`;
+    addNode({ id, label: holder.holder, kind: "investment", symbol: holderSymbol });
     addEdge({
       source: symbol,
       target: id,
-      relation: "holder",
+      relation: holder.ownershipType === "fund" ? "fund holder" : "institutional holder",
       domain: "investment",
-      label: holder.pctHeld != null ? `${roundTo(holder.pctHeld * 100, 2)}% public hold` : "public holder",
+      label: holderOwnershipNote(holder),
       weight: 3,
+    });
+    addCorporateRelation(
+      relation(
+        holder.holder,
+        holder.ownershipType === "fund" ? "fund holder" : "institutional holder",
+        "investment",
+        holderOwnershipNote(holder),
+        3,
+        holderSymbol ?? null,
+      ),
+    );
+  }
+
+  if (market.institutionPercentHeld != null) {
+    const institutionalId = `ownership:institutions:${symbol}`;
+    addNode({ id: institutionalId, label: "Institutional base", kind: "investment" });
+    addEdge({
+      source: symbol,
+      target: institutionalId,
+      relation: "institutional ownership",
+      domain: "investment",
+      label: `${roundTo(market.institutionPercentHeld * 100, 2)}% institutions held`,
+      weight: 3,
+    });
+    addCorporateRelation(
+      relation(
+        "Institutional base",
+        "institutional ownership",
+        "investment",
+        `${roundTo(market.institutionPercentHeld * 100, 2)}% institutions held`,
+        3,
+      ),
+    );
+  }
+
+  if (market.insiderPercentHeld != null) {
+    const insiderId = `ownership:insiders:${symbol}`;
+    addNode({ id: insiderId, label: "Insider ownership", kind: "investment" });
+    addEdge({
+      source: symbol,
+      target: insiderId,
+      relation: "insider ownership",
+      domain: "investment",
+      label: `${roundTo(market.insiderPercentHeld * 100, 2)}% insiders held`,
+      weight: 2,
+    });
+    addCorporateRelation(
+      relation(
+        "Insider ownership",
+        "insider ownership",
+        "investment",
+        `${roundTo(market.insiderPercentHeld * 100, 2)}% insiders held`,
+        2,
+      ),
+    );
+  }
+
+  if (market.floatShares != null) {
+    const floatId = `ownership:float:${symbol}`;
+    addNode({ id: floatId, label: "Public float", kind: "investment" });
+    addEdge({
+      source: symbol,
+      target: floatId,
+      relation: "float",
+      domain: "investment",
+      label: `${compactQuantity(market.floatShares)} shares`,
+      weight: 2,
     });
   }
 
-  for (const officer of (market.companyOfficers ?? []).slice(0, 4)) {
+  for (const insider of insiderRows) {
+    if (!insider?.name) {
+      continue;
+    }
+    const insiderSymbol = inferTickerFromText(insider.name) ?? undefined;
+    const id = `insider:${templateKey(insider.name)}`;
+    const note = insiderHoldingNote(insider);
+    addNode({ id, label: insider.name, kind: "investment", symbol: insiderSymbol });
+    addEdge({
+      source: symbol,
+      target: id,
+      relation: insider.relation ?? "insider holder",
+      domain: "investment",
+      label: note,
+      weight: 2,
+    });
+    addCorporateRelation(
+      relation(
+        insider.name,
+        insider.relation ?? "insider holder",
+        "investment",
+        note,
+        2,
+        insiderSymbol ?? null,
+      ),
+    );
+    addCorporateNode({
+      root: symbol,
+      type: "insider",
+      name: insider.name,
+      description: `${insider.relation ?? "Insider holder"} | ${note}`,
+    });
+  }
+
+  if (insiderTransactions.length) {
+    const insiderActivityId = `insider-activity:${symbol}`;
+    addNode({ id: insiderActivityId, label: "Recent insider activity", kind: "investment" });
+    addEdge({
+      source: symbol,
+      target: insiderActivityId,
+      relation: "insider activity",
+      domain: "investment",
+      label: `${insiderTransactions.length} recent insider transaction rows`,
+      weight: 2,
+    });
+    addCorporateRelation(
+      relation(
+        "Recent insider activity",
+        "insider filings",
+        "investment",
+        `${insiderTransactions.length} recent insider transaction rows`,
+        2,
+      ),
+    );
+    eventChains.push({
+      title: "Insider activity signal",
+      steps: [
+        `${symbol} insider filings update`,
+        "Positioning and governance watchers reassess the name",
+        "Peer sentiment can shift with the signal",
+      ],
+    });
+  }
+
+  for (const officer of officerRows) {
     if (!officer?.name) {
       continue;
     }
-    const id = `officer:${officer.name}`;
+    const id = `officer:${templateKey(officer.name)}`;
     addNode({ id, label: officer.name, kind: "corporate" });
     addEdge({
       source: symbol,
@@ -1758,11 +1912,92 @@ function buildDerivedRelationshipIntel(symbol, company) {
       background: [officer.age != null ? `Age ${officer.age}` : null, officer.yearBorn != null ? `Born ${officer.yearBorn}` : null].filter(Boolean),
       compensation: officer.totalPay ?? null,
     });
-    corporate.push({
+    addCorporateRelation(
+      relation(
+        officer.name,
+        officer.title ?? "executive",
+        "corporate",
+        officer.totalPay != null ? `Comp ${Math.round(officer.totalPay).toLocaleString()}` : "Public officer listing",
+        2,
+      ),
+    );
+    addCorporateNode({
       root: symbol,
       type: "officer",
       name: officer.name,
       description: officer.title ?? "Public officer listing",
+    });
+  }
+
+  if (secSignals?.ownershipFormCount) {
+    const ownershipSignalId = `sec-ownership:${symbol}`;
+    addNode({ id: ownershipSignalId, label: "Beneficial ownership filings", kind: "investment" });
+    addEdge({
+      source: symbol,
+      target: ownershipSignalId,
+      relation: "13D / 13G activity",
+      domain: "investment",
+      label: `${secSignals.ownershipFormCount} recent beneficial-ownership forms`,
+      weight: 2,
+    });
+    addCorporateRelation(
+      relation(
+        "Beneficial ownership filings",
+        "ownership filings",
+        "investment",
+        `${secSignals.ownershipFormCount} recent beneficial-ownership forms`,
+        2,
+      ),
+    );
+    addCorporateNode({
+      root: symbol,
+      type: "ownership filing",
+      name: "Beneficial ownership filings",
+      description: `${secSignals.ownershipFormCount} recent 13D / 13G-style forms`,
+    });
+    eventChains.push({
+      title: "Ownership filing cluster",
+      steps: [
+        `${symbol} beneficial-ownership filing posts`,
+        "Positioning watchers assess sponsor or activist interest",
+        "Peer governance-sensitive names can reprice around the signal",
+      ],
+    });
+  }
+
+  if (secSignals?.dealFormCount) {
+    const dealSignalId = `sec-deals:${symbol}`;
+    addNode({ id: dealSignalId, label: "Strategic / deal filings", kind: "corporate" });
+    addEdge({
+      source: symbol,
+      target: dealSignalId,
+      relation: "deal filing activity",
+      domain: "corporate",
+      label: `${secSignals.dealFormCount} recent 8-K / S-4 / 425 deal signals`,
+      weight: 2,
+    });
+    addCorporateRelation(
+      relation(
+        "Strategic / deal filings",
+        "deal activity",
+        "corporate",
+        `${secSignals.dealFormCount} recent 8-K / S-4 / 425 deal signals`,
+        2,
+      ),
+    );
+    addCorporateNode({
+      root: symbol,
+      type: "deal signal",
+      name: "Strategic / deal filings",
+      description: `${secSignals.dealFormCount} recent deal-related filings`,
+    });
+    eventChains.push({
+      title: "Strategic filing activity",
+      steps: [
+        `${symbol} deal-related filing posts`,
+        "Counterparties, owners, and sector peers reassess optionality",
+        "Corporate-event probability gets repriced",
+      ],
     });
   }
 
@@ -1815,7 +2050,7 @@ function buildDerivedRelationshipIntel(symbol, company) {
     supplyChain: { suppliers: supplierRelations, customers: customerRelations, ecosystem: ecosystemRelations },
     customers: customerRelations,
     ecosystemRelations,
-    corporateRelations: [],
+    corporateRelations,
     corporate,
     customerConcentration,
     geography,
@@ -1826,6 +2061,59 @@ function buildDerivedRelationshipIntel(symbol, company) {
       edges: graphEdges,
     },
   };
+}
+
+function buildOwnershipRows(market = {}) {
+  const rows = [
+    ...(market.topInstitutionalHolders ?? []).map((item) => ({ ...item, ownershipType: "institution" })),
+    ...(market.topFundHolders ?? []).map((item) => ({ ...item, ownershipType: "fund" })),
+  ];
+  const seen = new Set();
+  return rows.filter((item) => {
+    const key = `${String(item?.holder ?? "").trim().toLowerCase()}:${String(item?.ownershipType ?? "").trim().toLowerCase()}`;
+    if (!key.trim() || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function holderOwnershipNote(holder) {
+  if (!holder) {
+    return "public owner";
+  }
+  const pct = holder.pctHeld != null ? `${roundTo(holder.pctHeld * 100, 2)}% held` : null;
+  const shares = holder.shares != null ? `${compactQuantity(holder.shares)} shares` : null;
+  const reportDate = holder.reportDate ? `reported ${holder.reportDate}` : null;
+  return [pct, shares, reportDate, holder.note ?? null].filter(Boolean).join(" | ") || "public owner";
+}
+
+function insiderHoldingNote(holder) {
+  if (!holder) {
+    return "public insider signal";
+  }
+  const direct = holder.positionDirect != null ? `Direct ${compactQuantity(holder.positionDirect)} shares` : null;
+  const indirect = holder.positionIndirect != null ? `Indirect ${compactQuantity(holder.positionIndirect)} shares` : null;
+  const latest = holder.latestTransDate ? `latest ${holder.latestTransDate}` : null;
+  return [direct, indirect, latest, holder.transactionDescription ?? null].filter(Boolean).join(" | ") || "public insider signal";
+}
+
+function compactQuantity(value) {
+  const amount = numeric(value);
+  if (!Number.isFinite(amount)) {
+    return "n/a";
+  }
+  if (amount >= 1_000_000_000) {
+    return `${roundTo(amount / 1_000_000_000, 2)}B`;
+  }
+  if (amount >= 1_000_000) {
+    return `${roundTo(amount / 1_000_000, 2)}M`;
+  }
+  if (amount >= 1_000) {
+    return `${roundTo(amount / 1_000, 2)}K`;
+  }
+  return `${roundTo(amount, 2)}`;
 }
 
 function emptyCompanyMapIntel(symbol) {
@@ -1928,21 +2216,30 @@ function inferTickerFromText(value) {
 
 const KNOWN_PUBLIC_TICKER_ALIASES = new Map([
   ["APPLE", "AAPL"],
+  ["APPLE INC", "AAPL"],
   ["MICROSOFT", "MSFT"],
+  ["MICROSOFT CORP", "MSFT"],
   ["GOOGLE", "GOOGL"],
   ["ALPHABET", "GOOGL"],
+  ["ALPHABET INC", "GOOGL"],
   ["YOUTUBE", "GOOGL"],
   ["AMAZON", "AMZN"],
   ["AMAZON WEB SERVICES", "AMZN"],
+  ["AMAZON COM", "AMZN"],
   ["NVIDIA", "NVDA"],
+  ["NVIDIA CORP", "NVDA"],
   ["ADVANCED MICRO DEVICES", "AMD"],
   ["AMD", "AMD"],
   ["INTEL", "INTC"],
   ["QUALCOMM", "QCOM"],
   ["BROADCOM", "AVGO"],
+  ["MARVELL", "MRVL"],
+  ["MICRON", "MU"],
   ["TAIWAN SEMICONDUCTOR MANUFACTURING", "TSM"],
   ["TSMC", "TSM"],
   ["ASML", "ASML"],
+  ["APPLIED MATERIALS", "AMAT"],
+  ["LAM RESEARCH", "LRCX"],
   ["TESLA", "TSLA"],
   ["META", "META"],
   ["META PLATFORMS", "META"],
@@ -1951,17 +2248,94 @@ const KNOWN_PUBLIC_TICKER_ALIASES = new Map([
   ["ORACLE", "ORCL"],
   ["SALESFORCE", "CRM"],
   ["ADOBE", "ADBE"],
+  ["SERVICENOW", "NOW"],
+  ["IBM", "IBM"],
+  ["CISCO", "CSCO"],
+  ["ARISTA NETWORKS", "ANET"],
+  ["DELL", "DELL"],
+  ["HEWLETT PACKARD ENTERPRISE", "HPE"],
+  ["HP", "HPQ"],
   ["JPMORGAN CHASE", "JPM"],
   ["JPMORGAN", "JPM"],
   ["GOLDMAN SACHS", "GS"],
   ["BLACKROCK", "BLK"],
+  ["STATE STREET", "STT"],
+  ["CHARLES SCHWAB", "SCHW"],
+  ["MORGAN STANLEY", "MS"],
+  ["BANK OF NEW YORK MELLON", "BK"],
+  ["BANK OF AMERICA", "BAC"],
+  ["WELLS FARGO", "WFC"],
+  ["CITIGROUP", "C"],
+  ["BLACKSTONE", "BX"],
+  ["KKR", "KKR"],
+  ["APOLLO GLOBAL MANAGEMENT", "APO"],
+  ["INVESCO", "IVZ"],
+  ["FRANKLIN RESOURCES", "BEN"],
+  ["T ROWE PRICE", "TROW"],
   ["BERKSHIRE HATHAWAY", "BRK-B"],
   ["VISA", "V"],
   ["MASTERCARD", "MA"],
+  ["PAYPAL", "PYPL"],
+  ["AMERICAN EXPRESS", "AXP"],
   ["EXXON MOBIL", "XOM"],
   ["CHEVRON", "CVX"],
+  ["CONOCOPHILLIPS", "COP"],
+  ["SLB", "SLB"],
+  ["HALLIBURTON", "HAL"],
+  ["BAKER HUGHES", "BKR"],
+  ["VALERO ENERGY", "VLO"],
+  ["PHILLIPS 66", "PSX"],
+  ["KINDER MORGAN", "KMI"],
+  ["ONEOK", "OKE"],
+  ["TARGA RESOURCES", "TRGP"],
   ["UNITEDHEALTH", "UNH"],
+  ["UNITEDHEALTH GROUP", "UNH"],
+  ["CVS HEALTH", "CVS"],
+  ["CIGNA", "CI"],
+  ["ELEVANCE HEALTH", "ELV"],
+  ["MCKESSON", "MCK"],
+  ["CARDINAL HEALTH", "CAH"],
+  ["CENCORA", "COR"],
+  ["MERCK", "MRK"],
+  ["ABBVIE", "ABBV"],
+  ["ELI LILLY", "LLY"],
+  ["BRISTOL MYERS SQUIBB", "BMY"],
+  ["PFIZER", "PFE"],
+  ["AMGEN", "AMGN"],
+  ["GILEAD", "GILD"],
+  ["VERTEX PHARMACEUTICALS", "VRTX"],
+  ["ABBOTT", "ABT"],
+  ["DANAHER", "DHR"],
+  ["THERMO FISHER", "TMO"],
   ["CARRIER GLOBAL", "CARR"],
+  ["BOEING", "BA"],
+  ["RTX", "RTX"],
+  ["LOCKHEED MARTIN", "LMT"],
+  ["NORTHROP GRUMMAN", "NOC"],
+  ["GENERAL DYNAMICS", "GD"],
+  ["HONEYWELL", "HON"],
+  ["HOWMET AEROSPACE", "HWM"],
+  ["UNITED PARCEL SERVICE", "UPS"],
+  ["FEDEX", "FDX"],
+  ["GENERAL ELECTRIC", "GE"],
+  ["GE VERNOVA", "GEV"],
+  ["DEERE", "DE"],
+  ["CATERPILLAR", "CAT"],
+  ["PARKER HANNIFIN", "PH"],
+  ["EATON", "ETN"],
+  ["EMERSON ELECTRIC", "EMR"],
+  ["ROCKWELL AUTOMATION", "ROK"],
+  ["WALMART", "WMT"],
+  ["COSTCO", "COST"],
+  ["HOME DEPOT", "HD"],
+  ["TARGET", "TGT"],
+  ["NIKE", "NKE"],
+  ["STARBUCKS", "SBUX"],
+  ["COCA COLA", "KO"],
+  ["PROCTER AND GAMBLE", "PG"],
+  ["PROCTER GAMBLE", "PG"],
+  ["PEPSICO", "PEP"],
+  ["MCDONALDS", "MCD"],
   ["SPDR GOLD SHARES", "GLD"],
   ["SPY", "SPY"],
   ["QQQ", "QQQ"],
@@ -1991,6 +2365,7 @@ function templateKey(value) {
 function sectorTemplateForMarket(market) {
   const sector = String(market?.sector ?? "").toLowerCase();
   const industry = market?.industry ?? market?.sector ?? "public market cluster";
+  const industryLower = String(market?.industry ?? "").toLowerCase();
 
   const defaults = {
     peerSymbols: [],
@@ -2021,6 +2396,104 @@ function sectorTemplateForMarket(market) {
   };
 
   if (sector.includes("technology")) {
+    if (industryLower.includes("semiconductor")) {
+      return {
+        ...defaults,
+        peerSymbols: ["NVDA", "AMD", "AVGO", "QCOM", "MU", "INTC"],
+        suppliers: [
+          relation("Taiwan Semiconductor Manufacturing", "foundry supplier", "supply-chain", "Advanced-node wafer capacity and packaging dependency", 4, "TSM"),
+          relation("ASML", "second-order supplier", "supply-chain", "Lithography bottleneck to leading-edge expansion", 3, "ASML"),
+          relation("Applied Materials", "equipment supplier", "supply-chain", "Wafer-fab equipment and process tooling", 3, "AMAT"),
+          relation("Lam Research", "equipment supplier", "supply-chain", "Etch and deposition process capacity", 3, "LRCX"),
+        ],
+        customers: [
+          relation("Microsoft", "cloud customer", "customer", "AI and cloud infrastructure demand", 3, "MSFT"),
+          relation("Amazon", "cloud / platform customer", "customer", "Datacenter and edge compute demand", 3, "AMZN"),
+          relation("Apple", "device / compute customer", "customer", "Consumer and edge silicon demand", 2, "AAPL"),
+        ],
+        ecosystem: [
+          relation("NVIDIA", "AI compute benchmark", "ecosystem", "AI accelerator pricing and platform read-through", 3, "NVDA"),
+          relation("Broadcom", "adjacent silicon platform", "ecosystem", "Networking and custom silicon adjacency", 2, "AVGO"),
+          relation(industry, "industry map", "ecosystem", "Public semiconductor peer cluster", 2),
+        ],
+        customerConcentration: [
+          concentration("Hyperscaler demand", "High", "Cloud and AI infrastructure buyers often drive the marginal read-through."),
+          concentration("Device / OEM demand", "Moderate", "PC, handset, and embedded channels still matter across many chip franchises."),
+        ],
+        geography: {
+          revenueMix: weights([["North America", 4, "Cloud and enterprise silicon demand"], ["Asia", 5, "Assembly, electronics, and regional customer base"], ["Europe", 2, "Industrial and auto exposure"]]),
+          manufacturing: weights([["Taiwan", 5, "Leading-edge foundry concentration"], ["US", 3, "Design, validation, and some advanced packaging"], ["Southeast Asia", 3, "Assembly and test ecosystem"]]),
+          supplyRegions: weights([["Taiwan", 5, "Foundry and packaging bottleneck"], ["Netherlands", 4, "Lithography tool dependency"], ["Japan", 3, "Materials and equipment inputs"]]),
+        },
+        ecosystems: [
+          ecosystem("Semiconductor stack", ["Design", "Foundry", "Packaging", "Cloud / OEM demand"]),
+        ],
+        eventChains: [
+          impact("Foundry or packaging constraint", ["TSMC capacity tightens", "Lead times and margins reprice", "Adjacent chip and equipment names react"]),
+          impact("AI infrastructure demand surprise", ["Cloud capex outlook changes", "Compute and memory peers rerate", "Second-order equipment suppliers move"]),
+        ],
+        coverageNote: "Semiconductor fallback maps add named public foundries, equipment vendors, and hyperscaler demand nodes when no curated map exists.",
+      };
+    }
+
+    if (industryLower.includes("software") || industryLower.includes("application") || industryLower.includes("systems")) {
+      return {
+        ...defaults,
+        peerSymbols: ["MSFT", "ORCL", "CRM", "NOW", "ADBE"],
+        suppliers: [
+          relation("Microsoft", "platform partner", "supply-chain", "Azure and enterprise-stack dependency", 3, "MSFT"),
+          relation("Amazon", "cloud partner", "supply-chain", "AWS infrastructure and partner-stack sensitivity", 3, "AMZN"),
+          relation("Alphabet", "cloud partner", "supply-chain", "GCP and developer-platform dependency", 2, "GOOGL"),
+          relation("Accenture", "implementation partner", "supply-chain", "Systems-integrator and deployment channel", 2, "ACN"),
+        ],
+        customers: [
+          relation("Enterprise IT buyers", "customer base", "customer", "Seat growth, renewal, and enterprise-spend sensitivity", 3),
+          relation("Public sector / regulated buyers", "customer base", "customer", "Multi-year digital transformation and compliance budgets", 2),
+        ],
+        ecosystem: [
+          relation("ServiceNow", "workflow peer", "ecosystem", "Platform software and automation adjacency", 2, "NOW"),
+          relation("Salesforce", "application peer", "ecosystem", "Enterprise application and CRM read-through", 2, "CRM"),
+          relation(industry, "industry map", "ecosystem", "Public software peer cluster", 2),
+        ],
+        customerConcentration: [
+          concentration("Enterprise renewals", "High", "Renewal cadence, expansion, and pricing often dominate the setup."),
+          concentration("Cloud attach", "Moderate", "Public cloud and services partners often influence delivery and margin mix."),
+        ],
+        eventChains: [
+          impact("Enterprise software demand shift", ["Pipeline and renewal outlook move", "Peer software names rerate", "Cloud and services partners react"]),
+        ],
+        coverageNote: "Software fallback maps connect the issuer to cloud platforms, implementation channels, and enterprise budget drivers.",
+      };
+    }
+
+    if (industryLower.includes("communication equipment") || industryLower.includes("computer") || industryLower.includes("consumer electronics")) {
+      return {
+        ...defaults,
+        peerSymbols: ["AAPL", "CSCO", "QCOM", "DELL", "HPQ"],
+        suppliers: [
+          relation("Taiwan Semiconductor Manufacturing", "chip supplier", "supply-chain", "Advanced silicon dependency", 3, "TSM"),
+          relation("Broadcom", "component supplier", "supply-chain", "Connectivity and custom silicon inputs", 2, "AVGO"),
+          relation("FedEx", "logistics partner", "supply-chain", "Global device fulfillment", 2, "FDX"),
+          relation("United Parcel Service", "logistics partner", "supply-chain", "Distribution throughput and last-mile flow", 2, "UPS"),
+        ],
+        customers: [
+          relation("Carrier / reseller channels", "distribution", "customer", "Telecom and reseller demand channels", 2),
+          relation("Consumers / device fleets", "end demand", "customer", "Upgrade cycle and replacement demand", 3),
+        ],
+        ecosystem: [
+          relation("Apple", "device platform anchor", "ecosystem", "Consumer hardware and services read-through", 2, "AAPL"),
+          relation("Qualcomm", "chip ecosystem peer", "ecosystem", "Wireless and edge silicon adjacency", 2, "QCOM"),
+        ],
+        customerConcentration: [
+          concentration("Channel inventory", "Moderate", "Carrier, distribution, and OEM inventory can drive quarter-to-quarter volatility."),
+        ],
+        eventChains: [
+          impact("Device cycle turns", ["Order visibility shifts", "Component and logistics partners react", "Consumer hardware peers rerate"]),
+        ],
+        coverageNote: "Hardware fallback maps emphasize chip supply, logistics, and channel inventory dependence.",
+      };
+    }
+
     return {
       ...defaults,
       peerSymbols: ["MSFT", "AAPL", "NVDA", "AMD", "AVGO"],
@@ -2056,6 +2529,59 @@ function sectorTemplateForMarket(market) {
   }
 
   if (sector.includes("health")) {
+    if (industryLower.includes("drug") || industryLower.includes("biotech") || industryLower.includes("pharmaceutical")) {
+      return {
+        ...defaults,
+        peerSymbols: ["LLY", "MRK", "ABBV", "BMY", "AMGN", "PFE"],
+        suppliers: [
+          relation("McKesson", "distribution partner", "supply-chain", "Drug wholesale channel and inventory flow", 3, "MCK"),
+          relation("Cardinal Health", "distribution partner", "supply-chain", "Drug distribution and provider channel", 2, "CAH"),
+          relation("Cencora", "distribution partner", "supply-chain", "Commercial and specialty distribution", 2, "COR"),
+        ],
+        customers: [
+          relation("PBMs / payers", "reimbursement channel", "customer", "Formulary access and reimbursement sensitivity", 3),
+          relation("Hospitals / providers", "care channel", "customer", "Treatment volume and site-of-care demand", 2),
+        ],
+        ecosystem: [
+          relation("UnitedHealth", "payer ecosystem", "ecosystem", "Managed-care reimbursement read-through", 2, "UNH"),
+          relation("CVS Health", "PBM ecosystem", "ecosystem", "Pharmacy benefit and retail-health adjacency", 2, "CVS"),
+        ],
+        customerConcentration: [
+          concentration("Reimbursement access", "High", "Payers, PBMs, and formulary positioning often dominate the revenue outlook."),
+        ],
+        eventChains: [
+          impact("Drug price or trial outcome shifts", ["Commercial outlook changes", "Payer and distributor channels react", "Therapeutic-area peers rerate"]),
+        ],
+        coverageNote: "Pharma fallback maps add distribution, payer, and reimbursement nodes around the issuer.",
+      };
+    }
+
+    if (industryLower.includes("healthcare plans") || industryLower.includes("managed health")) {
+      return {
+        ...defaults,
+        peerSymbols: ["UNH", "ELV", "CVS", "CI", "HUM"],
+        suppliers: [
+          relation("Hospitals / provider networks", "care supply", "supply-chain", "Medical-cost and negotiated-rate sensitivity", 3),
+          relation("CVS Health", "pharmacy / PBM partner", "supply-chain", "Pharmacy and benefit-management channel", 2, "CVS"),
+        ],
+        customers: [
+          relation("Employers / members", "covered lives", "customer", "Enrollment and premium growth", 3),
+          relation("Government programs", "public coverage channel", "customer", "Medicare / Medicaid exposure", 2),
+        ],
+        ecosystem: [
+          relation("UnitedHealth", "managed-care benchmark", "ecosystem", "Managed-care and medical-cost read-through", 3, "UNH"),
+          relation("Humana", "senior-focused peer", "ecosystem", "Medicare Advantage sensitivity", 2, "HUM"),
+        ],
+        customerConcentration: [
+          concentration("Government / employer mix", "High", "Payer economics are heavily driven by enrollment mix, rate filings, and medical-loss trends."),
+        ],
+        eventChains: [
+          impact("Medical-cost trend changes", ["MLR outlook shifts", "Managed-care peers rerate", "Provider and PBM baskets react"]),
+        ],
+        coverageNote: "Managed-care fallback maps emphasize provider cost, PBM rails, and enrollment mix.",
+      };
+    }
+
     return {
       ...defaults,
       peerSymbols: ["UNH", "LLY", "MRK", "ABBV", "CVS"],
@@ -2081,6 +2607,33 @@ function sectorTemplateForMarket(market) {
   }
 
   if (sector.includes("financial")) {
+    if (industryLower.includes("bank")) {
+      return {
+        ...defaults,
+        peerSymbols: ["JPM", "BAC", "WFC", "C", "PNC", "USB"],
+        suppliers: [
+          relation("Funding markets", "liquidity source", "supply-chain", "Deposit beta and wholesale funding sensitivity", 3),
+          relation("Visa", "payments rail", "supply-chain", "Card network and transaction-flow dependency", 2, "V"),
+          relation("Mastercard", "payments rail", "supply-chain", "Card network and fee sensitivity", 2, "MA"),
+        ],
+        customers: [
+          relation("Consumers", "deposit / lending base", "customer", "Cards, deposits, and unsecured credit demand", 3),
+          relation("Corporate clients", "treasury / lending base", "customer", "Treasury, loan, and capital-markets demand", 2),
+        ],
+        ecosystem: [
+          relation("JPMorgan Chase", "money-center benchmark", "ecosystem", "Large-bank funding and fee benchmark", 3, "JPM"),
+          relation("Bank of America", "consumer-banking peer", "ecosystem", "Consumer and commercial banking read-through", 2, "BAC"),
+        ],
+        customerConcentration: [
+          concentration("Funding and credit quality", "High", "Deposit stability, credit costs, and fee momentum dominate most large-bank setups."),
+        ],
+        eventChains: [
+          impact("Funding or credit conditions tighten", ["NIM and credit-loss outlook move", "Bank peers rerate", "Payment and broker rails react"]),
+        ],
+        coverageNote: "Banking fallback maps link issuers to funding markets, payment rails, and consumer / corporate demand.",
+      };
+    }
+
     return {
       ...defaults,
       peerSymbols: ["JPM", "BAC", "GS", "MS", "V"],
@@ -2106,6 +2659,37 @@ function sectorTemplateForMarket(market) {
   }
 
   if (sector.includes("energy")) {
+    if (industryLower.includes("integrated") || industryLower.includes("oil gas")) {
+      return {
+        ...defaults,
+        peerSymbols: ["XOM", "CVX", "COP", "VLO", "PSX"],
+        suppliers: [
+          relation("SLB", "service partner", "supply-chain", "Field-service and upstream efficiency dependency", 3, "SLB"),
+          relation("Halliburton", "service partner", "supply-chain", "Completion and drilling support", 2, "HAL"),
+          relation("Baker Hughes", "equipment partner", "supply-chain", "Equipment and oilfield services", 2, "BKR"),
+          relation("Kinder Morgan", "midstream partner", "supply-chain", "Gathering, storage, and transport capacity", 2, "KMI"),
+        ],
+        customers: [
+          relation("Valero Energy", "refining customer", "customer", "Downstream margin and product demand read-through", 2, "VLO"),
+          relation("Phillips 66", "refining customer", "customer", "Refining and product channel sensitivity", 2, "PSX"),
+          relation("Global industrial demand", "macro demand", "customer", "Oil, gas, and product consumption", 3),
+        ],
+        ecosystem: [
+          relation("ConocoPhillips", "upstream benchmark", "ecosystem", "Exploration and production read-through", 2, "COP"),
+          relation("Chevron", "integrated major peer", "ecosystem", "Integrated major benchmark", 2, "CVX"),
+          relation("Exxon Mobil", "integrated major peer", "ecosystem", "Integrated major benchmark", 2, "XOM"),
+        ],
+        customerConcentration: [
+          concentration("Commodity pricing", "High", "Benchmark crude / gas curves usually matter more than any one named customer."),
+        ],
+        eventChains: [
+          impact("Oil or gas price spike", ["Integrated majors rerate", "Service and midstream names follow", "Transport-sensitive sectors feel pressure"]),
+          impact("Refining margin compression", ["Downstream earnings fade", "Integrated majors diverge from refiners", "Product-sensitive peers reprice"]),
+        ],
+        coverageNote: "Integrated-energy fallback maps add named service, midstream, and downstream public nodes.",
+      };
+    }
+
     return {
       ...defaults,
       peerSymbols: ["XOM", "CVX", "SLB", "EOG", "VLO"],
@@ -2131,6 +2715,59 @@ function sectorTemplateForMarket(market) {
   }
 
   if (sector.includes("industrial")) {
+    if (industryLower.includes("aerospace") || industryLower.includes("defense")) {
+      return {
+        ...defaults,
+        peerSymbols: ["RTX", "BA", "LMT", "NOC", "GD", "HWM"],
+        suppliers: [
+          relation("Howmet Aerospace", "component supplier", "supply-chain", "Engine and structural component inputs", 3, "HWM"),
+          relation("Honeywell", "avionics supplier", "supply-chain", "Avionics and control systems", 2, "HON"),
+          relation("RTX", "program partner", "supply-chain", "Defense and engine program overlap", 2, "RTX"),
+        ],
+        customers: [
+          relation("US / allied governments", "program customer", "customer", "Defense budget and program timing", 3),
+          relation("Commercial airlines", "fleet demand", "customer", "Aircraft and aftermarket demand", 2),
+        ],
+        ecosystem: [
+          relation("Boeing", "platform benchmark", "ecosystem", "Commercial-aerospace program sensitivity", 2, "BA"),
+          relation("Lockheed Martin", "defense benchmark", "ecosystem", "Defense spending and program execution", 2, "LMT"),
+        ],
+        customerConcentration: [
+          concentration("Government budgets", "High", "Program timing and defense budgets often dominate aerospace / defense setups."),
+        ],
+        eventChains: [
+          impact("Program timing or defense budget shifts", ["Backlog and margin outlook change", "Aerospace peers rerate", "Supplier chain names react"]),
+        ],
+        coverageNote: "Aerospace fallback maps emphasize program customers, avionics, and component suppliers.",
+      };
+    }
+
+    if (industryLower.includes("air freight") || industryLower.includes("logistics")) {
+      return {
+        ...defaults,
+        peerSymbols: ["UPS", "FDX", "CHRW", "EXPD", "JBHT"],
+        suppliers: [
+          relation("FedEx", "logistics peer / partner", "supply-chain", "Air and parcel throughput read-through", 3, "FDX"),
+          relation("United Parcel Service", "logistics peer / partner", "supply-chain", "Parcel network and pricing discipline", 3, "UPS"),
+          relation("Wabtec", "equipment supplier", "supply-chain", "Transport equipment and service support", 2, "WAB"),
+        ],
+        customers: [
+          relation("Amazon", "large shipper", "customer", "E-commerce shipping demand", 3, "AMZN"),
+          relation("Retail / industrial shippers", "customer base", "customer", "Freight and parcel volume mix", 2),
+        ],
+        ecosystem: [
+          relation("Transportation demand", "macro node", "ecosystem", "Industrial output and consumer demand sensitivity", 3),
+        ],
+        customerConcentration: [
+          concentration("Large shipping accounts", "Moderate", "Parcel and freight names can carry meaningful concentration to large enterprise shippers."),
+        ],
+        eventChains: [
+          impact("Freight demand shifts", ["Volume and yield outlook move", "Transport peers rerate", "Retail and industrial shipment baskets react"]),
+        ],
+        coverageNote: "Logistics fallback maps emphasize large shipping accounts and transport-throughput signals.",
+      };
+    }
+
     return {
       ...defaults,
       peerSymbols: ["GE", "CAT", "RTX", "BA", "UPS"],
@@ -2153,6 +2790,34 @@ function sectorTemplateForMarket(market) {
   }
 
   if (sector.includes("consumer")) {
+    if (industryLower.includes("internet") || industryLower.includes("direct marketing") || industryLower.includes("retail")) {
+      return {
+        ...defaults,
+        peerSymbols: ["AMZN", "WMT", "COST", "TGT", "EBAY", "BKNG"],
+        suppliers: [
+          relation("United Parcel Service", "logistics partner", "supply-chain", "Parcel throughput and delivery economics", 3, "UPS"),
+          relation("FedEx", "logistics partner", "supply-chain", "Parcel throughput and delivery economics", 3, "FDX"),
+          relation("Visa", "payments rail", "supply-chain", "Payment mix and transaction conversion", 2, "V"),
+          relation("Mastercard", "payments rail", "supply-chain", "Payment mix and transaction conversion", 2, "MA"),
+        ],
+        customers: [
+          relation("Consumers", "end demand", "customer", "Traffic, basket size, and discretionary spending", 3),
+          relation("Third-party sellers / merchants", "platform demand", "customer", "Marketplace and take-rate sensitivity", 2),
+        ],
+        ecosystem: [
+          relation("Amazon", "platform benchmark", "ecosystem", "E-commerce demand and logistics intensity", 3, "AMZN"),
+          relation("Walmart", "retail benchmark", "ecosystem", "Omnichannel and physical-retail benchmark", 2, "WMT"),
+        ],
+        customerConcentration: [
+          concentration("Traffic and basket size", "High", "Consumer spending and merchant activity dominate most retail and platform setups."),
+        ],
+        eventChains: [
+          impact("Consumer traffic inflects", ["Gross merchandise volume or comps move", "Retail peers rerate", "Logistics and payments rails react"]),
+        ],
+        coverageNote: "Retail fallback maps add logistics, payment rails, and merchant / consumer demand nodes.",
+      };
+    }
+
     return {
       ...defaults,
       peerSymbols: ["AMZN", "WMT", "COST", "NKE", "HD"],

@@ -2,6 +2,9 @@ import { fetchJson } from "../http.mjs";
 
 const BASE_URL = "https://query1.finance.yahoo.com";
 const ALTERNATE_BASE_URL = "https://query2.finance.yahoo.com";
+const OWNERSHIP_ROW_LIMIT = 25;
+const OFFICER_ROW_LIMIT = 20;
+const INSIDER_ROW_LIMIT = 20;
 const YAHOO_HEADERS = {
   Origin: "https://finance.yahoo.com",
   Referer: "https://finance.yahoo.com/",
@@ -446,7 +449,7 @@ function normalizeOption(raw) {
 
 function normalizeOwnershipList(node) {
   const list = node?.ownershipList ?? node?.holders ?? [];
-  return list.slice(0, 10).map((entry) => ({
+  return list.slice(0, OWNERSHIP_ROW_LIMIT).map((entry) => ({
     holder: entry.organization ?? entry.holder ?? entry.name ?? null,
     shares: unwrapFormatted(entry.position ?? entry.shares),
     value: unwrapFormatted(entry.value),
@@ -456,7 +459,7 @@ function normalizeOwnershipList(node) {
 }
 
 function normalizeOfficers(officers = []) {
-  return officers.slice(0, 10).map((officer) => ({
+  return officers.slice(0, OFFICER_ROW_LIMIT).map((officer) => ({
     name: officer.name ?? null,
     title: officer.title ?? officer.maxAge ?? null,
     age: officer.age ?? null,
@@ -469,7 +472,7 @@ function normalizeOfficers(officers = []) {
 
 function normalizeInsiderHolders(node) {
   const holders = node?.holders ?? node?.insiderHolders ?? [];
-  return holders.slice(0, 10).map((entry) => ({
+  return holders.slice(0, INSIDER_ROW_LIMIT).map((entry) => ({
     name: entry.name ?? entry.reportOwnerName ?? null,
     relation: entry.relation ?? null,
     url: entry.url ?? null,
@@ -483,7 +486,7 @@ function normalizeInsiderHolders(node) {
 
 function normalizeInsiderTransactions(node) {
   const transactions = node?.transactions ?? node?.insiderTransactions ?? [];
-  return transactions.slice(0, 10).map((entry) => ({
+  return transactions.slice(0, INSIDER_ROW_LIMIT).map((entry) => ({
     insider: entry.insider ?? entry.name ?? null,
     position: entry.position ?? null,
     transactionText: entry.transactionText ?? entry.transactionDescription ?? null,
