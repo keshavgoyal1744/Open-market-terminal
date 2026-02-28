@@ -1746,12 +1746,15 @@ button:hover {
   grid-column: 1 / -1;
 }
 
-#dashboardGrid[data-page="overview"] #section-macro,
-#dashboardGrid[data-page="overview"] #section-calendar {
+#dashboardGrid[data-page="overview"] #section-macro {
   grid-column: span 4;
 }
 
 #dashboardGrid[data-page="overview"] #section-news {
+  grid-column: 1 / -1;
+}
+
+#dashboardGrid[data-page="calendar"] #section-calendar {
   grid-column: 1 / -1;
 }
 
@@ -2567,6 +2570,81 @@ textarea:focus {
 .calendar-body {
   display: grid;
   gap: 4px;
+}
+
+.calendar-day-board {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.026), rgba(255, 255, 255, 0.012));
+}
+
+.calendar-day-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.calendar-day-header h3 {
+  margin: 0;
+  font-size: 16px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.calendar-day-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.calendar-day-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 10px;
+}
+
+.calendar-board-panel {
+  min-height: 100%;
+}
+
+.calendar-earnings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.calendar-earnings-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #0b0b0b;
+}
+
+.calendar-earnings-head,
+.calendar-earnings-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.calendar-earnings-note {
+  color: #c7cfda;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.calendar-board-list {
+  display: grid;
+  gap: 8px;
+}
+
+.calendar-board-item {
+  align-items: start;
 }
 
 .news-item-head {
@@ -3444,7 +3522,8 @@ th {
 
   .heatmap-context-grid,
   .earnings-drawer-grid,
-  .sector-board-shell {
+  .sector-board-shell,
+  .calendar-day-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3522,7 +3601,8 @@ th {
 
   .heatmap-context-stats,
   .news-list,
-  .sector-news-list {
+  .sector-news-list,
+  .calendar-earnings-grid {
     grid-template-columns: 1fr;
   }
 

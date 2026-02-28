@@ -782,7 +782,7 @@ function cleanSymbol(value) {
 }
 
 function normalizePage(value) {
-  return ["overview", "sectors", "news", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
+  return ["overview", "sectors", "calendar", "news", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
     ? String(value).trim().toLowerCase()
     : "overview";
 }

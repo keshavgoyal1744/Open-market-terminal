@@ -74,8 +74,8 @@ const PAGE_DEFINITIONS = {
     sectionLabel: "Markets Desk",
     title: "Cross-asset market board with breadth, catalysts, and scheduled risk.",
     description:
-      "Keep the heatmap, pulse board, ranked events, watchlists, flow signals, and macro calendar on one cleaner market page.",
-    tags: ["Heatmap", "Pulse", "Flow", "Calendar"],
+      "Keep the heatmap, pulse board, ranked events, watchlists, and flow signals on one cleaner market page.",
+    tags: ["Heatmap", "Pulse", "Flow", "Catalysts"],
     sections: [
       "section-market-pulse",
       "section-heatmap",
@@ -83,7 +83,6 @@ const PAGE_DEFINITIONS = {
       "section-watchlist",
       "section-flow",
       "section-macro",
-      "section-calendar",
     ],
   },
   sectors: {
@@ -95,6 +94,17 @@ const PAGE_DEFINITIONS = {
     tags: ["Sector Board", "Leaders", "Weights", "Headlines"],
     sections: [
       "section-sector-board",
+    ],
+  },
+  calendar: {
+    label: "Calendar",
+    sectionLabel: "Calendar Desk",
+    title: "Date-grouped earnings boards with macro and policy events on the same tape.",
+    description:
+      "Browse upcoming dates as daily boards instead of a flat feed, with earnings grouped by day and macro / policy events stacked beneath.",
+    tags: ["Daily Boards", "Earnings", "Fed", "Macro"],
+    sections: [
+      "section-calendar",
     ],
   },
   news: {
@@ -151,10 +161,12 @@ const PAGE_PANEL_SPANS = {
     "section-flow": 7,
     "section-heatmap": 12,
     "section-macro": 3,
-    "section-calendar": 4,
   },
   sectors: {
     "section-sector-board": 12,
+  },
+  calendar: {
+    "section-calendar": 12,
   },
   news: {
     "section-news": 12,
@@ -1025,6 +1037,7 @@ function setActivePage(pageId, options = {}) {
     toggleEarningsDrawer(false);
   }
   applyPanelLayout();
+  rerenderPageScopedPanels();
   schedulePreferenceSync();
   if (options.scroll) {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1047,6 +1060,18 @@ function normalizePanelLayout(panelLayout) {
   });
 
   return [...normalized, ...DEFAULT_PANEL_LAYOUT.filter((panelId) => !seen.has(panelId))];
+}
+
+function rerenderPageScopedPanels() {
+  const windowDays = Number(document.querySelector("#calendarWindow")?.value ?? 30);
+  const filter = document.querySelector("#calendarFilter")?.value ?? "all";
+  if (document.querySelector("#calendarList")) {
+    document.querySelector("#calendarList").innerHTML = renderCalendar(state.calendarEvents, {
+      filter,
+      windowDays,
+      grouped: normalizePage(state.preferences.activePage) === "calendar",
+    });
+  }
 }
 
 function normalizePanelSizes(panelSizes) {
@@ -1548,6 +1573,7 @@ async function loadDeskCalendar(force = false) {
     document.querySelector("#calendarList").innerHTML = renderCalendar(state.calendarEvents, {
       filter,
       windowDays,
+      grouped: normalizePage(state.preferences.activePage) === "calendar",
     });
     if (document.querySelector("#calendarWarnings")) {
       document.querySelector("#calendarWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
@@ -3398,6 +3424,10 @@ function renderCalendar(events, options = {}) {
     return renderIntelEmpty("No desk calendar events match the current filter.");
   }
 
+  if (options.grouped) {
+    return renderCalendarBoards(filtered);
+  }
+
   return filtered
     .map(
       (event) => `
@@ -3417,6 +3447,110 @@ function renderCalendar(events, options = {}) {
       `,
     )
     .join("");
+}
+
+function renderCalendarBoards(events) {
+  const groups = groupCalendarByDate(events);
+  return groups
+    .map(([dateKey, entries]) => {
+      const earnings = entries.filter((entry) => entry.category === "earnings");
+      const policy = entries.filter((entry) => entry.category === "policy");
+      const macro = entries.filter((entry) => entry.category !== "earnings" && entry.category !== "policy");
+
+      return `
+        <section class="calendar-day-board">
+          <header class="calendar-day-header">
+            <div>
+              <h3>${escapeHtml(formatCalendarBoardDate(dateKey))}</h3>
+              <div class="meta">${escapeHtml(`${entries.length} scheduled items`)}</div>
+            </div>
+            <div class="calendar-day-stats">
+              <span class="terminal-chip">${escapeHtml(`${earnings.length} earnings`)}</span>
+              <span class="terminal-chip">${escapeHtml(`${policy.length} policy`)}</span>
+              <span class="terminal-chip">${escapeHtml(`${macro.length} macro`)}</span>
+            </div>
+          </header>
+          <div class="calendar-day-grid">
+            <article class="subpanel calendar-board-panel">
+              <div class="subpanel-header">
+                <h3>Daily Earnings Board</h3>
+                <div class="muted">${escapeHtml(earnings.length ? "Nasdaq / Zacks public schedule" : "No earnings on this date")}</div>
+              </div>
+              <div class="calendar-earnings-grid">
+                ${earnings.length ? earnings.map(renderCalendarEarningsCard).join("") : renderIntelEmpty("No earnings names are scheduled on this date.")}
+              </div>
+            </article>
+            <article class="subpanel calendar-board-panel">
+              <div class="subpanel-header">
+                <h3>Macro & Policy</h3>
+                <div class="muted">${escapeHtml(policy.length ? "Fed / policy active" : "Macro tape")}</div>
+              </div>
+              <div class="calendar-board-list">
+                ${[...policy, ...macro].length ? [...policy, ...macro].map(renderCalendarBoardRow).join("") : renderIntelEmpty("No macro or policy events are scheduled on this date.")}
+              </div>
+            </article>
+          </div>
+        </section>
+      `;
+    })
+    .join("");
+}
+
+function renderCalendarEarningsCard(event) {
+  return `
+    <article class="calendar-earnings-card ${toneByImportance(event.importance)}">
+      <div class="calendar-earnings-head">
+        <strong>${escapeHtml(event.symbol ?? compactLabel(event.title ?? "Event", 14))}</strong>
+        <span class="signal-chip">${escapeHtml(formatTime(event.date))}</span>
+      </div>
+      <div class="meta">${escapeHtml(event.title ?? "Earnings")}</div>
+      <div class="calendar-earnings-note">${escapeHtml(event.note ?? event.source ?? "")}</div>
+      <div class="calendar-earnings-foot">
+        <span class="muted">${escapeHtml(event.source ?? "Public source")}</span>
+        ${event.link ? `<a class="event-link" href="${safeUrl(event.link)}" target="_blank" rel="noreferrer">Open</a>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function renderCalendarBoardRow(event) {
+  return `
+    <div class="list-item calendar-board-item ${toneByImportance(event.importance)}">
+      <div>
+        <strong>${event.link ? `<a class="event-link" href="${safeUrl(event.link)}" target="_blank" rel="noreferrer">${escapeHtml(event.title ?? "Event")}</a>` : escapeHtml(event.title ?? "Event")}</strong>
+        <div class="meta">${escapeHtml(event.note ?? event.source ?? "")}</div>
+      </div>
+      <div class="terminal-price-stack">
+        <strong>${escapeHtml(formatTime(event.date))}</strong>
+        <div class="meta">${escapeHtml((event.category ?? "event").toUpperCase())}</div>
+      </div>
+    </div>
+  `;
+}
+
+function groupCalendarByDate(events) {
+  return [...events.reduce((map, event) => {
+    const key = calendarDateKey(event.date);
+    const bucket = map.get(key) ?? [];
+    bucket.push(event);
+    map.set(key, bucket);
+    return map;
+  }, new Map()).entries()];
+}
+
+function calendarDateKey(value) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    return String(value ?? "");
+  }
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+function formatCalendarBoardDate(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp)
+    ? new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" }).format(new Date(timestamp))
+    : "Unknown date";
 }
 
 function renderNewsFeed(items, options = {}) {
