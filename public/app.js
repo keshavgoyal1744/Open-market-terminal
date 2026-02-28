@@ -99,10 +99,10 @@ const PAGE_DEFINITIONS = {
   overview: {
     label: "Markets",
     sectionLabel: "Markets Desk",
-    title: "Cross-asset market board with breadth, catalysts, and scheduled risk.",
+    title: "Live market dashboard for index breadth, risk events, watchlists, and cross-asset context.",
     description:
-      "Keep the heatmap, pulse board, ranked events, watchlists, and flow signals on one cleaner market page.",
-    deskGuide: "Heatmap, pulse, events, flow, and macro on one live market board.",
+      "Use this page as the front screen for the session: track the S&P 500 heatmap, cross-asset pulse, watchlist flow, macro rates, and the ranked events most likely to move the tape.",
+    deskGuide: "Front page for heatmap, pulse, watchlist flow, event risk, and macro tone.",
     tags: ["Heatmap", "Pulse", "Flow", "Catalysts"],
     sections: [
       "section-market-pulse",
@@ -116,10 +116,10 @@ const PAGE_DEFINITIONS = {
   sectors: {
     label: "Sectors",
     sectionLabel: "Sector Desk",
-    title: "Sector drilldowns with relative movers, weight maps, and linked headlines.",
+    title: "Sector drilldowns with weighted boards, relative movers, headlines, and full constituent context.",
     description:
-      "Open any heatmap sector into its own board with constituent ranks, sector headlines, and direct routes back into single-name research.",
-    deskGuide: "Switch sectors fast and compare leaders, laggards, weights, and headlines.",
+      "Choose a sector and break it down properly: view the weighted sector board, strongest and weakest names, sector headlines, and the full constituent list without leaving the desk.",
+    deskGuide: "Filter one sector at a time and compare weights, movers, headlines, and constituents.",
     tags: ["Sector Board", "Leaders", "Weights", "Headlines"],
     sections: [
       "section-sector-board",
@@ -128,10 +128,10 @@ const PAGE_DEFINITIONS = {
   boards: {
     label: "Boards",
     sectionLabel: "Monitor Boards",
-    title: "Leaders, active tape, unusual volume, sector performance, ETF tape, and macro boards.",
+    title: "Classic monitor boards for movers, activity, volume anomalies, sector breadth, ETF tape, and macro tone.",
     description:
-      "Use one page for the classic market monitor surfaces: movers, activity, sector breadth, ETF tape, and macro regime snapshots.",
-    deskGuide: "Use this page for movers, activity, breadth, ETF tape, and macro monitors.",
+      "This is the monitor wall: use it to scan leaders, laggards, most-active names, unusual volume, sector performance, ETF proxies, and the macro backdrop in one pass.",
+    deskGuide: "Monitor-wall page for movers, activity, breadth, ETF proxies, and macro regime.",
     tags: ["Leaders", "Most Active", "ETF Tape", "Macro"],
     sections: [
       "section-market-boards",
@@ -140,10 +140,10 @@ const PAGE_DEFINITIONS = {
   calendar: {
     label: "Calendar",
     sectionLabel: "Calendar Desk",
-    title: "Date-grouped earnings boards with macro and policy events on the same tape.",
+    title: "Upcoming earnings, macro releases, and policy events organized into one compact schedule.",
     description:
-      "Browse upcoming dates as daily boards instead of a flat feed, with earnings grouped by day and macro / policy events stacked beneath.",
-    deskGuide: "Scan upcoming earnings, Fed, and macro dates in one compact calendar view.",
+      "Use the calendar to plan the next few sessions: browse earnings dates, macro releases, and policy events with paging and window controls instead of a long noisy feed.",
+    deskGuide: "Forward schedule for earnings, macro releases, and policy dates.",
     tags: ["Daily Boards", "Earnings", "Fed", "Macro"],
     sections: [
       "section-calendar",
@@ -152,10 +152,10 @@ const PAGE_DEFINITIONS = {
   map: {
     label: "Map",
     sectionLabel: "Company Map Desk",
-    title: "Detailed company relationship mapping across suppliers, customers, indices, holders, and board data.",
+    title: "Detailed company map across suppliers, customers, holders, board links, geography, and indices.",
     description:
-      "Search any symbol and inspect a cleaner detailed map with supplier and output networks, index memberships, competition, holders, and officer coverage.",
-    deskGuide: "Trace suppliers, customers, holders, board links, indices, and competition.",
+      "Search a company and trace the broader operating picture: who supplies it, who it sells into, how it is owned, where it is exposed geographically, and which benchmarks include it.",
+    deskGuide: "Company relationship map for suppliers, customers, holders, board links, and indices.",
     tags: ["Supply Chain", "Customers", "Indices", "Ownership"],
     sections: [
       "section-company-map",
@@ -164,10 +164,10 @@ const PAGE_DEFINITIONS = {
   quote: {
     label: "Quote",
     sectionLabel: "Quote Monitor",
-    title: "Single-name quote monitor with linked mini-windows for chart, news, filings, options, peers, and timeline.",
+    title: "Single-name monitor linking tape, chart, filings, options, peers, news, and catalysts.",
     description:
-      "Stay on one symbol and keep the tape, chart, options, holders, peers, and catalysts linked in a dedicated monitor view.",
-    deskGuide: "Stay on one symbol with linked chart, news, filings, peers, holders, and options.",
+      "Stay focused on one symbol and keep every core window tied together: price, chart, filings, holders, peers, options, symbol-specific news, and event timeline.",
+    deskGuide: "Single-name monitor for tape, chart, filings, options, peers, holders, and catalysts.",
     tags: ["Quote", "Chart", "News", "Peers"],
     sections: [
       "section-quote-monitor",
@@ -176,10 +176,10 @@ const PAGE_DEFINITIONS = {
   news: {
     label: "News",
     sectionLabel: "Newswire Desk",
-    title: "Live market headlines with searchable symbol and company coverage.",
+    title: "Live market newswire with broad market coverage and symbol-specific search.",
     description:
-      "Search a ticker, company, or theme and browse a fuller headline board with linked public sources.",
-    deskGuide: "Track broad market news or search one ticker, company, or theme.",
+      "Use the news desk for both modes: scan general market headlines, or search a ticker, company, or theme and read the freshest linked sources in one place.",
+    deskGuide: "Broad market news plus ticker, company, and theme search in one wire view.",
     tags: ["Search", "Headlines", "Sources", "Themes"],
     sections: [
       "section-news",
@@ -188,10 +188,10 @@ const PAGE_DEFINITIONS = {
   ai: {
     label: "AI",
     sectionLabel: "AI Lab",
-    title: "Hosted long and short idea board built from the live S&P 500 universe.",
+    title: "Shared daily long and short idea board generated from the live S&P 500 setup.",
     description:
-      "A shared daily snapshot ranks 20 bullish and 20 bearish S&P 500 ideas using current market, macro, and earnings context.",
-    deskGuide: "Review the daily bullish and bearish board generated from live market context.",
+      "This page publishes one daily snapshot for everyone: 20 bullish and 20 bearish S&P 500 ideas ranked from current market structure, macro conditions, and earnings context.",
+    deskGuide: "Daily shared bullish and bearish idea board built from live market context.",
     tags: ["Bullish 20", "Bearish 20", "Gemini", "Groq"],
     sections: [
       "section-ai-lab",
@@ -200,10 +200,10 @@ const PAGE_DEFINITIONS = {
   research: {
     label: "Research",
     sectionLabel: "Research Desk",
-    title: "Deep security workbench, relationship intelligence, and peer tools.",
+    title: "Deep research workspace for price, filings, options, relationships, and peer analysis.",
     description:
-      "Use this page for single-name work, filings, price history, options, supply-chain links, competitor maps, and custom screens.",
-    deskGuide: "Do deep single-name work across price, filings, options, peers, and relationship maps.",
+      "Use the research desk when you need depth instead of breadth: work through one name’s price action, filings, options, holders, peers, and supply-chain or competitor relationships in one view.",
+    deskGuide: "Deep single-name workspace for chart, filings, options, peers, and relationship analysis.",
     tags: ["Workbench", "Intel", "Filings", "Screening"],
     sections: [
       "section-research-rail",
@@ -216,10 +216,10 @@ const PAGE_DEFINITIONS = {
   ops: {
     label: "Ops",
     sectionLabel: "Ops Desk",
-    title: "Portfolio state, automation, notes, alerts, crypto, and saved workflows.",
+    title: "Operational workspace for portfolio state, alerts, notes, workspaces, activity, and crypto.",
     description:
-      "Keep automations and persistence away from the market overview so the desk stays readable during the trading day.",
-    deskGuide: "Manage portfolio state, alerts, workspaces, notes, activity, and crypto tools.",
+      "Keep the operational tools off the main market pages: manage portfolio state, alerts, digests, saved desk layouts, notes, activity logs, and crypto tools from one dedicated ops view.",
+    deskGuide: "Operations page for portfolio state, alerts, notes, activity, workspaces, and crypto.",
     tags: ["Portfolio", "Alerts", "Digests", "Workspaces"],
     sections: [
       "section-portfolio",
