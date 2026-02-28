@@ -79,10 +79,6 @@
             <span>Events</span>
             <span>Desk News</span>
           </div>
-          <p class="warning">
-            Licensed tick-by-tick equities, premium research, and proprietary institutional graph depth are still
-            outside the scope of a free public-data build.
-          </p>
         </div>
         <div class="hero-visual">
           <div class="desk-terminal">
@@ -104,12 +100,16 @@
               <span class="desk-label">Page</span>
               <span id="hudPageLabel">Overview</span>
             </div>
+            <div class="desk-line muted">
+              <span class="desk-label">Guide</span>
+              <span id="deskPageGuide">Markets: pulse, heatmap, events, and flow in one board</span>
+            </div>
             <div id="symbolRibbon" class="symbol-ribbon"></div>
           </div>
           <div class="signal-log">
             <div class="signal-row"><span>ROUTING</span><strong>Ctrl/⌘ + K opens the terminal palette</strong></div>
             <div class="signal-row"><span>SYMBOLS</span><strong>[ and ] cycle through watchlist names</strong></div>
-            <div class="signal-row"><span>PAGES</span><strong>Markets, Boards, Sectors, Calendar, Map, Quote, News, AI, Research, and Ops split the desk into cleaner views</strong></div>
+            <div class="signal-row"><span>PAGES</span><strong>Markets: live board · Boards: movers and breadth · Sectors: drilldowns · Calendar: earnings and macro · Map: company relationships · Quote: single-name monitor · News: searchable wire · AI: daily long-short snapshot · Research: deep single-name work · Ops: alerts, notes, portfolio</strong></div>
           </div>
         </div>
         <aside class="auth-card control-card">
@@ -1240,20 +1240,6 @@
           <div id="watchlistEvents" class="list-stack"></div>
         </section>
 
-        <section id="section-limitations" class="panel panel-wide limitations">
-          <p class="section-label">Reality Check</p>
-          <h2>What this app now covers</h2>
-          <div class="limits-grid">
-            <div>
-              <h3>Added in this version</h3>
-              <p>Accounts, sessions, server alerts, saved workspaces, notes, activity streaming, background jobs, cache warming, Docker, and a curated relationship console for supply-chain and corporate maps.</p>
-            </div>
-            <div>
-              <h3>Still outside scope</h3>
-              <p>Licensed low-latency market data, premium research, broker workflows, and Bloomberg’s proprietary graph depth across every listed company.</p>
-            </div>
-          </div>
-        </section>
       </main>
 
       <footer class="site-footer">

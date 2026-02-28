@@ -49,7 +49,6 @@ const DEFAULT_PANEL_SIZES = {
   "section-crypto": 3,
   "section-screening": 12,
   "section-events": 12,
-  "section-limitations": 12,
 };
 const DEFAULT_PANEL_LAYOUT = [
   "section-market-pulse",
@@ -77,7 +76,6 @@ const DEFAULT_PANEL_LAYOUT = [
   "section-crypto",
   "section-screening",
   "section-events",
-  "section-limitations",
 ];
 const DEFAULT_SECTORS = [
   "Technology",
@@ -104,6 +102,7 @@ const PAGE_DEFINITIONS = {
     title: "Cross-asset market board with breadth, catalysts, and scheduled risk.",
     description:
       "Keep the heatmap, pulse board, ranked events, watchlists, and flow signals on one cleaner market page.",
+    deskGuide: "Heatmap, pulse, events, flow, and macro on one live market board.",
     tags: ["Heatmap", "Pulse", "Flow", "Catalysts"],
     sections: [
       "section-market-pulse",
@@ -120,6 +119,7 @@ const PAGE_DEFINITIONS = {
     title: "Sector drilldowns with relative movers, weight maps, and linked headlines.",
     description:
       "Open any heatmap sector into its own board with constituent ranks, sector headlines, and direct routes back into single-name research.",
+    deskGuide: "Switch sectors fast and compare leaders, laggards, weights, and headlines.",
     tags: ["Sector Board", "Leaders", "Weights", "Headlines"],
     sections: [
       "section-sector-board",
@@ -131,6 +131,7 @@ const PAGE_DEFINITIONS = {
     title: "Leaders, active tape, unusual volume, sector performance, ETF tape, and macro boards.",
     description:
       "Use one page for the classic market monitor surfaces: movers, activity, sector breadth, ETF tape, and macro regime snapshots.",
+    deskGuide: "Use this page for movers, activity, breadth, ETF tape, and macro monitors.",
     tags: ["Leaders", "Most Active", "ETF Tape", "Macro"],
     sections: [
       "section-market-boards",
@@ -142,6 +143,7 @@ const PAGE_DEFINITIONS = {
     title: "Date-grouped earnings boards with macro and policy events on the same tape.",
     description:
       "Browse upcoming dates as daily boards instead of a flat feed, with earnings grouped by day and macro / policy events stacked beneath.",
+    deskGuide: "Scan upcoming earnings, Fed, and macro dates in one compact calendar view.",
     tags: ["Daily Boards", "Earnings", "Fed", "Macro"],
     sections: [
       "section-calendar",
@@ -153,6 +155,7 @@ const PAGE_DEFINITIONS = {
     title: "Detailed company relationship mapping across suppliers, customers, indices, holders, and board data.",
     description:
       "Search any symbol and inspect a cleaner detailed map with supplier and output networks, index memberships, competition, holders, and officer coverage.",
+    deskGuide: "Trace suppliers, customers, holders, board links, indices, and competition.",
     tags: ["Supply Chain", "Customers", "Indices", "Ownership"],
     sections: [
       "section-company-map",
@@ -164,6 +167,7 @@ const PAGE_DEFINITIONS = {
     title: "Single-name quote monitor with linked mini-windows for chart, news, filings, options, peers, and timeline.",
     description:
       "Stay on one symbol and keep the tape, chart, options, holders, peers, and catalysts linked in a dedicated monitor view.",
+    deskGuide: "Stay on one symbol with linked chart, news, filings, peers, holders, and options.",
     tags: ["Quote", "Chart", "News", "Peers"],
     sections: [
       "section-quote-monitor",
@@ -175,6 +179,7 @@ const PAGE_DEFINITIONS = {
     title: "Live market headlines with searchable symbol and company coverage.",
     description:
       "Search a ticker, company, or theme and browse a fuller headline board with linked public sources.",
+    deskGuide: "Track broad market news or search one ticker, company, or theme.",
     tags: ["Search", "Headlines", "Sources", "Themes"],
     sections: [
       "section-news",
@@ -185,7 +190,8 @@ const PAGE_DEFINITIONS = {
     sectionLabel: "AI Lab",
     title: "Hosted long and short idea board built from the live S&P 500 universe.",
     description:
-      "Gemini runs the primary hosted query, Groq is the hosted fallback, and the board stays live off the current S&P 500, macro, and earnings context already in this app.",
+      "A shared daily snapshot ranks 20 bullish and 20 bearish S&P 500 ideas using current market, macro, and earnings context.",
+    deskGuide: "Review the daily bullish and bearish board generated from live market context.",
     tags: ["Bullish 20", "Bearish 20", "Gemini", "Groq"],
     sections: [
       "section-ai-lab",
@@ -197,6 +203,7 @@ const PAGE_DEFINITIONS = {
     title: "Deep security workbench, relationship intelligence, and peer tools.",
     description:
       "Use this page for single-name work, filings, price history, options, supply-chain links, competitor maps, and custom screens.",
+    deskGuide: "Do deep single-name work across price, filings, options, peers, and relationship maps.",
     tags: ["Workbench", "Intel", "Filings", "Screening"],
     sections: [
       "section-research-rail",
@@ -212,6 +219,7 @@ const PAGE_DEFINITIONS = {
     title: "Portfolio state, automation, notes, alerts, crypto, and saved workflows.",
     description:
       "Keep automations and persistence away from the market overview so the desk stays readable during the trading day.",
+    deskGuide: "Manage portfolio state, alerts, workspaces, notes, activity, and crypto tools.",
     tags: ["Portfolio", "Alerts", "Digests", "Workspaces"],
     sections: [
       "section-portfolio",
@@ -221,7 +229,6 @@ const PAGE_DEFINITIONS = {
       "section-notes",
       "section-activity",
       "section-crypto",
-      "section-limitations",
     ],
   },
 };
@@ -271,7 +278,6 @@ const PAGE_PANEL_SPANS = {
     "section-activity": 6,
     "section-workspaces": 3,
     "section-notes": 3,
-    "section-limitations": 12,
   },
 };
 
@@ -308,7 +314,6 @@ const PAGE_PANEL_ORDERS = {
     "section-alerts": 4,
     "section-notes": 5,
     "section-crypto": 6,
-    "section-limitations": 7,
   },
 };
 
@@ -345,7 +350,6 @@ const PAGE_PANEL_COLUMNS = {
     "section-alerts": "5 / span 4",
     "section-notes": "9 / span 4",
     "section-crypto": "1 / -1",
-    "section-limitations": "1 / -1",
   },
 };
 
@@ -382,7 +386,6 @@ const PAGE_PANEL_ROWS = {
     "section-alerts": "2",
     "section-notes": "2",
     "section-crypto": "3",
-    "section-limitations": "4",
   },
 };
 
@@ -1469,6 +1472,7 @@ function applyPageState() {
   setText("#pageTitle", page.title);
   setText("#pageDescription", page.description);
   setText("#hudPageLabel", page.label);
+  setText("#deskPageGuide", page.deskGuide ?? page.description);
 
   const tags = document.querySelector("#pageTags");
   if (tags) {

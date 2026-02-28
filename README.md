@@ -1,8 +1,7 @@
 # Open Market Terminal
 
 Open Market Terminal is a self-hosted market workstation built around free and public data sources. It is designed for traders, researchers, and technically inclined users who want a Bloomberg-terminal-style workspace without paying for licensed market-data infrastructure.
-
-The app is not a Bloomberg replacement in data rights, speed, or global proprietary coverage. It is a pragmatic open build that combines public quotes, filings, macro calendars, public news, relationship mapping, and saved desk workflows into a single terminal-style interface.
+It combines public quotes, filings, macro calendars, public news, relationship mapping, and saved desk workflows into a single terminal-style interface.
 
 ## What The App Currently Does
 
@@ -184,17 +183,6 @@ This build uses public or free-to-access data paths already integrated into the 
 
 This repository does **not** currently integrate Financial Modeling Prep, Unusual Whales, Quartr, Fiscal.ai, S&P Global, or Polymarket. If you wire any of those providers into the app later, update the website footer and your product disclosures so the provider attribution matches the actual implementation.
 
-## What The App Does Not Do
-
-These are structural limitations, not just missing UI:
-
-- No licensed real-time equities/options/futures exchange feed
-- No premium wire-news entitlement
-- No broker execution or OMS/EMS workflow
-- No Bloomberg / FactSet / Refinitiv proprietary graph depth
-- No universal global ownership / board / supply-chain coverage
-- No guaranteed institutional-grade data completeness
-
 ## Architecture
 
 ### Backend
@@ -341,22 +329,6 @@ If you want a more reliable always-on deployment for background tasks and statef
 Open Market Terminal is an informational research interface. It is not a broker, not a registered advisor, and not a source of trading instructions. Data may be delayed, incomplete, unofficial, or unavailable depending on the upstream provider.
 
 The global website footer now reflects the current integrated provider model and includes an informational-use disclaimer. If you add or remove data vendors, update that disclosure text accordingly.
-
-## Current Reality Check
-
-This app is strongest when used as:
-
-- a public-data market desk
-- a research dashboard
-- a company / sector / event workstation
-- a self-hosted trader/research UI foundation
-
-It is weakest where licensed products dominate:
-
-- exchange-grade real-time feeds
-- premium sell-side research
-- proprietary supply-chain / ownership / graph coverage
-- institutional execution tools
 
 ## Suggested Next Steps
 

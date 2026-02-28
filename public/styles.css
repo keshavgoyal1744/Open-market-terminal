@@ -1325,12 +1325,6 @@ svg {
   min-height: 1rem;
 }
 
-.limitations p,
-.limitations h3 {
-  color: #d2deec;
-  line-height: 1.6;
-}
-
 .site-footer {
   margin: 0 10px 12px;
   border: 1px solid var(--line);
@@ -1913,8 +1907,7 @@ button:hover {
 .panel-market-events,
 .intelligence-panel,
 #section-screening,
-#section-events,
-#section-limitations {
+#section-events {
   grid-column: 1 / -1;
 }
 
@@ -2454,10 +2447,6 @@ button:hover {
 
 #dashboardGrid[data-page="ops"] #section-crypto .orderbook-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-#dashboardGrid[data-page="ops"] #section-limitations {
-  grid-column: 1 / -1;
 }
 
 .ai-idea-list {
@@ -4702,8 +4691,7 @@ th {
   .panel-market-events,
   .intelligence-panel,
   #section-screening,
-  #section-events,
-  #section-limitations {
+  #section-events {
     grid-column: 1 / -1;
   }
 
