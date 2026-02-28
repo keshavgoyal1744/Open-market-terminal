@@ -303,8 +303,8 @@ const PAGE_PANEL_COLUMNS = {
   },
   research: {
     "section-research-rail": "1",
-    "section-workbench": "2 / span 2",
-    "section-intelligence": "2",
+    "section-workbench": "2",
+    "section-intelligence": "3",
     "section-screening": "3",
     "section-events": "2 / span 2",
   },
@@ -337,8 +337,8 @@ const PAGE_PANEL_ROWS = {
   },
   research: {
     "section-research-rail": "1 / span 3",
-    "section-workbench": "1",
-    "section-intelligence": "2",
+    "section-workbench": "1 / span 2",
+    "section-intelligence": "1",
     "section-screening": "2",
     "section-events": "3",
   },
@@ -5425,9 +5425,17 @@ function renderIntelSection(title, body, meta = "") {
 }
 
 function buildIntelConsoleView(payload, holders, view) {
-  const supplyRows = renderIntelList(
-    ...payload.supplyChain.suppliers.map((item) => renderIntelListItem(item.relation, item.target, item.label)),
-    ...payload.supplyChain.ecosystem.map((item) => renderIntelListItem(item.relation, item.target, item.label)),
+  const supplierRows = renderIntelList(
+    ...(payload.supplyChain.suppliers ?? []).map((item) => renderIntelListItem(item.relation, item.target, item.label)),
+  );
+  const ecosystemRows = renderIntelList(
+    ...(payload.supplyChain.ecosystem ?? []).map((item) => renderIntelListItem(item.relation, item.target, item.label)),
+  );
+  const customerThemeRows = renderIntelList(
+    ...(payload.customerConcentration ?? []).map((item) => renderIntelListItem(item.level, item.name, item.commentary)),
+  );
+  const customerLinkRows = renderIntelList(
+    ...(payload.supplyChain.customers ?? []).map((item) => renderIntelListItem(item.relation, item.target, item.label)),
   );
   const customerRows = renderIntelList(
     ...(payload.customerConcentration ?? []).map((item) => renderIntelListItem(item.level, item.name, item.commentary)),
@@ -5453,6 +5461,11 @@ function buildIntelConsoleView(payload, holders, view) {
   const impactRows =
     (payload.eventChains ?? []).map((chain, index) => renderImpactChain(chain, index)).join("") ||
     renderIntelEmpty("No impact chains mapped.");
+  const supplierCount = payload.supplyChain.suppliers?.length ?? 0;
+  const ecosystemCount = payload.supplyChain.ecosystem?.length ?? 0;
+  const customerCount = payload.supplyChain.customers?.length ?? 0;
+  const customerThemeCount = payload.customerConcentration?.length ?? 0;
+  const impactCount = payload.eventChains?.length ?? 0;
   const competitorsTable = `
     <div class="table-wrap compact terminal-table-wrap">
       <table class="terminal-table intel-table">
@@ -5583,22 +5596,43 @@ function buildIntelConsoleView(payload, holders, view) {
     case "SPLC":
     default:
       return {
-        title: "Supply Chain",
+        title: "Supply Chain Breakdown",
         meta: intelCommandLabel(payload, "SPLC"),
         detailHtml:
           renderIntelSection(
-            "Suppliers & Partners",
-            `<div class="list-stack">${supplyRows}</div>`,
-            `${payload.supplyChain.suppliers?.length ?? 0} supplier links`,
+            "Coverage Snapshot",
+            `<div class="metric-strip intel-inline-metrics intel-supply-summary">
+              ${renderTerminalStat("Upstream", String(supplierCount), "mapped supplier links")}
+              ${renderTerminalStat("2nd Order", String(ecosystemCount), "ecosystem dependencies")}
+              ${renderTerminalStat("Channels", String(customerCount), "named demand links")}
+              ${renderTerminalStat("Catalysts", String(impactCount), "mapped chain reactions")}
+            </div>`,
+            payload.coverage.curated ? "curated + public coverage" : "public fallback coverage",
           ) +
           renderIntelSection(
-            "Customer Concentration",
-            `<div class="list-stack">${customerRows}</div>`,
-            `${payload.supplyChain.customers?.length ?? 0} customer themes`,
+            "Core Suppliers",
+            `<div class="list-stack">${supplierRows}</div>`,
+            `${supplierCount} mapped upstream links`,
+          ) +
+          renderIntelSection(
+            "Secondary Dependencies",
+            `<div class="list-stack">${ecosystemRows}</div>`,
+            `${ecosystemCount} second-order or partner nodes`,
           ),
-        secondaryTitle: "Impact Chains",
-        secondaryMeta: `${payload.eventChains?.length ?? 0} mapped catalysts`,
-        secondaryHtml: `<div class="list-stack">${impactRows}</div>`,
+        secondaryTitle: "Demand Side + Catalysts",
+        secondaryMeta: `${customerCount + customerThemeCount} downstream signals`,
+        secondaryHtml:
+          renderIntelSection(
+            "Customer Channels",
+            `<div class="list-stack">${customerLinkRows}</div>`,
+            `${customerCount} named channels`,
+          ) +
+          renderIntelSection(
+            "Concentration Themes",
+            `<div class="list-stack">${customerThemeRows}</div>`,
+            `${customerThemeCount} public demand themes`,
+          ) +
+          renderIntelSection("Impact Chains", `<div class="list-stack">${impactRows}</div>`, `${impactCount} mapped catalysts`),
       };
   }
 }
