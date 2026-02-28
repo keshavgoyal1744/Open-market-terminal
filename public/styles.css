@@ -2019,7 +2019,7 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .intel-top-grid {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.12fr) minmax(280px, 0.88fr);
   gap: 6px;
 }
 
@@ -2029,8 +2029,8 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .intel-console-grid {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .command-bar {
@@ -2054,17 +2054,17 @@ button:hover {
 
 #dashboardGrid[data-page="research"] #section-intelligence .list-stack,
 #dashboardGrid[data-page="research"] #section-intelligence .terminal-table-wrap {
-  max-height: 214px;
+  max-height: 236px;
   overflow: auto;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence #intelGraph {
-  min-height: 360px;
-  overflow: auto;
+  min-height: 460px;
+  overflow: visible;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .intel-detail-body .list-stack {
-  max-height: 186px;
+  max-height: 220px;
   overflow: auto;
 }
 
@@ -2086,7 +2086,7 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] #section-screening .screening-shell {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -2156,6 +2156,17 @@ button:hover {
 
 #dashboardGrid[data-page="research"] .intel-ownership-shell {
   grid-template-columns: minmax(0, 1.15fr) minmax(180px, 0.85fr);
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-graph-grid .subpanel {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-graph-grid h3 {
+  justify-self: start;
+  width: 100%;
 }
 
 #dashboardGrid[data-page="ops"] {

@@ -303,10 +303,10 @@ const PAGE_PANEL_COLUMNS = {
   },
   research: {
     "section-research-rail": "1",
-    "section-workbench": "2",
-    "section-intelligence": "3",
-    "section-screening": "2 / span 2",
-    "section-events": "2 / span 2",
+    "section-workbench": "2 / span 2",
+    "section-intelligence": "2 / span 2",
+    "section-screening": "2",
+    "section-events": "3",
   },
   quote: {
     "section-quote-monitor": "1 / -1",
@@ -338,8 +338,8 @@ const PAGE_PANEL_ROWS = {
   research: {
     "section-research-rail": "1 / span 3",
     "section-workbench": "1",
-    "section-intelligence": "1",
-    "section-screening": "2",
+    "section-intelligence": "2",
+    "section-screening": "3",
     "section-events": "3",
   },
   quote: {
@@ -6456,7 +6456,7 @@ function renderIntelGraphNetwork(graph, symbol) {
     market: nodes.filter((node) => ["competitor", "ecosystem"].includes(String(node.kind))),
   };
 
-  const width = Math.max(880, 320 + Math.max(lanes.corporate.length, lanes.market.length, 4) * 96);
+  const width = 980;
   const height = Math.max(500, 220 + Math.max(lanes.supply.length, lanes.customer.length, 4) * 56);
   const hub = { x: width / 2, y: height / 2 };
   const topY = 82;
@@ -6535,11 +6535,31 @@ function layoutGraphLane(nodes, spec) {
     return [];
   }
 
+  if (Number.isFinite(spec.y)) {
+    const rowCount = list.length > 8 ? 2 : 1;
+    const perRow = Math.ceil(list.length / rowCount);
+    return list.map((node, index) => {
+      const row = Math.floor(index / perRow);
+      const offset = row * perRow;
+      const count = Math.min(perRow, list.length - offset);
+      const progress = count === 1 ? 0.5 : (index - offset) / (count - 1);
+      const x = spec.xFrom === spec.xTo || spec.xTo == null
+        ? spec.xFrom
+        : spec.xFrom + progress * (spec.xTo - spec.xFrom);
+      const y = spec.y + (rowCount === 1 ? 0 : row === 0 ? -26 : 26);
+      return { ...node, x, y };
+    });
+  }
+
+  const columnCount = list.length > 6 ? 2 : 1;
+  const perColumn = Math.ceil(list.length / columnCount);
   return list.map((node, index) => {
-    const progress = list.length === 1 ? 0.5 : index / (list.length - 1);
-    const x = spec.xFrom === spec.xTo || spec.xTo == null
-      ? spec.xFrom
-      : spec.xFrom + progress * (spec.xTo - spec.xFrom);
+    const column = Math.floor(index / perColumn);
+    const offset = column * perColumn;
+    const count = Math.min(perColumn, list.length - offset);
+    const progress = count === 1 ? 0.5 : (index - offset) / (count - 1);
+    const xShift = columnCount === 1 ? 0 : column === 0 ? -44 : 44;
+    const x = spec.xFrom + xShift;
     const y = spec.yFrom === spec.yTo || spec.yTo == null
       ? spec.y
       : spec.yFrom + progress * (spec.yTo - spec.yFrom);
