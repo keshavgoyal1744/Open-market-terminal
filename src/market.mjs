@@ -103,7 +103,7 @@ export class MarketDataService {
             ? marketResult.value
             : emptyMarketOverview(upper, sec.title, marketResult.reason);
 
-        if (secResult.status === "rejected") {
+        if (secResult.status === "rejected" && !shouldSuppressSecWarning(upper, market)) {
           warnings.push(`SEC data unavailable for ${upper}: ${secResult.reason?.message ?? "source error"}`);
         }
         if (marketResult.status === "rejected") {
@@ -1770,6 +1770,7 @@ function emptyMarketOverview(symbol, title, error) {
   return {
     symbol,
     shortName: title ?? symbol,
+    type: null,
     exchange: null,
     sector: null,
     industry: null,
@@ -1817,6 +1818,22 @@ function emptyOptions(symbol, error) {
     puts: [],
     warning: error?.message ?? null,
   };
+}
+
+function shouldSuppressSecWarning(symbol, market) {
+  const clean = String(symbol ?? "").trim().toUpperCase();
+  const shortName = String(market?.shortName ?? "").toLowerCase();
+  const type = String(market?.type ?? "").toLowerCase();
+  if (!clean) {
+    return false;
+  }
+  if (clean.startsWith("^") || clean.includes("=") || clean.endsWith("-USD")) {
+    return true;
+  }
+  if (/\betf\b|\bfund\b|\bmutualfund\b|\bindex\b|\bcurrency\b/.test(type)) {
+    return true;
+  }
+  return /\betf\b|\btrust\b|\bfund\b|\bshares\b|\bindex\b|\bcurrency\b|\btreasury\b|\bspdr\b|\bishares\b|\binvesco\b|\bvanguard\b/.test(shortName);
 }
 
 function normalizeFlowWarning(warning) {

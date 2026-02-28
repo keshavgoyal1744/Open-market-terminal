@@ -504,6 +504,9 @@ function bindForms() {
     event.preventDefault();
     await selectSectorFocus(document.querySelector("#sectorBoardSelect")?.value, { page: "sectors", jump: false });
   });
+  document.querySelector("#sectorBoardSelect")?.addEventListener("change", async (event) => {
+    await selectSectorFocus(event.target?.value, { page: "sectors", jump: false });
+  });
 
   document.querySelector("#refreshFlowButton")?.addEventListener("click", async () => {
     await loadFlow(true);
@@ -1169,6 +1172,12 @@ function setActivePage(pageId, options = {}) {
   if (state.preferences.activePage === "map") {
     void loadCompanyMap(state.preferences.detailSymbol);
   }
+  if (state.preferences.activePage === "sectors") {
+    syncSectorSelector(state.sectorBoard?.sectors ?? state.heatmap?.sectors ?? [], state.preferences.sectorFocus);
+    if (!(state.sectorBoard?.sectors?.length || state.heatmap?.sectors?.length)) {
+      void loadSectorBoard(false);
+    }
+  }
   schedulePreferenceSync();
   if (options.scroll) {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1465,14 +1474,15 @@ async function loadSectorBoard(force = false) {
     state.sectorBoard = payload;
     state.preferences.sectorFocus = payload.sector ?? sector;
     syncSectorSelector(payload.sectors?.length ? payload.sectors : state.heatmap?.sectors ?? [], payload.sector);
+    const sectorLabel = payload.sector ?? state.preferences.sectorFocus ?? "selected sector";
     document.querySelector("#sectorBoardSummary").innerHTML = renderSectorBoardSummary(payload);
     document.querySelector("#sectorBoardWarnings").innerHTML = renderHeatmapWarnings(payload.warnings ?? []);
-    document.querySelector("#sectorBoardTitle").textContent = `${payload.sector ?? "Sector"} board`;
+    document.querySelector("#sectorBoardTitle").textContent = `${sectorLabel} board`;
     document.querySelector("#sectorBoardMeta").textContent =
       `${payload.summary?.names ?? 0} names | ${payload.asOf ? `updated ${formatDateTime(payload.asOf)}` : "awaiting sync"}`;
     document.querySelector("#sectorNewsMeta").textContent = payload.news?.length
-      ? `Public source blend for ${payload.sector}`
-      : `No sector headlines available for ${payload.sector}`;
+      ? `Public source blend for ${sectorLabel}`
+      : `No sector headlines available for ${sectorLabel}`;
     document.querySelector("#sectorBoardTiles").innerHTML = renderSectorBoardTiles(payload.items ?? []);
     document.querySelector("#sectorLeadersList").innerHTML = (payload.leaders ?? []).map(renderQuoteListItem).join("")
       || renderIntelEmpty("No leaders available.");
@@ -2427,7 +2437,13 @@ function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFo
     return;
   }
 
-  const ordered = (sectors ?? []).map((item) => item.sector).filter(Boolean);
+  const ordered = [...new Set((sectors ?? []).map((item) => item?.sector ?? item).filter(Boolean))];
+  if (!ordered.length) {
+    select.innerHTML = `<option value="">Loading sectors...</option>`;
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
   const preferred = selectedSector && ordered.includes(selectedSector) ? selectedSector : ordered[0] ?? selectedSector ?? "Technology";
   select.innerHTML = ordered
     .map((sector) => `<option value="${escapeHtml(sector)}">${escapeHtml(sector)}</option>`)

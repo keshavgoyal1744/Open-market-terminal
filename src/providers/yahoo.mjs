@@ -114,6 +114,7 @@ export async function getCompanyOverview(symbol) {
   return {
     symbol: quote.symbol ?? symbol.toUpperCase(),
     shortName: quote.shortName ?? null,
+    type: quote.type ?? null,
     exchange: quote.exchange ?? null,
     sector: null,
     industry: null,
@@ -270,6 +271,7 @@ async function fetchCompanyOverviewFromBase(symbol, baseUrl) {
   return {
     symbol: result.price?.symbol ?? symbol.toUpperCase(),
     shortName: result.price?.shortName ?? null,
+    type: result.price?.quoteType ?? null,
     exchange: result.price?.exchangeName ?? null,
     sector: result.assetProfile?.sector ?? null,
     industry: result.assetProfile?.industry ?? null,
