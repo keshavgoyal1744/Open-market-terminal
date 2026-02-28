@@ -55,6 +55,7 @@ export function defaultUserPreferences() {
     researchPinnedSymbols: [],
     detailSymbol: "AAPL",
     companyMapCompareSymbol: "",
+    terminalHotkeys: [],
     newsFocus: "",
     sectorFocus: "Technology",
     cryptoProducts: [...config.defaultCryptoProducts],

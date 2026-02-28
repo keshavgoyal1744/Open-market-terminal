@@ -1519,6 +1519,7 @@ th,
   gap: 6px;
   flex: 1;
   justify-content: center;
+  flex-wrap: wrap;
 }
 
 .topbar-nav-btn,
@@ -1563,6 +1564,47 @@ button:hover {
 
 .topbar-chip-action {
   min-width: 116px;
+}
+
+.terminal-command-deck {
+  display: grid;
+  gap: 8px;
+  margin: 0 10px 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: #0c0c0c;
+}
+
+.terminal-command-form {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-command-kicker {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.terminal-command-meta,
+.terminal-hotkeys {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.terminal-hotkey-chip {
+  min-height: 28px;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .hero {
@@ -2571,6 +2613,41 @@ button:hover {
   padding: 10px;
 }
 
+.market-boards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px;
+}
+
+.quote-monitor-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.28fr) minmax(280px, 0.72fr) minmax(280px, 0.72fr);
+  gap: 10px;
+  padding: 10px;
+  align-items: start;
+}
+
+.quote-monitor-hero {
+  grid-column: 1 / span 2;
+}
+
+.quote-monitor-shell .metric-strip {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.quote-monitor-shell .list-stack,
+.quote-monitor-shell .table-wrap,
+.market-boards-grid .table-wrap {
+  max-height: 300px;
+  overflow: auto;
+}
+
+.quote-monitor-shell .subpanel,
+.market-boards-grid .subpanel {
+  align-content: start;
+}
+
 .company-map-compare-shell {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2606,6 +2683,11 @@ button:hover {
 
 .company-map-hero-panel {
   align-content: start;
+}
+
+#companyMapBoardInterlocks,
+#companyMapOwnershipTrend {
+  min-height: 220px;
 }
 
 .company-map-link.has-symbol {
@@ -4099,6 +4181,8 @@ th {
   .heatmap-context-grid,
   .earnings-drawer-grid,
   .sector-board-shell,
+  .market-boards-grid,
+  .quote-monitor-shell,
   .calendar-day-grid,
   .company-map-shell,
   .company-map-compare-shell,
@@ -4170,6 +4254,11 @@ th {
 
   .inline-form {
     grid-template-columns: 1fr;
+  }
+
+  .terminal-command-form {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .panel-resize-handle {

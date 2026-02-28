@@ -451,6 +451,19 @@ async function handleApi(request, response, url, context) {
     return sendJson(response, 200, await market.getWatchlistFlow(symbols));
   }
 
+  if (request.method === "GET" && url.pathname === "/api/market-boards") {
+    const symbols = splitList(url.searchParams.get("symbols"));
+    return sendJson(response, 200, await market.getMarketBoards(symbols));
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/quote-monitor") {
+    const symbol = requireParam(url, "symbol");
+    const range = url.searchParams.get("range") ?? "1d";
+    const interval = url.searchParams.get("interval") ?? "5m";
+    const peerSymbols = splitList(url.searchParams.get("peerSymbols"));
+    return sendJson(response, 200, await market.getQuoteMonitor(symbol, { range, interval, peerSymbols }));
+  }
+
   if (request.method === "GET" && url.pathname === "/api/quote") {
     const symbols = splitList(url.searchParams.get("symbols"));
     return sendJson(response, 200, { quotes: await market.getQuotes(symbols) });
@@ -702,6 +715,9 @@ function sanitizePreferencePatch(body) {
     detailSymbol: typeof body.detailSymbol === "string" ? cleanSymbol(body.detailSymbol) : undefined,
     companyMapCompareSymbol:
       typeof body.companyMapCompareSymbol === "string" ? cleanSymbol(body.companyMapCompareSymbol) : undefined,
+    terminalHotkeys: Array.isArray(body.terminalHotkeys)
+      ? body.terminalHotkeys.map((entry) => String(entry ?? "").trim()).filter(Boolean).slice(0, 8)
+      : undefined,
     newsFocus: typeof body.newsFocus === "string" ? String(body.newsFocus).trim().slice(0, 80) : undefined,
     sectorFocus: typeof body.sectorFocus === "string" ? String(body.sectorFocus).trim().slice(0, 80) : undefined,
     cryptoProducts: Array.isArray(body.cryptoProducts)
@@ -763,6 +779,9 @@ function sanitizeWorkspaceSnapshot(snapshot) {
     detailSymbol: typeof snapshot.detailSymbol === "string" ? cleanSymbol(snapshot.detailSymbol) : "AAPL",
     companyMapCompareSymbol:
       typeof snapshot.companyMapCompareSymbol === "string" ? cleanSymbol(snapshot.companyMapCompareSymbol) : "",
+    terminalHotkeys: Array.isArray(snapshot.terminalHotkeys)
+      ? snapshot.terminalHotkeys.map((entry) => String(entry ?? "").trim()).filter(Boolean).slice(0, 8)
+      : [],
     newsFocus: typeof snapshot.newsFocus === "string" ? String(snapshot.newsFocus).trim().slice(0, 80) : "",
     sectorFocus: typeof snapshot.sectorFocus === "string" ? String(snapshot.sectorFocus).trim().slice(0, 80) : "Technology",
     cryptoProducts: Array.isArray(snapshot.cryptoProducts)
@@ -791,7 +810,7 @@ function cleanSymbol(value) {
 }
 
 function normalizePage(value) {
-  return ["overview", "sectors", "calendar", "map", "news", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
+  return ["overview", "boards", "sectors", "calendar", "map", "quote", "news", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
     ? String(value).trim().toLowerCase()
     : "overview";
 }

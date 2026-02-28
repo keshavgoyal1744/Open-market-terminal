@@ -15,9 +15,11 @@
         </div>
         <nav class="topbar-nav">
           <button type="button" class="topbar-nav-btn" data-page="overview">Markets</button>
+          <button type="button" class="topbar-nav-btn" data-page="boards">Boards</button>
           <button type="button" class="topbar-nav-btn" data-page="sectors">Sectors</button>
           <button type="button" class="topbar-nav-btn" data-page="calendar">Calendar</button>
           <button type="button" class="topbar-nav-btn" data-page="map">Map</button>
+          <button type="button" class="topbar-nav-btn" data-page="quote">Quote</button>
           <button type="button" class="topbar-nav-btn" data-page="news">News</button>
           <button type="button" class="topbar-nav-btn" data-page="research">Research</button>
           <button type="button" class="topbar-nav-btn" data-page="ops">Ops</button>
@@ -45,6 +47,23 @@
           </div>
         </div>
       </header>
+
+      <section class="terminal-command-deck">
+        <form id="terminalCommandForm" class="terminal-command-form">
+          <div class="terminal-command-kicker">Command Bar</div>
+          <input
+            id="terminalCommandInput"
+            type="text"
+            autocomplete="off"
+            placeholder="AAPL US <Equity> DES · QUOTE NVDA · MAP AAPL MSFT · PAGE NEWS · SECTOR Technology"
+          />
+          <button type="submit">Run</button>
+        </form>
+        <div class="terminal-command-meta">
+          <div id="terminalCommandHint" class="muted">Symbol-first command routing with DES / FA / OWN / RV / SPLC / BMAP support.</div>
+          <div id="terminalHotkeys" class="terminal-hotkeys"></div>
+        </div>
+      </section>
 
       <section class="hero">
         <div class="hero-copy">
@@ -89,7 +108,7 @@
           <div class="signal-log">
             <div class="signal-row"><span>ROUTING</span><strong>Ctrl/⌘ + K opens the terminal palette</strong></div>
             <div class="signal-row"><span>SYMBOLS</span><strong>[ and ] cycle through watchlist names</strong></div>
-            <div class="signal-row"><span>PAGES</span><strong>Markets, Sectors, Calendar, Map, News, Research, and Ops split the desk into cleaner views</strong></div>
+            <div class="signal-row"><span>PAGES</span><strong>Markets, Boards, Sectors, Calendar, Map, Quote, News, Research, and Ops split the desk into cleaner views</strong></div>
           </div>
         </div>
         <aside class="auth-card control-card">
@@ -224,6 +243,97 @@
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section id="section-market-boards" class="panel panel-wide panel-market-boards">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Market Monitor Boards</p>
+              <h2>Leaders, actives, unusual volume, sectors, ETF tape, and macro regime</h2>
+            </div>
+            <button id="refreshMarketBoardsButton" type="button" class="secondary">Refresh</button>
+          </div>
+          <div id="marketBoardsSummary" class="watchlist-summary-grid"></div>
+          <div id="marketBoardsWarnings" class="panel-status-strip"></div>
+          <div class="market-boards-grid">
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Leaders</h3><div class="muted">top advancers</div></div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead><tr><th>Symbol</th><th>Last</th><th>% Change</th><th>Volume</th></tr></thead>
+                  <tbody id="leadersBoardBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Laggards</h3><div class="muted">top decliners</div></div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead><tr><th>Symbol</th><th>Last</th><th>% Change</th><th>Volume</th></tr></thead>
+                  <tbody id="laggardsBoardBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Most Active</h3><div class="muted">share tape</div></div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead><tr><th>Symbol</th><th>Volume</th><th>Dollar Vol</th><th>% Change</th></tr></thead>
+                  <tbody id="activeBoardBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Unusual Volume</h3><div class="muted">watchlist flow</div></div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead><tr><th>Symbol</th><th>Rel Vol</th><th>Shares</th><th>Street</th></tr></thead>
+                  <tbody id="unusualBoardBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Gap Up</h3><div class="muted">session proxy</div></div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead><tr><th>Symbol</th><th>Proxy</th><th>Last</th><th>Sector</th></tr></thead>
+                  <tbody id="gapUpBoardBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Gap Down</h3><div class="muted">session proxy</div></div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead><tr><th>Symbol</th><th>Proxy</th><th>Last</th><th>Sector</th></tr></thead>
+                  <tbody id="gapDownBoardBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Sector Performance</h3><div class="muted">index-weighted board</div></div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead><tr><th>Sector</th><th>% Move</th><th>Weight</th><th>Count</th></tr></thead>
+                  <tbody id="sectorPerformanceBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>ETF Tape</h3><div class="muted">flow proxy</div></div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead><tr><th>Symbol</th><th>Price</th><th>Tape Flow</th><th>% Change</th></tr></thead>
+                  <tbody id="etfFlowsBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Macro Dashboard</h3><div class="muted">rates and regime</div></div>
+              <div id="boardsMacroCards" class="watchlist-summary-grid"></div>
+              <div id="boardsYieldCurve" class="chart-card small"></div>
+            </article>
           </div>
         </section>
 
@@ -560,6 +670,35 @@
             </article>
             <article class="subpanel">
               <div class="subpanel-header">
+                <h3>Board Interlocks</h3>
+                <div class="muted">career and network ties</div>
+              </div>
+              <div id="companyMapBoardInterlocks" class="chart-card small"></div>
+              <div id="companyMapBoardInterlockList" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3>Ownership Trend</h3>
+                <div class="muted">public ownership signal timeline</div>
+              </div>
+              <div id="companyMapOwnershipTrend" class="chart-card small"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3>Acquisition Timeline</h3>
+                <div class="muted">corporate events and filings</div>
+              </div>
+              <div id="companyMapAcquisitions" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3>Index Presence Timeline</h3>
+                <div class="muted">current benchmark verification</div>
+              </div>
+              <div id="companyMapIndexTimeline" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
                 <h3>Competitors</h3>
                 <div class="muted">closest public comps</div>
               </div>
@@ -608,6 +747,87 @@
                 <div class="muted">reported insider positions</div>
               </div>
               <div id="companyMapInsiders" class="list-stack"></div>
+            </article>
+          </div>
+        </section>
+
+        <section id="section-quote-monitor" class="panel panel-wide panel-quote-monitor">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Quote Monitor</p>
+              <h2>Single-name tape, chart, holders, options, filings, news, and catalyst windows</h2>
+            </div>
+            <div class="workbench-header-actions">
+              <form id="quoteMonitorForm" class="inline-form">
+                <input id="quoteMonitorSymbol" type="text" placeholder="AAPL" />
+                <select id="quoteMonitorRange">
+                  <option value="1d">1 day</option>
+                  <option value="1w">1 week</option>
+                  <option value="1mo">1 month</option>
+                  <option value="3mo">3 months</option>
+                  <option value="6mo">6 months</option>
+                  <option value="1y">1 year</option>
+                </select>
+                <button type="submit">Load</button>
+              </form>
+              <button id="refreshQuoteMonitorButton" type="button" class="secondary">Refresh</button>
+            </div>
+          </div>
+          <div id="quoteMonitorSummary" class="watchlist-summary-grid"></div>
+          <div id="quoteMonitorWarnings" class="panel-status-strip"></div>
+          <div class="quote-monitor-shell">
+            <article class="subpanel quote-monitor-hero">
+              <div id="quoteMonitorHeadline" class="intel-headline"></div>
+              <div id="quoteMonitorMetrics" class="metric-strip"></div>
+              <div id="quoteMonitorChart" class="chart-card"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>News</h3><div class="muted">linked headlines</div></div>
+              <div id="quoteMonitorNews" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Event Timeline</h3><div class="muted">ranked catalysts</div></div>
+              <div id="quoteMonitorTimeline" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Recent Filings</h3><div class="muted">SEC disclosure tape</div></div>
+              <div id="quoteMonitorFilings" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Options</h3><div class="muted">front chain snapshot</div></div>
+              <div id="quoteMonitorOptionsSummary" class="watchlist-summary-grid"></div>
+              <div class="options-grid">
+                <div class="table-wrap compact terminal-table-wrap">
+                  <table class="terminal-table options-table">
+                    <thead><tr><th>Call Strike</th><th>Last</th><th>Bid / Ask</th><th>Vol / OI</th></tr></thead>
+                    <tbody id="quoteMonitorCallsBody"></tbody>
+                  </table>
+                </div>
+                <div class="table-wrap compact terminal-table-wrap">
+                  <table class="terminal-table options-table">
+                    <thead><tr><th>Put Strike</th><th>Last</th><th>Bid / Ask</th><th>Vol / OI</th></tr></thead>
+                    <tbody id="quoteMonitorPutsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Peers</h3><div class="muted">nearby public comps</div></div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead><tr><th>Symbol</th><th>Company</th><th>Last</th><th>% Change</th></tr></thead>
+                  <tbody id="quoteMonitorPeersBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header"><h3>Top Holders</h3><div class="muted">public owners</div></div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead><tr><th>Holder</th><th>% Held</th><th>Shares</th></tr></thead>
+                  <tbody id="quoteMonitorHoldersBody"></tbody>
+                </table>
+              </div>
             </article>
           </div>
         </section>

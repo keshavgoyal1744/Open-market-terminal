@@ -515,6 +515,10 @@ export class MarketDataService {
                 ]
               : []
         ).slice(0, 12);
+        const acquisitionsTimeline = buildAcquisitionTimeline(intel, company.sec?.filings ?? []);
+        const indexTimeline = buildIndexTimeline(indexMemberships);
+        const ownershipTrend = buildOwnershipTrend(company.market, resolvedHolders, company.market.insiderTransactions ?? []);
+        const boardInterlocks = buildBoardInterlocks(upper, intel.executives ?? [], company.market.companyOfficers ?? []);
 
         return {
           symbol: upper,
@@ -550,6 +554,10 @@ export class MarketDataService {
           ).slice(0, 16),
           insiderHolders: resolvedInsiderHolders,
           insiderTransactions: (company.market.insiderTransactions ?? []).slice(0, 12),
+          boardInterlocks,
+          acquisitionsTimeline,
+          indexTimeline,
+          ownershipTrend,
           corporate: {
             tree: intel.corporate?.tree ?? [],
             relations: normalizeMapRelations(intel.corporate?.relations ?? []),
@@ -559,6 +567,148 @@ export class MarketDataService {
         };
       },
       { ttlMs: config.companyTtlMs, staleMs: config.companyTtlMs * 2 },
+    );
+  }
+
+  async getQuoteMonitor(symbol, options = {}) {
+    const upper = String(symbol ?? "").trim().toUpperCase();
+    const range = String(options.range ?? "1d").trim() || "1d";
+    const interval = String(options.interval ?? inferMonitorInterval(range)).trim() || inferMonitorInterval(range);
+    const peerUniverse = [...new Set((options.peerSymbols ?? []).map((entry) => String(entry ?? "").trim().toUpperCase()).filter(Boolean))]
+      .filter((entry) => entry !== upper)
+      .slice(0, 10);
+
+    return this.cache.getOrSet(
+      `quote-monitor:${upper}:${range}:${interval}:${peerUniverse.join(",")}`,
+      async () => {
+        const [company, companyMap, history, optionsPayload, news, events] = await Promise.all([
+          this.getCompany(upper).catch((error) => ({
+            symbol: upper,
+            sec: emptySecSnapshot(upper, error),
+            market: emptyMarketOverview(upper, upper, error),
+            warnings: [error.message],
+          })),
+          this.getCompanyMap(upper).catch(() => null),
+          this.getHistory(upper, range, interval).catch(() => []),
+          this.getOptions(upper).catch((error) => emptyOptions(upper, error)),
+          this.getDeskNews([upper, ...peerUniverse], upper).catch(() => ({ items: [] })),
+          this.getMarketEvents([upper, ...peerUniverse], upper).catch(() => ({ events: [] })),
+        ]);
+
+        const quote = companyMap?.quote ?? (await this.getQuotes([upper]).catch(() => [null]))[0] ?? null;
+        const filings = company.sec?.filings?.slice(0, 8) ?? [];
+        const peers = (companyMap?.competitors ?? []).slice(0, 8);
+        const holders = (companyMap?.holders ?? []).slice(0, 10);
+
+        return {
+          symbol: upper,
+          companyName: companyMap?.companyName ?? company.market.shortName ?? company.sec.title ?? upper,
+          summary: companyMap?.summary ?? company.market.businessSummary ?? null,
+          quote,
+          market: company.market,
+          warnings: [...new Set([...(company.warnings ?? []), companyMap ? null : "Company map unavailable from current public sources."])].filter(Boolean),
+          history: {
+            range,
+            interval,
+            points: history,
+          },
+          options: optionsPayload,
+          filings,
+          peers,
+          holders,
+          board: (companyMap?.board ?? []).slice(0, 8),
+          news: (news.items ?? []).slice(0, 10),
+          timeline: (events.events ?? []).slice(0, 10),
+        };
+      },
+      { ttlMs: config.quoteTtlMs * 2, staleMs: config.quoteTtlMs * 6 },
+    );
+  }
+
+  async getMarketBoards(symbols = []) {
+    const watchlist = [...new Set((symbols ?? []).map((symbol) => String(symbol ?? "").trim().toUpperCase()).filter(Boolean))].slice(0, 20);
+    return this.cache.getOrSet(
+      `market-boards:${watchlist.join(",") || "default"}`,
+      async () => {
+        const [heatmap, watchlistQuotes, flow, macro, yieldCurve, etfQuotes] = await Promise.all([
+          this.getSp500Heatmap().catch(() => ({ tiles: [], sectors: [], asOf: new Date().toISOString(), warnings: [] })),
+          this.getQuotes(watchlist).catch(() => []),
+          this.getWatchlistFlow(watchlist).catch(() => ({ rows: [], summary: {} })),
+          this.getMacro().catch(() => ({ cards: [], highlights: [] })),
+          this.getYieldCurve().catch(() => ({ points: [] })),
+          this.getQuotes(["SPY", "QQQ", "DIA", "IWM", "TLT", "GLD", "USO", "XLE", "XLF", "XLK", "XLI", "XLV", "XLP", "XLY"]).catch(() => []),
+        ]);
+
+        const watchMap = new Map(watchlistQuotes.map((quote) => [quote.symbol, quote]));
+        const universe = dedupeBySymbol([
+          ...(heatmap.tiles ?? []).slice(0, 220),
+          ...watchlistQuotes,
+        ]);
+        const flowMap = new Map((flow.rows ?? []).map((row) => [row.symbol, row]));
+
+        const leaders = [...universe]
+          .filter((item) => Number.isFinite(item.changePercent))
+          .sort((left, right) => right.changePercent - left.changePercent)
+          .slice(0, 12);
+        const laggards = [...universe]
+          .filter((item) => Number.isFinite(item.changePercent))
+          .sort((left, right) => left.changePercent - right.changePercent)
+          .slice(0, 12);
+        const mostActive = [...universe]
+          .filter((item) => Number.isFinite(item.volume))
+          .sort((left, right) => numeric(right.volume) - numeric(left.volume))
+          .slice(0, 12)
+          .map((item) => ({ ...item, dollarVolume: numeric(item.price) * numeric(item.volume) }));
+        const unusualVolume = [...(flow.rows ?? [])]
+          .sort((left, right) => numeric(right.relativeVolume) - numeric(left.relativeVolume))
+          .slice(0, 12)
+          .map((row) => ({ ...row, quote: watchMap.get(row.symbol) ?? null }));
+        const gapUp = [...universe]
+          .filter((item) => Number.isFinite(item.changePercent))
+          .sort((left, right) => right.changePercent - left.changePercent)
+          .slice(0, 10)
+          .map((item) => ({ ...item, gapProxyPercent: item.changePercent }));
+        const gapDown = [...universe]
+          .filter((item) => Number.isFinite(item.changePercent))
+          .sort((left, right) => left.changePercent - right.changePercent)
+          .slice(0, 10)
+          .map((item) => ({ ...item, gapProxyPercent: item.changePercent }));
+        const sectorPerformance = [...(heatmap.sectors ?? [])]
+          .sort((left, right) => numeric(right.weight) - numeric(left.weight))
+          .slice(0, 12);
+        const etfFlows = etfQuotes
+          .map((quote) => ({
+            ...quote,
+            tapeFlow: numeric(quote.price) * numeric(quote.volume),
+          }))
+          .sort((left, right) => numeric(right.tapeFlow) - numeric(left.tapeFlow))
+          .slice(0, 12);
+
+        return {
+          asOf: new Date().toISOString(),
+          warnings: [
+            flow.rows?.some((row) => row.warning) ? "Options-flow fields are limited by the current free upstream source." : null,
+            "ETF flows are public tape-flow proxies, not fund-creation/redemption data.",
+            "Gap boards use public session gap proxies from quote feeds.",
+          ].filter(Boolean),
+          summary: {
+            trackedSymbols: watchlist.length,
+            leader: leaders[0]?.symbol ?? null,
+            active: mostActive[0]?.symbol ?? null,
+            unusual: unusualVolume[0]?.symbol ?? null,
+          },
+          leaders,
+          laggards,
+          mostActive,
+          unusualVolume,
+          gapUp,
+          gapDown,
+          sectorPerformance,
+          etfFlows,
+          macro: summarizeMacroDashboard(macro, yieldCurve),
+        };
+      },
+      { ttlMs: config.quoteTtlMs * 3, staleMs: config.quoteTtlMs * 8 },
     );
   }
 
@@ -2110,6 +2260,255 @@ function buildHeatmapReferences({ upper, company, focusNews, macroNews, filings 
     seen.add(reference.url);
     return true;
   }).slice(0, 8);
+}
+
+function buildAcquisitionTimeline(intel, filings = []) {
+  const corporateRows = [
+    ...((intel?.corporate?.tree ?? []).map((item) => ({
+      date: item.date ?? null,
+      title: item.name ?? item.target ?? "Corporate event",
+      kind: item.type ?? "corporate",
+      note: item.description ?? "Curated/public corporate relationship",
+      source: "Relationship console",
+    }))),
+    ...((intel?.corporate?.relations ?? []).map((item) => ({
+      date: item.date ?? null,
+      title: item.target ?? "Corporate link",
+      kind: item.relation ?? "relationship",
+      note: item.label ?? "Curated/public relationship",
+      source: "Relationship console",
+    }))),
+  ]
+    .filter((item) => /acqu|subs|invest|spin|merge|joint/i.test(`${item.kind} ${item.title} ${item.note}`))
+    .slice(0, 8);
+
+  const filingRows = (filings ?? [])
+    .filter((filing) => /8-K|S-4|SC 13D|425|10-K/i.test(String(filing.form ?? "")))
+    .slice(0, 6)
+    .map((filing) => ({
+      date: filing.filingDate ?? null,
+      title: filing.form ?? "SEC filing",
+      kind: "filing",
+      note: filing.primaryDocument ?? "Recent corporate disclosure",
+      source: "SEC",
+      url: filing.filingUrl ?? filing.filingIndexUrl ?? null,
+    }));
+
+  return [...corporateRows, ...filingRows]
+    .sort((left, right) => compareDatesDescending(left.date, right.date))
+    .slice(0, 12);
+}
+
+function buildIndexTimeline(indices = []) {
+  const verifiedAt = new Date().toISOString();
+  return (indices ?? []).slice(0, 8).map((item) => ({
+    date: item.verifiedAt ?? verifiedAt,
+    title: item.label ?? "Index membership",
+    kind: "index",
+    note: item.note ?? `Current membership via ${item.source ?? "public source"}`,
+    source: item.source ?? "Public source",
+    url: item.sourceUrl ?? null,
+  }));
+}
+
+function buildOwnershipTrend(market = {}, holders = [], insiderTransactions = []) {
+  const grouped = new Map();
+
+  for (const holder of holders ?? []) {
+    const date = normalizeDateKey(holder.reportDate);
+    if (!date || !Number.isFinite(holder.pctHeld)) {
+      continue;
+    }
+    const row = grouped.get(date) ?? { date, institutionPercent: 0, insiderEvents: 0, note: "holder reports" };
+    row.institutionPercent += holder.pctHeld;
+    grouped.set(date, row);
+  }
+
+  for (const item of insiderTransactions ?? []) {
+    const date = normalizeDateKey(item.startDate);
+    if (!date) {
+      continue;
+    }
+    const row = grouped.get(date) ?? { date, institutionPercent: null, insiderEvents: 0, note: "insider transactions" };
+    row.insiderEvents += 1;
+    grouped.set(date, row);
+  }
+
+  const rows = [...grouped.values()]
+    .sort((left, right) => compareDatesAscending(left.date, right.date))
+    .slice(-10);
+
+  if (rows.length) {
+    return rows;
+  }
+
+  return [
+    {
+      date: new Date().toISOString().slice(0, 10),
+      institutionPercent: market.institutionPercentHeld ?? null,
+      insiderEvents: (insiderTransactions ?? []).length || null,
+      note: "current public ownership snapshot",
+    },
+  ];
+}
+
+function buildBoardInterlocks(symbol, executives = [], officers = []) {
+  const interlocks = new Map();
+  const nodes = [{ id: symbol, label: symbol, kind: "issuer", symbol }];
+  const edges = [];
+
+  const addNode = (id, label, kind, symbol = undefined) => {
+    if (id && !nodes.find((node) => node.id === id)) {
+      nodes.push({ id, label, kind, symbol });
+    }
+  };
+
+  const addEdge = (source, target, relation, domain, label) => {
+    if (!source || !target) {
+      return;
+    }
+    const key = `${source}:${target}:${relation}:${domain}`;
+    if (!edges.find((entry) => `${entry.source}:${entry.target}:${entry.relation}:${entry.domain}` === key)) {
+      edges.push({ source, target, relation, domain, label, weight: 2 });
+    }
+  };
+
+  for (const executive of executives ?? []) {
+    if (!executive?.name) {
+      continue;
+    }
+    const background = Array.isArray(executive.background) ? executive.background : [];
+    for (const companyName of background) {
+      if (!companyName || /^age |^born /i.test(companyName)) {
+        continue;
+      }
+      const cleanName = String(companyName).trim();
+      const nodeId = `interlock:${templateKey(cleanName)}`;
+      addNode(nodeId, cleanName, "investment", inferTickerFromText(cleanName) ?? undefined);
+      addEdge(symbol, nodeId, executive.role ?? "executive", "corporate", `${executive.name} career link`);
+      interlocks.set(cleanName, (interlocks.get(cleanName) ?? 0) + 1);
+    }
+  }
+
+  return {
+    nodes,
+    edges,
+    summary: [...interlocks.entries()]
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({ name, count, symbol: inferTickerFromText(name) ?? null })),
+  };
+}
+
+function summarizeMacroDashboard(macro, yieldCurve) {
+  const cards = [
+    {
+      label: "Unemployment",
+      value: macro?.unemploymentRate?.display ?? "n/a",
+      note: macro?.unemploymentRate?.date ? `BLS ${macro.unemploymentRate.date}` : "BLS",
+    },
+    {
+      label: "Inflation YoY",
+      value: macro?.inflationYoY?.display ?? "n/a",
+      note: macro?.inflationYoY?.date ? `BLS ${macro.inflationYoY.date}` : "BLS",
+    },
+    {
+      label: "Payrolls",
+      value: macro?.nonfarmPayrolls?.display ?? "n/a",
+      note: macro?.nonfarmPayrolls?.date ? `BLS ${macro.nonfarmPayrolls.date}` : "BLS",
+    },
+    {
+      label: "Curve As Of",
+      value: yieldCurve?.asOf ?? "n/a",
+      note: "Treasury",
+    },
+  ];
+  const curve = (yieldCurve?.points ?? []).slice(0, 8).map((point) => ({
+    tenor: point.tenor ?? point.label ?? "n/a",
+    value: point.value ?? point.rate ?? null,
+  }));
+  return {
+    cards,
+    curve,
+    invertedSegments: countInvertedCurveSegments(curve),
+  };
+}
+
+function countInvertedCurveSegments(points = []) {
+  let count = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    if (numeric(points[index - 1]?.value) != null && numeric(points[index]?.value) != null && points[index].value < points[index - 1].value) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function inferMonitorInterval(range) {
+  const clean = String(range ?? "").trim();
+  if (clean === "1d") {
+    return "5m";
+  }
+  if (clean === "1w") {
+    return "30m";
+  }
+  if (clean === "1mo") {
+    return "1d";
+  }
+  if (clean === "3mo") {
+    return "1d";
+  }
+  if (clean === "6mo") {
+    return "1d";
+  }
+  return "1wk";
+}
+
+function dedupeBySymbol(items = []) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = String(item?.symbol ?? "").trim().toUpperCase();
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizeDateKey(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString().slice(0, 10) : null;
+}
+
+function compareDatesDescending(left, right) {
+  const leftTime = Date.parse(left ?? "");
+  const rightTime = Date.parse(right ?? "");
+  if (!Number.isFinite(leftTime) && !Number.isFinite(rightTime)) {
+    return 0;
+  }
+  if (!Number.isFinite(leftTime)) {
+    return 1;
+  }
+  if (!Number.isFinite(rightTime)) {
+    return -1;
+  }
+  return rightTime - leftTime;
+}
+
+function compareDatesAscending(left, right) {
+  const leftTime = Date.parse(left ?? "");
+  const rightTime = Date.parse(right ?? "");
+  if (!Number.isFinite(leftTime) && !Number.isFinite(rightTime)) {
+    return 0;
+  }
+  if (!Number.isFinite(leftTime)) {
+    return 1;
+  }
+  if (!Number.isFinite(rightTime)) {
+    return -1;
+  }
+  return leftTime - rightTime;
 }
 
 function chunkList(items, size) {

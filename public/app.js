@@ -3,6 +3,7 @@ const DEFAULT_PREFERENCES = {
   researchPinnedSymbols: [],
   detailSymbol: "AAPL",
   companyMapCompareSymbol: "",
+  terminalHotkeys: [],
   newsFocus: "",
   sectorFocus: "Technology",
   cryptoProducts: ["BTC-USD", "ETH-USD", "SOL-USD"],
@@ -23,7 +24,9 @@ const GUEST_PREFERENCES_KEY = "omt-guest-preferences";
 const DEFAULT_PANEL_SIZES = {
   "section-market-pulse": 12,
   "section-heatmap": 12,
+  "section-market-boards": 12,
   "section-sector-board": 12,
+  "section-quote-monitor": 12,
   "section-market-events": 12,
   "section-watchlist": 5,
   "section-flow": 7,
@@ -48,7 +51,9 @@ const DEFAULT_PANEL_SIZES = {
 const DEFAULT_PANEL_LAYOUT = [
   "section-market-pulse",
   "section-heatmap",
+  "section-market-boards",
   "section-sector-board",
+  "section-quote-monitor",
   "section-market-events",
   "section-watchlist",
   "section-flow",
@@ -114,6 +119,17 @@ const PAGE_DEFINITIONS = {
       "section-sector-board",
     ],
   },
+  boards: {
+    label: "Boards",
+    sectionLabel: "Monitor Boards",
+    title: "Leaders, active tape, unusual volume, sector performance, ETF tape, and macro boards.",
+    description:
+      "Use one page for the classic market monitor surfaces: movers, activity, sector breadth, ETF tape, and macro regime snapshots.",
+    tags: ["Leaders", "Most Active", "ETF Tape", "Macro"],
+    sections: [
+      "section-market-boards",
+    ],
+  },
   calendar: {
     label: "Calendar",
     sectionLabel: "Calendar Desk",
@@ -134,6 +150,17 @@ const PAGE_DEFINITIONS = {
     tags: ["Supply Chain", "Customers", "Indices", "Ownership"],
     sections: [
       "section-company-map",
+    ],
+  },
+  quote: {
+    label: "Quote",
+    sectionLabel: "Quote Monitor",
+    title: "Single-name quote monitor with linked mini-windows for chart, news, filings, options, peers, and timeline.",
+    description:
+      "Stay on one symbol and keep the tape, chart, options, holders, peers, and catalysts linked in a dedicated monitor view.",
+    tags: ["Quote", "Chart", "News", "Peers"],
+    sections: [
+      "section-quote-monitor",
     ],
   },
   news: {
@@ -191,8 +218,14 @@ const PAGE_PANEL_SPANS = {
     "section-heatmap": 12,
     "section-macro": 3,
   },
+  boards: {
+    "section-market-boards": 12,
+  },
   sectors: {
     "section-sector-board": 12,
+  },
+  quote: {
+    "section-quote-monitor": 12,
   },
   calendar: {
     "section-calendar": 12,
@@ -231,12 +264,18 @@ const PAGE_PANEL_ORDERS = {
     "section-watchlist": 4,
     "section-flow": 5,
   },
+  boards: {
+    "section-market-boards": 0,
+  },
   research: {
     "section-research-rail": 0,
     "section-workbench": 1,
     "section-intelligence": 2,
     "section-screening": 3,
     "section-events": 4,
+  },
+  quote: {
+    "section-quote-monitor": 0,
   },
   ops: {
     "section-portfolio": 0,
@@ -259,12 +298,18 @@ const PAGE_PANEL_COLUMNS = {
     "section-watchlist": "1 / span 7",
     "section-flow": "8 / span 5",
   },
+  boards: {
+    "section-market-boards": "1 / -1",
+  },
   research: {
     "section-research-rail": "1",
     "section-workbench": "2 / span 2",
     "section-intelligence": "2",
     "section-screening": "3",
     "section-events": "2 / span 2",
+  },
+  quote: {
+    "section-quote-monitor": "1 / -1",
   },
   ops: {
     "section-portfolio": "1 / span 4",
@@ -287,12 +332,18 @@ const PAGE_PANEL_ROWS = {
     "section-watchlist": "3",
     "section-flow": "3",
   },
+  boards: {
+    "section-market-boards": "1",
+  },
   research: {
     "section-research-rail": "1 / span 3",
     "section-workbench": "1",
     "section-intelligence": "2",
     "section-screening": "2",
     "section-events": "3",
+  },
+  quote: {
+    "section-quote-monitor": "1",
   },
   ops: {
     "section-portfolio": "1",
@@ -346,11 +397,13 @@ const state = {
   currentCompany: null,
   currentOptions: null,
   currentEarnings: null,
+  quoteMonitor: null,
   calendarEvents: [],
   newsItems: [],
   marketEvents: [],
   sectorBoard: null,
   flow: null,
+  marketBoards: null,
   companyMap: null,
   companyMapCompare: null,
   calendarPage: 1,
@@ -367,7 +420,9 @@ const state = {
 const SECTION_COMMANDS = [
   { id: "section-market-pulse", label: "Jump to Market Pulse", meta: "cross-asset pulse board" },
   { id: "section-heatmap", label: "Jump to S&P 500 Heatmap", meta: "live breadth and hover reasons" },
+  { id: "section-market-boards", label: "Jump to Monitor Boards", meta: "leaders, actives, sectors, etf tape" },
   { id: "section-sector-board", label: "Jump to Sector Board", meta: "sector drilldown and constituents" },
+  { id: "section-quote-monitor", label: "Jump to Quote Monitor", meta: "single-name quote and catalyst board" },
   { id: "section-watchlist", label: "Jump to Watchlist", meta: "tracked market quotes" },
   { id: "section-flow", label: "Jump to Flow Monitor", meta: "share volume, options flow, short interest" },
   { id: "section-research-rail", label: "Jump to Research Rail", meta: "symbol stack and focus list" },
@@ -413,6 +468,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await Promise.all([
     loadMarketPulse(),
     loadHeatmap(),
+    loadMarketBoards(),
     loadSectorBoard(),
     loadMarketEvents(),
     loadWatchlist(state.preferences.watchlistSymbols),
@@ -420,6 +476,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadResearchRail(),
     loadDetail(state.preferences.detailSymbol),
     loadCompanyMap(state.preferences.detailSymbol),
+    loadQuoteMonitor(state.preferences.detailSymbol),
     loadMacro(),
     loadYieldCurve(),
     loadDeskCalendar(),
@@ -501,6 +558,10 @@ function bindForms() {
     await loadHeatmap(true);
   });
 
+  document.querySelector("#refreshMarketBoardsButton")?.addEventListener("click", async () => {
+    await loadMarketBoards(true);
+  });
+
   document.querySelector("#refreshSectorBoardButton")?.addEventListener("click", async () => {
     await loadSectorBoard(true);
   });
@@ -514,7 +575,7 @@ function bindForms() {
     state.preferences.watchlistSymbols = splitSymbols(document.querySelector("#watchlistInput").value);
     schedulePreferenceSync();
     await loadWatchlist(state.preferences.watchlistSymbols);
-    await Promise.all([loadWatchlistEvents(), loadDeskCalendar(true), loadDeskNews(true), loadMarketEvents(true), loadFlow(true)]);
+    await Promise.all([loadWatchlistEvents(), loadDeskCalendar(true), loadDeskNews(true), loadMarketEvents(true), loadFlow(true), loadMarketBoards(true)]);
   });
 
   document.querySelector("#saveWatchlistButton").addEventListener("click", async () => {
@@ -525,6 +586,22 @@ function bindForms() {
     event.preventDefault();
     state.currentHistoryRange = document.querySelector("#historyRange").value;
     await selectDetailSymbol(document.querySelector("#detailSymbol").value.trim().toUpperCase());
+  });
+
+  document.querySelector("#quoteMonitorForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const symbol = document.querySelector("#quoteMonitorSymbol")?.value.trim().toUpperCase() ?? state.preferences.detailSymbol;
+    await selectDetailSymbol(symbol, { page: "quote", jump: false });
+  });
+
+  document.querySelector("#refreshQuoteMonitorButton")?.addEventListener("click", async () => {
+    await loadQuoteMonitor(state.preferences.detailSymbol, true);
+  });
+
+  document.querySelector("#terminalCommandForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const raw = document.querySelector("#terminalCommandInput")?.value ?? "";
+    await executeTerminalInput(raw);
   });
 
   document.querySelector("#companyMapForm")?.addEventListener("submit", async (event) => {
@@ -840,6 +917,14 @@ function bindGlobalActions() {
     openCommandPalette("");
   });
 
+  document.querySelector("#terminalHotkeys")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-terminal-hotkey]") : null;
+    if (!trigger?.dataset.terminalHotkey) {
+      return;
+    }
+    await executeTerminalInput(trigger.dataset.terminalHotkey);
+  });
+
   document.querySelectorAll("[data-page]").forEach((button) => {
     button.addEventListener("click", () => {
       setActivePage(button.dataset.page, { scroll: true });
@@ -913,6 +998,18 @@ function bindGlobalActions() {
     await selectDetailSymbol(trigger.dataset.flowSymbol, { jump: true, page: "research" });
   });
 
+  document.querySelector("#section-market-boards")?.addEventListener("click", async (event) => {
+    const symbolTrigger = event.target instanceof Element ? event.target.closest("[data-flow-symbol]") : null;
+    if (symbolTrigger?.dataset.flowSymbol) {
+      await selectDetailSymbol(symbolTrigger.dataset.flowSymbol, { jump: false, page: "quote" });
+      return;
+    }
+    const sectorTrigger = event.target instanceof Element ? event.target.closest("[data-board-sector]") : null;
+    if (sectorTrigger?.dataset.boardSector) {
+      await selectSectorFocus(sectorTrigger.dataset.boardSector, { jump: false, page: "sectors" });
+    }
+  });
+
   document.querySelector("#intelGraph")?.addEventListener("click", async (event) => {
     const trigger = event.target instanceof Element ? event.target.closest("[data-graph-symbol]") : null;
     if (!trigger?.dataset.graphSymbol) {
@@ -944,6 +1041,14 @@ function bindGlobalActions() {
       return;
     }
     await selectDetailSymbol(trigger.dataset.companyMapSymbol, { jump: false, page: "map" });
+  });
+
+  document.querySelector("#section-quote-monitor")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-company-map-symbol]") : null;
+    if (!trigger?.dataset.companyMapSymbol) {
+      return;
+    }
+    await selectDetailSymbol(trigger.dataset.companyMapSymbol, { jump: false, page: "quote" });
   });
 
   document.querySelector("#commandPaletteInput")?.addEventListener("input", (event) => {
@@ -1037,6 +1142,12 @@ function bindGlobalActions() {
       return;
     }
 
+    if (!editable && event.key === "/") {
+      event.preventDefault();
+      document.querySelector("#terminalCommandInput")?.focus();
+      return;
+    }
+
     if (state.commandPaletteOpen) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -1075,10 +1186,35 @@ function bindGlobalActions() {
       return;
     }
 
+    if (event.altKey && !event.ctrlKey && !event.metaKey) {
+      const pageHotkeys = {
+        "1": "overview",
+        "2": "boards",
+        "3": "sectors",
+        "4": "calendar",
+        "5": "map",
+        "6": "quote",
+        "7": "news",
+        "8": "research",
+        "9": "ops",
+      };
+      if (pageHotkeys[event.key]) {
+        event.preventDefault();
+        setActivePage(pageHotkeys[event.key], { scroll: true });
+        return;
+      }
+    }
+
     if (event.key === "[") {
       event.preventDefault();
       await cycleDetailSymbol(-1);
     } else if (event.key === "]") {
+      event.preventDefault();
+      await cycleDetailSymbol(1);
+    } else if (event.shiftKey && event.key === "ArrowLeft") {
+      event.preventDefault();
+      await cycleDetailSymbol(-1);
+    } else if (event.shiftKey && event.key === "ArrowRight") {
       event.preventDefault();
       await cycleDetailSymbol(1);
     }
@@ -1252,6 +1388,12 @@ function setActivePage(pageId, options = {}) {
   if (state.preferences.activePage === "map") {
     void loadCompanyMap(state.preferences.detailSymbol);
   }
+  if (state.preferences.activePage === "quote") {
+    void loadQuoteMonitor(state.preferences.detailSymbol);
+  }
+  if (state.preferences.activePage === "boards") {
+    void loadMarketBoards(false);
+  }
   if (state.preferences.activePage === "sectors") {
     syncSectorSelector(state.sectorBoard?.sectors ?? state.heatmap?.sectors ?? DEFAULT_SECTORS, state.preferences.sectorFocus);
     if (!(state.sectorBoard?.sectors?.length || state.heatmap?.sectors?.length)) {
@@ -1297,6 +1439,9 @@ function rerenderPageScopedPanels() {
   }
   if (document.querySelector("#marketEventsList")) {
     renderMarketEventsPanel(state.marketEvents);
+  }
+  if (document.querySelector("#terminalHotkeys")) {
+    renderTerminalHotkeys();
   }
 }
 
@@ -1679,12 +1824,37 @@ async function loadCompanyMap(symbol, force = false) {
       payload.customers ?? [],
       "No downstream or customer-side public links are available.",
     );
+    document.querySelector("#companyMapBoardInterlockList").innerHTML = renderCompanyMapInterlocks(payload.boardInterlocks?.summary ?? []);
+    document.querySelector("#companyMapAcquisitions").innerHTML = renderCompanyMapTimeline(
+      payload.acquisitionsTimeline ?? [],
+      "No acquisition or corporate-event timeline rows are available.",
+    );
+    document.querySelector("#companyMapIndexTimeline").innerHTML = renderCompanyMapTimeline(
+      payload.indexTimeline ?? [],
+      "No current index-presence timeline rows are available.",
+    );
     document.querySelector("#companyMapCompetitorBody").innerHTML = renderCompanyMapCompetitors(payload.competitors ?? []);
     document.querySelector("#companyMapHoldersBody").innerHTML = renderCompanyMapHolders(payload.holders ?? []);
     document.querySelector("#companyMapBoard").innerHTML = renderCompanyMapBoard(payload.board ?? []);
     document.querySelector("#companyMapInsiders").innerHTML = renderCompanyMapInsiders(payload.insiderHolders ?? [], payload.insiderTransactions ?? []);
     mountIntelGraph(document.querySelector("#companyMapGraph"), payload.graph, payload.symbol);
+    mountIntelGraph(
+      document.querySelector("#companyMapBoardInterlocks"),
+      payload.boardInterlocks ?? { nodes: [{ id: payload.symbol, label: payload.symbol, kind: "issuer", symbol: payload.symbol }], edges: [] },
+      payload.symbol,
+    );
     mountGeoExposureChart(document.querySelector("#companyMapGeo"), payload.geography);
+    mountBarChart(document.querySelector("#companyMapOwnershipTrend"), {
+      title: "Ownership Signal",
+      subtitle: "Institutional report dates and insider activity",
+      points: (payload.ownershipTrend ?? []).map((item) => ({
+        label: formatDateShort(item.date),
+        value: item.institutionPercent != null ? item.institutionPercent * 100 : item.insiderEvents ?? 0,
+        meta: item.note ?? "public ownership",
+      })),
+      valueFormatter: (value) => `${formatNumber(value, 2)}${value > 20 ? "%" : ""}`,
+      labelFormatter: (label) => label,
+    });
     await loadCompanyMapComparison(payload, force);
     markFeedHeartbeat("Live");
   } catch (error) {
@@ -1720,6 +1890,93 @@ async function loadCompanyMapComparison(primaryPayload, force = false) {
   } catch (error) {
     state.companyMapCompare = null;
     renderCompanyMapCompare(primaryPayload, null, error.message);
+  }
+}
+
+async function loadQuoteMonitor(symbol, force = false) {
+  const clean = String(symbol ?? state.preferences.detailSymbol ?? "").trim().toUpperCase();
+  if (!clean) {
+    return;
+  }
+  const range = document.querySelector("#quoteMonitorRange")?.value ?? state.currentHistoryRange ?? "1d";
+  const interval = resolveHistoryInterval(range);
+  const peerSymbols = state.preferences.watchlistSymbols.filter((entry) => entry !== clean).slice(0, 10);
+
+  try {
+    const payload = await api(
+      `/api/quote-monitor?symbol=${encodeURIComponent(clean)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&peerSymbols=${encodeURIComponent(peerSymbols.join(","))}${force ? "&force=1" : ""}`,
+    );
+    state.quoteMonitor = payload;
+    document.querySelector("#quoteMonitorSymbol").value = clean;
+    document.querySelector("#quoteMonitorRange").value = range;
+    document.querySelector("#quoteMonitorSummary").innerHTML = renderQuoteMonitorSummary(payload);
+    document.querySelector("#quoteMonitorWarnings").innerHTML = renderStatusStrip(
+      payload.warnings ?? [],
+      `${clean} quote monitor loaded from current public quote, options, filing, and news feeds.`,
+    );
+    document.querySelector("#quoteMonitorHeadline").innerHTML = `
+      <p class="section-label">${escapeHtml(payload.market?.sector ?? humanizeInstrumentType(payload.quote))}</p>
+      <h3>${escapeHtml(payload.companyName ?? clean)}</h3>
+      <p>${escapeHtml(payload.summary ?? "Single-name quote monitor with linked public-source windows.")}</p>
+    `;
+    document.querySelector("#quoteMonitorMetrics").innerHTML = renderQuoteMonitorMetrics(payload.quote, payload.market, payload.history?.points ?? []);
+    mountCandlestickChart(document.querySelector("#quoteMonitorChart"), {
+      title: `${clean} ${historyRangeLabel(range)} OHLC + volume`,
+      subtitle: `${payload.quote?.exchange ?? payload.market?.exchange ?? "Public market"} · ${formatTimestampShort(payload.quote?.timestamp)}`,
+      points: payload.history?.points ?? [],
+      valueFormatter: formatMoney,
+    });
+    document.querySelector("#quoteMonitorNews").innerHTML = renderQuoteMonitorNews(payload.news ?? []);
+    document.querySelector("#quoteMonitorTimeline").innerHTML = renderQuoteMonitorTimeline(payload.timeline ?? []);
+    document.querySelector("#quoteMonitorFilings").innerHTML = renderQuoteMonitorFilings(payload.filings ?? []);
+    document.querySelector("#quoteMonitorOptionsSummary").innerHTML = renderOptionsSummary(payload.options ?? {}, payload.quote ?? null);
+    document.querySelector("#quoteMonitorCallsBody").innerHTML = renderQuoteMonitorOptionRows(payload.options?.calls ?? [], "call");
+    document.querySelector("#quoteMonitorPutsBody").innerHTML = renderQuoteMonitorOptionRows(payload.options?.puts ?? [], "put");
+    document.querySelector("#quoteMonitorPeersBody").innerHTML = renderCompanyMapCompetitors(payload.peers ?? []);
+    document.querySelector("#quoteMonitorHoldersBody").innerHTML = renderCompanyMapHolders(payload.holders ?? []);
+    markFeedHeartbeat("Live");
+  } catch (error) {
+    document.querySelector("#quoteMonitorWarnings").innerHTML =
+      `<div class="panel-status-chip warn">${escapeHtml(error.message)}</div>`;
+    showStatus(error.message, true);
+  }
+}
+
+async function loadMarketBoards(force = false) {
+  const symbols = state.preferences.watchlistSymbols.slice(0, 16);
+  try {
+    const payload = await api(`/api/market-boards?symbols=${encodeURIComponent(symbols.join(","))}${force ? "&force=1" : ""}`);
+    state.marketBoards = payload;
+    document.querySelector("#marketBoardsSummary").innerHTML = renderMarketBoardsSummary(payload);
+    document.querySelector("#marketBoardsWarnings").innerHTML = renderStatusStrip(
+      payload.warnings ?? [],
+      "Market boards loaded from public heatmap breadth, share tape, ETF tape proxies, and macro sources.",
+    );
+    document.querySelector("#leadersBoardBody").innerHTML = renderBoardQuoteRows(payload.leaders ?? [], "volume");
+    document.querySelector("#laggardsBoardBody").innerHTML = renderBoardQuoteRows(payload.laggards ?? [], "volume");
+    document.querySelector("#activeBoardBody").innerHTML = renderBoardActiveRows(payload.mostActive ?? []);
+    document.querySelector("#unusualBoardBody").innerHTML = renderBoardUnusualRows(payload.unusualVolume ?? []);
+    document.querySelector("#gapUpBoardBody").innerHTML = renderBoardGapRows(payload.gapUp ?? []);
+    document.querySelector("#gapDownBoardBody").innerHTML = renderBoardGapRows(payload.gapDown ?? []);
+    document.querySelector("#sectorPerformanceBody").innerHTML = renderBoardSectorRows(payload.sectorPerformance ?? []);
+    document.querySelector("#etfFlowsBody").innerHTML = renderBoardEtfRows(payload.etfFlows ?? []);
+    document.querySelector("#boardsMacroCards").innerHTML = renderBoardsMacroCards(payload.macro);
+    mountBarChart(document.querySelector("#boardsYieldCurve"), {
+      title: "Yield Curve",
+      subtitle: `${payload.macro?.invertedSegments ?? 0} inverted segments`,
+      points: (payload.macro?.curve ?? []).map((point) => ({
+        label: point.tenor,
+        value: point.value,
+        meta: "Treasury curve",
+      })),
+      valueFormatter: (value) => formatPercent(value),
+      labelFormatter: (label) => label,
+    });
+    markFeedHeartbeat("Live");
+  } catch (error) {
+    document.querySelector("#marketBoardsWarnings").innerHTML =
+      `<div class="panel-status-chip warn">${escapeHtml(error.message)}</div>`;
+    showStatus(error.message, true);
   }
 }
 
@@ -2898,6 +3155,12 @@ function renderPortfolio() {
 function applyPreferencesToInputs() {
   document.querySelector("#watchlistInput").value = state.preferences.watchlistSymbols.join(",");
   document.querySelector("#detailSymbol").value = state.preferences.detailSymbol;
+  if (document.querySelector("#quoteMonitorSymbol")) {
+    document.querySelector("#quoteMonitorSymbol").value = state.preferences.detailSymbol;
+  }
+  if (document.querySelector("#quoteMonitorRange")) {
+    document.querySelector("#quoteMonitorRange").value = state.currentHistoryRange;
+  }
   if (document.querySelector("#companyMapSymbol")) {
     document.querySelector("#companyMapSymbol").value = state.preferences.detailSymbol;
   }
@@ -2918,6 +3181,7 @@ function applyPreferencesToInputs() {
   applyCryptoPreferences();
   renderSymbolRibbon();
   renderResearchRail();
+  renderTerminalHotkeys();
   renderHud();
 }
 
@@ -2968,6 +3232,7 @@ function snapshotCurrentWorkspace() {
     researchPinnedSymbols: state.preferences.researchPinnedSymbols,
     detailSymbol: state.preferences.detailSymbol,
     companyMapCompareSymbol: state.preferences.companyMapCompareSymbol,
+    terminalHotkeys: state.preferences.terminalHotkeys,
     newsFocus: state.preferences.newsFocus,
     sectorFocus: state.preferences.sectorFocus,
     cryptoProducts: state.preferences.cryptoProducts,
@@ -3019,6 +3284,7 @@ function persistGuestPreferencesIfNeeded() {
 function scheduleRefresh() {
   setInterval(() => void loadMarketPulse(), 45000);
   setInterval(() => void loadHeatmap(false), 180000);
+  setInterval(() => void loadMarketBoards(false), 180000);
   setInterval(() => void loadSectorBoard(false), 180000);
   setInterval(() => void loadMarketEvents(false), 120000);
   setInterval(() => void loadWatchlist(state.preferences.watchlistSymbols), 30000);
@@ -3032,6 +3298,11 @@ function scheduleRefresh() {
       void loadCompanyMap(state.preferences.detailSymbol);
     }
   }, 180000);
+  setInterval(() => {
+    if (normalizePage(state.preferences.activePage) === "quote") {
+      void loadQuoteMonitor(state.preferences.detailSymbol);
+    }
+  }, 90000);
   setInterval(() => void loadDeskCalendar(false), 300000);
   setInterval(() => void loadDeskNews(false), 120000);
   setInterval(() => void renderPortfolio(), 30000);
@@ -3060,6 +3331,7 @@ async function selectDetailSymbol(symbol, options = {}) {
     loadDetail(clean),
     loadDeskNews(false),
     loadMarketEvents(false),
+    options.page === "quote" || normalizePage(state.preferences.activePage) === "quote" ? loadQuoteMonitor(clean, true) : Promise.resolve(),
     options.page === "map" || normalizePage(state.preferences.activePage) === "map" ? loadCompanyMap(clean, true) : Promise.resolve(),
   ]);
 }
@@ -3283,6 +3555,163 @@ function buildPaletteCommands(query = "") {
       return `${command.label} ${command.meta} ${command.kind}`.toLowerCase().includes(normalized);
     })
     .slice(0, 14);
+}
+
+function renderTerminalHotkeys() {
+  const container = document.querySelector("#terminalHotkeys");
+  if (!container) {
+    return;
+  }
+  const items = state.preferences.terminalHotkeys ?? [];
+  container.innerHTML = items.length
+    ? items
+        .map(
+          (entry) => `
+            <button type="button" class="secondary terminal-hotkey-chip" data-terminal-hotkey="${escapeHtml(entry)}">
+              ${escapeHtml(entry)}
+            </button>
+          `,
+        )
+        .join("")
+    : `<div class="muted">Recent terminal commands appear here.</div>`;
+}
+
+function rememberTerminalHotkey(input) {
+  const clean = String(input ?? "").trim();
+  if (!clean) {
+    return;
+  }
+  state.preferences.terminalHotkeys = [clean, ...(state.preferences.terminalHotkeys ?? []).filter((entry) => entry !== clean)].slice(0, 8);
+  schedulePreferenceSync();
+  renderTerminalHotkeys();
+}
+
+async function executeTerminalInput(raw) {
+  const input = String(raw ?? "").trim();
+  if (!input) {
+    return;
+  }
+  try {
+    const command = parseTerminalCommand(input);
+    await command.run();
+    rememberTerminalHotkey(input);
+    document.querySelector("#terminalCommandInput").value = input;
+    setText("#terminalCommandHint", command.meta);
+    showStatus(`Executed ${command.label}.`, false);
+  } catch (error) {
+    showStatus(error.message, true);
+  }
+}
+
+function parseTerminalCommand(raw) {
+  const normalized = String(raw ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\bUS\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const upper = normalized.toUpperCase();
+  const parts = upper.split(" ").filter(Boolean);
+  if (!parts.length) {
+    throw new Error("Enter a terminal command or symbol.");
+  }
+
+  if (parts[0] === "PAGE" && parts[1]) {
+    const pageId = Object.keys(PAGE_DEFINITIONS).find((key) => PAGE_DEFINITIONS[key].label.toUpperCase() === parts.slice(1).join(" "));
+    if (!pageId) {
+      throw new Error(`Unknown page: ${parts.slice(1).join(" ")}`);
+    }
+    return {
+      label: `Open ${PAGE_DEFINITIONS[pageId].label}`,
+      meta: PAGE_DEFINITIONS[pageId].description,
+      run: async () => setActivePage(pageId, { scroll: true }),
+    };
+  }
+
+  if (parts[0] === "SECTOR" && parts.length > 1) {
+    const sector = normalized.split(/\s+/).slice(1).join(" ");
+    return {
+      label: `Open ${sector} sector`,
+      meta: "Open the sector drilldown board",
+      run: () => selectSectorFocus(sector, { jump: false, page: "sectors" }),
+    };
+  }
+
+  if (parts[0] === "MAP" && parts[1]) {
+    const primary = cleanTerminalSymbol(parts[1]);
+    const compare = parts[2] ? cleanTerminalSymbol(parts[2]) : "";
+    return {
+      label: `Open ${primary} map`,
+      meta: compare ? `Compare ${primary} vs ${compare}` : "Open company map",
+      run: async () => {
+        state.preferences.companyMapCompareSymbol = compare && compare !== primary ? compare : "";
+        schedulePreferenceSync();
+        await selectDetailSymbol(primary, { page: "map", jump: false });
+      },
+    };
+  }
+
+  if (parts[0] === "QUOTE" && parts[1]) {
+    const symbol = cleanTerminalSymbol(parts[1]);
+    return {
+      label: `Open ${symbol} quote monitor`,
+      meta: "Single-name quote monitor",
+      run: () => selectDetailSymbol(symbol, { page: "quote", jump: false }),
+    };
+  }
+
+  if (parts[0] === "BOARDS") {
+    return {
+      label: "Open monitor boards",
+      meta: "Leaders, activity, ETF tape, and macro boards",
+      run: async () => setActivePage("boards", { scroll: true }),
+    };
+  }
+
+  if (parts[0] === "NEWS") {
+    const query = normalized.split(/\s+/).slice(1).join(" ");
+    return {
+      label: query ? `Search news for ${query}` : "Open news page",
+      meta: query ? "Open the news page and search this symbol or theme" : PAGE_DEFINITIONS.news.description,
+      run: async () => {
+        state.preferences.newsFocus = query;
+        schedulePreferenceSync();
+        applyPreferencesToInputs();
+        setActivePage("news", { scroll: true });
+        await loadDeskNews(true);
+      },
+    };
+  }
+
+  const intelView = normalizeIntelView(parts.at(-1));
+  const hasIntelView = INTEL_VIEWS.includes(parts.at(-1));
+  const symbol = cleanTerminalSymbol(parts[0]);
+  if (!symbol) {
+    throw new Error(`Could not parse terminal command: ${raw}`);
+  }
+
+  if (hasIntelView) {
+    return {
+      label: `Open ${symbol} ${intelView}`,
+      meta: `Load ${symbol} into the Research page and switch the Relationship Console to ${intelView}`,
+      run: async () => {
+        state.intelView = intelView;
+        await selectDetailSymbol(symbol, { page: "research", jump: false });
+      },
+    };
+  }
+
+  return {
+    label: `Open ${symbol}`,
+    meta: "Load the symbol into the research workbench",
+    run: () => selectDetailSymbol(symbol, { page: "research", jump: false }),
+  };
+}
+
+function cleanTerminalSymbol(value) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9^=.\-]/g, "");
 }
 
 function guardAuthenticated(label) {
@@ -4463,6 +4892,55 @@ function renderCompanyMapRelations(items, emptyMessage) {
     .join("");
 }
 
+function renderCompanyMapTimeline(items, emptyMessage) {
+  if (!items.length) {
+    return renderIntelEmpty(emptyMessage);
+  }
+
+  return items
+    .map(
+      (item, index) => `
+        <div class="list-item terminal-list-item">
+          <div class="terminal-list-main">
+            <div class="terminal-symbol-line">
+              <strong>${escapeHtml(item.title ?? item.kind ?? "Event")}</strong>
+              <span class="terminal-chip">${String(index + 1).padStart(2, "0")}</span>
+            </div>
+            <div class="meta">${escapeHtml(item.note ?? "")}</div>
+          </div>
+          <div class="terminal-price-stack">
+            <strong>${escapeHtml(formatDateShort(item.date) ?? "n/a")}</strong>
+            <div class="meta">${item.url ? `<a class="event-link" href="${safeUrl(item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.source ?? "Source")}</a>` : escapeHtml(item.source ?? "Source")}</div>
+          </div>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderCompanyMapInterlocks(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No public interlock rows are available.");
+  }
+
+  return items
+    .map(
+      (item) => `
+        <div class="list-item intel-list-item company-map-link${item.symbol ? " has-symbol" : ""}"${item.symbol ? ` data-company-map-symbol="${escapeHtml(item.symbol)}"` : ""}>
+          <div class="intel-list-main">
+            <span class="intel-tag">INTERLOCK</span>
+            <div>
+              <strong>${escapeHtml(item.name ?? "n/a")}</strong>
+              <div class="meta">${escapeHtml(`${item.count} executive link${item.count === 1 ? "" : "s"}`)}</div>
+            </div>
+          </div>
+          <div class="intel-domain">${escapeHtml((item.symbol ?? "board").toUpperCase())}</div>
+        </div>
+      `,
+    )
+    .join("");
+}
+
 function renderCompanyMapCompare(primary, secondary, warning = "") {
   const summary = document.querySelector("#companyMapCompareSummary");
   const shell = document.querySelector("#companyMapCompareShell");
@@ -5206,6 +5684,248 @@ function renderOptionsSummary(options, quote) {
   ].join("");
 }
 
+function renderQuoteMonitorSummary(payload) {
+  return [
+    renderTerminalStat("Last", formatMoney(payload.quote?.price), payload.quote?.exchange ?? "public quote"),
+    renderTerminalStat("Daily Move", formatPercent(payload.quote?.changePercent), formatSignedMoney(payload.quote?.change)),
+    renderTerminalStat("Peers", String(payload.peers?.length ?? 0), payload.peers?.[0]?.symbol ?? "peer set"),
+    renderTerminalStat("Filings", String(payload.filings?.length ?? 0), payload.filings?.[0]?.form ?? "SEC"),
+    renderTerminalStat("Holders", String(payload.holders?.length ?? 0), payload.holders?.[0]?.holder ?? "public ownership"),
+  ].join("");
+}
+
+function renderQuoteMonitorMetrics(quote, market, points) {
+  const closes = (points ?? []).map((point) => point.close).filter(Number.isFinite);
+  const trend = closes.length >= 2 ? closes.at(-1) - closes[0] : null;
+  return [
+    metric("Last", formatMoney(quote?.price)),
+    metric("Move", formatPercent(quote?.changePercent), tone(quote?.changePercent)),
+    metric("Trend", formatSignedMoney(trend), tone(trend)),
+    metric("Volume", formatCompact(quote?.volume)),
+    metric("Mkt Cap", formatCompact(market?.marketCap ?? quote?.marketCap)),
+    metric("Street", market?.analystRating ?? "n/a"),
+  ].join("");
+}
+
+function renderQuoteMonitorNews(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No linked news rows are available.");
+  }
+  return items
+    .slice(0, 8)
+    .map(
+      (item) => `
+        <div class="list-item terminal-list-item">
+          <div class="terminal-list-main">
+            <strong>${escapeHtml(item.title ?? "News")}</strong>
+            <div class="meta">${escapeHtml(item.source ?? "Source")} · ${escapeHtml(formatDateTime(item.publishedAt))}</div>
+          </div>
+          <div class="terminal-price-stack">
+            <strong>${escapeHtml((item.category ?? "news").toUpperCase())}</strong>
+            <div class="meta">${item.link ? `<a class="event-link" href="${safeUrl(item.link)}" target="_blank" rel="noreferrer">Open</a>` : "link n/a"}</div>
+          </div>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderQuoteMonitorTimeline(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No catalyst timeline rows are available.");
+  }
+  return items
+    .map(
+      (item) => `
+        <div class="list-item terminal-list-item">
+          <div class="terminal-list-main">
+            <div class="terminal-symbol-line">
+              <strong>${escapeHtml(item.title ?? item.kind ?? "Event")}</strong>
+              <span class="terminal-chip">${escapeHtml((item.category ?? item.kind ?? "event").toUpperCase())}</span>
+            </div>
+            <div class="meta">${escapeHtml(item.note ?? item.source ?? "")}</div>
+          </div>
+          <div class="terminal-price-stack">
+            <strong>${escapeHtml(formatDateShort(item.timestamp ?? item.date))}</strong>
+            <div class="meta">${escapeHtml(item.source ?? "Source")}</div>
+          </div>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderQuoteMonitorFilings(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No recent SEC filings are available.");
+  }
+  return items
+    .map(
+      (filing) => `
+        <div class="list-item terminal-list-item">
+          <div class="terminal-list-main">
+            <div class="terminal-symbol-line">
+              <strong>${escapeHtml(filing.form ?? "SEC filing")}</strong>
+              <span class="terminal-chip">${escapeHtml(formatDateShort(filing.filingDate))}</span>
+            </div>
+            <div class="meta">${escapeHtml(filing.primaryDocument ?? "document")}</div>
+          </div>
+          <div class="terminal-price-stack">
+            <strong>${escapeHtml(filing.accessionNumber ?? "SEC")}</strong>
+            <div class="meta">${filing.filingUrl ? `<a class="event-link" href="${safeUrl(filing.filingUrl)}" target="_blank" rel="noreferrer">Open</a>` : "source n/a"}</div>
+          </div>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderQuoteMonitorOptionRows(items, side) {
+  if (!items.length) {
+    return `<tr><td colspan="4" class="muted">Public ${escapeHtml(side)} chain unavailable right now.</td></tr>`;
+  }
+  return items
+    .slice(0, 8)
+    .map(
+      (item) => `
+        <tr class="intel-row">
+          <td>${formatMoney(item.strike)}</td>
+          <td>${formatMoney(item.lastPrice)}</td>
+          <td>${formatMoney(item.bid)} / ${formatMoney(item.ask)}</td>
+          <td>${formatCompact(item.volume)} / ${formatCompact(item.openInterest)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderMarketBoardsSummary(payload) {
+  return [
+    renderTerminalStat("Leader", payload.summary?.leader ?? "n/a", "best mover"),
+    renderTerminalStat("Most Active", payload.summary?.active ?? "n/a", "highest tape"),
+    renderTerminalStat("Unusual", payload.summary?.unusual ?? "n/a", "flow board"),
+    renderTerminalStat("Tracked", String(payload.summary?.trackedSymbols ?? 0), "watchlist universe"),
+  ].join("");
+}
+
+function renderBoardQuoteRows(items, volumeField = "volume") {
+  if (!items.length) {
+    return `<tr><td colspan="4" class="muted">No board rows are available.</td></tr>`;
+  }
+  return items
+    .map(
+      (item) => `
+        <tr class="intel-row ${tone(item.changePercent)}" data-flow-symbol="${escapeHtml(item.symbol)}">
+          <td><strong>${escapeHtml(item.symbol)}</strong></td>
+          <td>${formatMoney(item.price)}</td>
+          <td class="${tone(item.changePercent)}">${formatPercent(item.changePercent)}</td>
+          <td>${formatCompact(item[volumeField])}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderBoardActiveRows(items) {
+  if (!items.length) {
+    return `<tr><td colspan="4" class="muted">No active rows are available.</td></tr>`;
+  }
+  return items
+    .map(
+      (item) => `
+        <tr class="intel-row ${tone(item.changePercent)}" data-flow-symbol="${escapeHtml(item.symbol)}">
+          <td><strong>${escapeHtml(item.symbol)}</strong></td>
+          <td>${formatCompact(item.volume)}</td>
+          <td>${formatCompact(item.dollarVolume)}</td>
+          <td class="${tone(item.changePercent)}">${formatPercent(item.changePercent)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderBoardUnusualRows(items) {
+  if (!items.length) {
+    return `<tr><td colspan="4" class="muted">No unusual-volume rows are available.</td></tr>`;
+  }
+  return items
+    .map(
+      (item) => `
+        <tr class="intel-row" data-flow-symbol="${escapeHtml(item.symbol)}">
+          <td><strong>${escapeHtml(item.symbol)}</strong></td>
+          <td>${formatNumber(item.relativeVolume, 2)}x</td>
+          <td>${formatCompact(item.shareVolume)}</td>
+          <td>${escapeHtml(item.analystRating ?? item.instrumentType ?? item.exchange ?? "market")}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderBoardGapRows(items) {
+  if (!items.length) {
+    return `<tr><td colspan="4" class="muted">No gap-proxy rows are available.</td></tr>`;
+  }
+  return items
+    .map(
+      (item) => `
+        <tr class="intel-row ${tone(item.gapProxyPercent)}" data-flow-symbol="${escapeHtml(item.symbol)}">
+          <td><strong>${escapeHtml(item.symbol)}</strong></td>
+          <td class="${tone(item.gapProxyPercent)}">${formatPercent(item.gapProxyPercent)}</td>
+          <td>${formatMoney(item.price)}</td>
+          <td>${escapeHtml(item.sector ?? "market")}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderBoardSectorRows(items) {
+  if (!items.length) {
+    return `<tr><td colspan="4" class="muted">No sector rows are available.</td></tr>`;
+  }
+  return items
+    .map(
+      (item) => `
+        <tr class="intel-row ${tone(item.averageMove)}" data-board-sector="${escapeHtml(item.sector ?? "Sector")}">
+          <td><strong>${escapeHtml(item.sector ?? "Sector")}</strong></td>
+          <td class="${tone(item.averageMove)}">${formatPercent(item.averageMove)}</td>
+          <td>${formatPercent(item.weight)}</td>
+          <td>${escapeHtml(String(item.count ?? 0))}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderBoardEtfRows(items) {
+  if (!items.length) {
+    return `<tr><td colspan="4" class="muted">No ETF tape rows are available.</td></tr>`;
+  }
+  return items
+    .map(
+      (item) => `
+        <tr class="intel-row ${tone(item.changePercent)}" data-flow-symbol="${escapeHtml(item.symbol)}">
+          <td><strong>${escapeHtml(item.symbol)}</strong></td>
+          <td>${formatMoney(item.price)}</td>
+          <td>${formatCompact(item.tapeFlow)}</td>
+          <td class="${tone(item.changePercent)}">${formatPercent(item.changePercent)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderBoardsMacroCards(macro) {
+  const cards = macro?.cards ?? [];
+  return cards.length
+    ? cards
+        .slice(0, 6)
+        .map((card) => renderTerminalStat(card.label, String(card.value ?? "n/a"), card.note ?? "macro"))
+        .join("")
+    : renderIntelEmpty("No macro cards are available.");
+}
+
 function renderIntelNote(note, index) {
   return `
     <div class="list-item intel-note-item">
@@ -5271,6 +5991,9 @@ function mergePreferences(preferences) {
       typeof preferences?.companyMapCompareSymbol === "string"
         ? preferences.companyMapCompareSymbol
         : DEFAULT_PREFERENCES.companyMapCompareSymbol,
+    terminalHotkeys: Array.isArray(preferences?.terminalHotkeys)
+      ? preferences.terminalHotkeys.map((entry) => String(entry ?? "").trim()).filter(Boolean).slice(0, 8)
+      : [...DEFAULT_PREFERENCES.terminalHotkeys],
     newsFocus: typeof preferences?.newsFocus === "string" ? preferences.newsFocus : "",
     sectorFocus: typeof preferences?.sectorFocus === "string" ? preferences.sectorFocus : DEFAULT_PREFERENCES.sectorFocus,
     activePage: normalizePage(preferences?.activePage),
