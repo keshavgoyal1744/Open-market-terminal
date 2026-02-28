@@ -445,10 +445,19 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 });
 
 document.addEventListener("DOMContentLoaded", async () => {
-  bindForms();
-  bindGlobalActions();
+  try {
+    bindForms();
+  } catch (error) {
+    console.error("bindForms failed", error);
+  }
+
+  try {
+    bindGlobalActions();
+  } catch (error) {
+    console.error("bindGlobalActions failed", error);
+  }
+
   startHudClock();
-  await loadSession();
   initializePanelLayout();
   applyPageState();
   applyPreferencesToInputs();
@@ -464,8 +473,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   renderActivity();
   renderSymbolRibbon();
   renderHud();
+
+  try {
+    await loadSession();
+  } catch (error) {
+    console.error("loadSession failed", error);
+  }
+
   connectCrypto();
-  await Promise.all([
+
+  const bootstrapTasks = [
     loadMarketPulse(),
     loadHeatmap(),
     loadMarketBoards(),
@@ -485,7 +502,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     runScreen(),
     runCompare(),
     loadWatchlistEvents(),
-  ]);
+  ];
+
+  const results = await Promise.allSettled(bootstrapTasks);
+  const firstFailure = results.find((result) => result.status === "rejected");
+  if (firstFailure?.status === "rejected") {
+    console.error("bootstrap task failed", firstFailure.reason);
+  }
+
   scheduleRefresh();
 });
 
