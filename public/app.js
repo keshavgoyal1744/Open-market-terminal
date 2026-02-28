@@ -2,6 +2,7 @@ const DEFAULT_PREFERENCES = {
   watchlistSymbols: ["AAPL", "MSFT", "NVDA", "SPY", "TLT", "GLD", "EURUSD=X", "^GSPC"],
   researchPinnedSymbols: [],
   detailSymbol: "AAPL",
+  newsFocus: "",
   cryptoProducts: ["BTC-USD", "ETH-USD", "SOL-USD"],
   activePage: "overview",
   screenConfig: {
@@ -68,8 +69,8 @@ const PAGE_DEFINITIONS = {
     sectionLabel: "Markets Desk",
     title: "Cross-asset market board with breadth, catalysts, and scheduled risk.",
     description:
-      "Keep the heatmap, pulse board, ranked events, macro calendar, and live headlines on one cleaner market page.",
-    tags: ["Heatmap", "Pulse", "Calendar", "Headlines"],
+      "Keep the heatmap, pulse board, ranked events, watchlists, and macro calendar on one cleaner market page.",
+    tags: ["Heatmap", "Pulse", "Calendar", "Events"],
     sections: [
       "section-market-pulse",
       "section-heatmap",
@@ -77,6 +78,16 @@ const PAGE_DEFINITIONS = {
       "section-watchlist",
       "section-macro",
       "section-calendar",
+    ],
+  },
+  news: {
+    label: "News",
+    sectionLabel: "Newswire Desk",
+    title: "Live market headlines with searchable symbol and company coverage.",
+    description:
+      "Search a ticker, company, or theme and browse a fuller headline board with linked public sources.",
+    tags: ["Search", "Headlines", "Sources", "Themes"],
+    sections: [
       "section-news",
     ],
   },
@@ -123,6 +134,8 @@ const PAGE_PANEL_SPANS = {
     "section-heatmap": 12,
     "section-macro": 3,
     "section-calendar": 4,
+  },
+  news: {
     "section-news": 12,
   },
   research: {
@@ -565,6 +578,13 @@ function bindForms() {
     event.preventDefault();
     await loadDeskCalendar(true);
   });
+
+  document.querySelector("#newsSearchForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    state.preferences.newsFocus = document.querySelector("#newsFocusInput")?.value.trim() ?? "";
+    schedulePreferenceSync();
+    await loadDeskNews(true);
+  });
 }
 
 function bindGlobalActions() {
@@ -645,6 +665,13 @@ function bindGlobalActions() {
   });
 
   document.querySelector("#refreshNewsButton")?.addEventListener("click", async () => {
+    await loadDeskNews(true);
+  });
+
+  document.querySelector("#clearNewsFocusButton")?.addEventListener("click", async () => {
+    state.preferences.newsFocus = "";
+    applyPreferencesToInputs();
+    schedulePreferenceSync();
     await loadDeskNews(true);
   });
 
@@ -1355,14 +1382,20 @@ async function loadDeskCalendar(force = false) {
 
 async function loadDeskNews(force = false) {
   const symbols = state.preferences.watchlistSymbols.slice(0, 8);
-  const focusSymbol = state.preferences.detailSymbol;
+  const query = String(state.preferences.newsFocus ?? "").trim();
+  const focusSymbol = inferNewsFocusSymbol(query) ?? (query ? null : state.preferences.detailSymbol);
 
   try {
     const payload = await api(
-      `/api/news?symbols=${encodeURIComponent(symbols.join(","))}&focusSymbol=${encodeURIComponent(focusSymbol)}${force ? "&force=1" : ""}`,
+      `/api/news?symbols=${encodeURIComponent(symbols.join(","))}${focusSymbol ? `&focusSymbol=${encodeURIComponent(focusSymbol)}` : ""}${query ? `&q=${encodeURIComponent(query)}` : ""}${force ? "&force=1" : ""}`,
     );
-    state.newsItems = (payload.items ?? []).slice(0, 12);
-    document.querySelector("#newsList").innerHTML = renderNewsFeed(state.newsItems);
+    state.newsItems = payload.items ?? [];
+    document.querySelector("#newsSummary").innerHTML = renderNewsSummary(state.newsItems, query || focusSymbol);
+    document.querySelector("#newsStatus").innerHTML = renderNewsStatus(payload.asOf, query, focusSymbol);
+    document.querySelector("#newsList").innerHTML = renderNewsFeed(
+      state.newsItems,
+      normalizePage(state.preferences.activePage) === "news" ? { full: true } : {},
+    );
     markFeedHeartbeat("Live");
   } catch (error) {
     showStatus(error.message, true);
@@ -1420,12 +1453,17 @@ async function loadYieldCurve() {
   try {
     const payload = await api("/api/yield-curve");
     markFeedHeartbeat("Live");
-    document.querySelector("#yieldCurveChart").innerHTML = renderBarChart(
-      payload.points.map((point) => point.value),
-      payload.points.map((point) => point.tenor),
-      payload.asOf,
-      "%",
-    );
+    mountBarChart(document.querySelector("#yieldCurveChart"), {
+      title: "Yield Curve",
+      subtitle: `Treasury daily curve as of ${payload.asOf}`,
+      points: payload.points.map((point) => ({
+        label: point.tenor,
+        value: point.value,
+        meta: payload.asOf,
+      })),
+      valueFormatter: (value) => `${Number(value).toFixed(2)}%`,
+      accent: "#7cc5ff",
+    });
   } catch (error) {
     setFeedStatus("Degraded");
     showStatus(error.message, true);
@@ -1958,7 +1996,7 @@ function heatmapSectorSpan(weight) {
     return 2;
   }
   if (weight >= 24) {
-    return 5;
+    return 4;
   }
   if (weight >= 14) {
     return 3;
@@ -2313,6 +2351,7 @@ function renderPortfolio() {
 function applyPreferencesToInputs() {
   document.querySelector("#watchlistInput").value = state.preferences.watchlistSymbols.join(",");
   document.querySelector("#detailSymbol").value = state.preferences.detailSymbol;
+  document.querySelector("#newsFocusInput").value = state.preferences.newsFocus ?? "";
   document.querySelector("#historyRange").value = state.currentHistoryRange;
   document.querySelector("#screenSymbols").value = state.preferences.screenConfig.symbols;
   document.querySelector("#screenMaxPe").value = state.preferences.screenConfig.maxPe;
@@ -2369,6 +2408,7 @@ function snapshotCurrentWorkspace() {
     watchlistSymbols: state.preferences.watchlistSymbols,
     researchPinnedSymbols: state.preferences.researchPinnedSymbols,
     detailSymbol: state.preferences.detailSymbol,
+    newsFocus: state.preferences.newsFocus,
     cryptoProducts: state.preferences.cryptoProducts,
     activePage: state.preferences.activePage,
     screenConfig: state.preferences.screenConfig,
@@ -2974,8 +3014,8 @@ async function loadIntelligence(symbol) {
       )
       .join("");
 
-    document.querySelector("#intelGraph").innerHTML = renderIntelGraph(payload.graph, payload.symbol);
-    document.querySelector("#intelGeoChart").innerHTML = renderGeoExposure(payload.geography);
+    mountIntelGraph(document.querySelector("#intelGraph"), payload.graph, payload.symbol);
+    mountGeoExposureChart(document.querySelector("#intelGeoChart"), payload.geography);
   } catch (error) {
     showStatus(error.message, true);
   }
@@ -3074,27 +3114,17 @@ function renderPriceChart(points, symbol) {
     return;
   }
 
-  const values = validPoints.map((point) => point.close);
-  const path = buildLinePath(values, 720, 260);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-
-  document.querySelector("#priceChart").innerHTML = `
-    <svg viewBox="0 0 720 260" preserveAspectRatio="none" aria-label="${escapeHtml(symbol)} price chart">
-      <defs>
-        <linearGradient id="line-fill" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stop-color="rgba(53, 240, 210, 0.24)" />
-          <stop offset="100%" stop-color="rgba(53, 240, 210, 0)" />
-        </linearGradient>
-      </defs>
-      <path d="${path.area}" fill="url(#line-fill)"></path>
-      <path d="${path.line}" fill="none" stroke="#35f0d2" stroke-width="3" stroke-linecap="round"></path>
-      <text x="10" y="20" fill="#8ea1c7" font-size="14">${escapeHtml(symbol)}</text>
-      <text x="10" y="42" fill="#eff7ff" font-size="22">${formatMoney(values.at(-1))}</text>
-      <text x="620" y="24" fill="#8ea1c7" font-size="12">High ${formatMoney(max)}</text>
-      <text x="620" y="44" fill="#8ea1c7" font-size="12">Low ${formatMoney(min)}</text>
-    </svg>
-  `;
+  mountLineChart(document.querySelector("#priceChart"), {
+    title: symbol,
+    subtitle: `${historyRangeLabel(state.currentHistoryRange)} price history`,
+    points: validPoints.map((point) => ({
+      label: point.date ?? point.timestamp ?? "",
+      value: point.close,
+      meta: point.volume ? `Vol ${formatCompact(point.volume)}` : "",
+    })),
+    valueFormatter: (value) => formatMoney(value),
+    accent: "#35f0d2",
+  });
 }
 
 function renderCalendarSummary(events, windowDays) {
@@ -3139,13 +3169,13 @@ function renderCalendar(events, options = {}) {
     .join("");
 }
 
-function renderNewsFeed(items) {
+function renderNewsFeed(items, options = {}) {
   if (!items.length) {
     return renderIntelEmpty("No public market headlines are available right now.");
   }
 
   return items
-    .slice(0, 9)
+    .slice(0, options.full ? 24 : 9)
     .map(
       (item, index) => `
         <article class="news-item ${toneByImportance(item.impact)}${index === 0 ? " featured" : ""}">
@@ -3162,6 +3192,33 @@ function renderNewsFeed(items) {
       `,
     )
     .join("");
+}
+
+function renderNewsSummary(items, focus) {
+  const counts = items.reduce(
+    (summary, item) => {
+      summary.total += 1;
+      summary[item.category] = (summary[item.category] ?? 0) + 1;
+      return summary;
+    },
+    { total: 0 },
+  );
+
+  return [
+    renderTerminalStat("Feed", focus ? compactLabel(focus, 18) : "Desk", focus ? "focus query" : "watchlist + macro"),
+    renderTerminalStat("Headlines", String(counts.total ?? 0), "loaded"),
+    renderTerminalStat("Policy", String(counts.policy ?? 0), "central bank + rates"),
+    renderTerminalStat("Earnings", String(counts.earnings ?? 0), "results + guidance"),
+    renderTerminalStat("Macro", String(counts.macro ?? 0), "inflation + jobs"),
+  ].join("");
+}
+
+function renderNewsStatus(asOf, query, focusSymbol) {
+  return [
+    `<div class="panel-status-chip">${escapeHtml(query ? `Search ${query}` : `${focusSymbol} bias`)}</div>`,
+    `<div class="panel-status-chip">${escapeHtml(asOf ? `Updated ${formatTimeAgo(asOf)}` : "Awaiting feed")}</div>`,
+    `<div class="panel-status-chip">${escapeHtml(query ? "Google News live query" : "Macro + watchlist blend")}</div>`,
+  ].join("");
 }
 
 function renderMarketEventsSummary(summary) {
@@ -3604,6 +3661,7 @@ function mergePreferences(preferences) {
       ? preferences.cryptoProducts
       : [...DEFAULT_PREFERENCES.cryptoProducts],
     portfolio: Array.isArray(preferences?.portfolio) ? preferences.portfolio : [],
+    newsFocus: typeof preferences?.newsFocus === "string" ? preferences.newsFocus : "",
     activePage: normalizePage(preferences?.activePage),
     panelLayout: normalizePanelLayout(preferences?.panelLayout),
     panelSizes: normalizePanelSizes(preferences?.panelSizes),
@@ -3621,6 +3679,15 @@ function splitSymbols(text) {
     .filter(Boolean);
 }
 
+function inferNewsFocusSymbol(query) {
+  const clean = String(query ?? "").trim();
+  if (!clean) {
+    return null;
+  }
+  const normalized = clean.toUpperCase();
+  return /^[A-Z0-9.^=\-]{1,12}$/.test(normalized) ? normalized : null;
+}
+
 function buildLinePath(values, width, height) {
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -3633,6 +3700,355 @@ function buildLinePath(values, width, height) {
   const line = points.map(([x, y], index) => `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`).join(" ");
   const area = `${line} L ${points.at(-1)[0].toFixed(2)} ${(height - 6).toFixed(2)} L ${points[0][0].toFixed(2)} ${(height - 6).toFixed(2)} Z`;
   return { line, area };
+}
+
+function mountLineChart(container, options) {
+  if (!container) {
+    return;
+  }
+
+  const points = (options.points ?? []).filter((point) => Number.isFinite(point.value));
+  if (!points.length) {
+    container.innerHTML = "<p class='muted'>No chart data available.</p>";
+    return;
+  }
+
+  const width = 760;
+  const height = 280;
+  const padding = { top: 42, right: 18, bottom: 26, left: 16 };
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const gradientId = `interactive-line-fill-${String(options.title ?? "chart").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+  const coords = points.map((point, index) => {
+    const x = padding.left + (index / Math.max(points.length - 1, 1)) * chartWidth;
+    const y = padding.top + chartHeight - ((point.value - min) / range) * chartHeight;
+    return { ...point, x, y };
+  });
+  const path = buildLinePath(values, chartWidth, chartHeight);
+  const areaPath = path.area
+    .replaceAll(/(^| )([0-9.]+) ([0-9.]+)/g, (match, prefix, x, y) => `${prefix}${(Number(x) + padding.left).toFixed(2)} ${(Number(y) + padding.top).toFixed(2)}`);
+  const linePath = path.line
+    .replaceAll(/(^| )([0-9.]+) ([0-9.]+)/g, (match, prefix, x, y) => `${prefix}${(Number(x) + padding.left).toFixed(2)} ${(Number(y) + padding.top).toFixed(2)}`);
+  const accent = options.accent ?? "#35f0d2";
+
+  container.innerHTML = `
+    <div class="interactive-chart interactive-chart-line">
+      <div class="interactive-chart-heading">
+        <div>
+          <div class="interactive-chart-title">${escapeHtml(options.title ?? "Chart")}</div>
+          <div class="interactive-chart-subtitle">${escapeHtml(options.subtitle ?? "")}</div>
+        </div>
+        <div class="interactive-chart-range">
+          <span>High ${escapeHtml((options.valueFormatter ?? String)(max))}</span>
+          <span>Low ${escapeHtml((options.valueFormatter ?? String)(min))}</span>
+        </div>
+      </div>
+      <div class="interactive-chart-frame">
+        <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="${escapeHtml(options.title ?? "chart")}">
+          <defs>
+            <linearGradient id="${gradientId}" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="${accent}" stop-opacity="0.28" />
+              <stop offset="100%" stop-color="${accent}" stop-opacity="0.02" />
+            </linearGradient>
+          </defs>
+          <line x1="${padding.left}" y1="${padding.top + chartHeight}" x2="${width - padding.right}" y2="${padding.top + chartHeight}" class="chart-axis"></line>
+          <path d="${areaPath}" fill="url(#${gradientId})"></path>
+          <path d="${linePath}" fill="none" stroke="${accent}" stroke-width="2.6" stroke-linecap="round"></path>
+          <line class="chart-crosshair" x1="${coords.at(-1).x}" x2="${coords.at(-1).x}" y1="${padding.top}" y2="${padding.top + chartHeight}"></line>
+          <circle class="chart-marker" cx="${coords.at(-1).x}" cy="${coords.at(-1).y}" r="4.5" fill="${accent}"></circle>
+        </svg>
+        <div class="chart-tooltip">
+          <strong></strong>
+          <span></span>
+          <small></small>
+        </div>
+      </div>
+    </div>
+  `;
+
+  bindInteractiveChart(container, coords, {
+    valueFormatter: options.valueFormatter ?? ((value) => String(value)),
+    labelFormatter: options.labelFormatter ?? ((value) => formatDateShort(value)),
+    viewWidth: width,
+    viewHeight: height,
+  });
+}
+
+function mountBarChart(container, options) {
+  if (!container) {
+    return;
+  }
+
+  const points = (options.points ?? []).filter((point) => Number.isFinite(point.value));
+  if (!points.length) {
+    container.innerHTML = "<p class='muted'>No chart data available.</p>";
+    return;
+  }
+
+  const width = 760;
+  const height = 240;
+  const padding = { top: 40, right: 18, bottom: 32, left: 18 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const max = Math.max(...points.map((point) => point.value), 0);
+  const barWidth = chartWidth / points.length;
+  const accent = options.accent ?? "#7cc5ff";
+  const geometry = points.map((point, index) => {
+    const heightValue = max ? (point.value / max) * chartHeight : 0;
+    const x = padding.left + index * barWidth + 6;
+    const y = padding.top + chartHeight - heightValue;
+    return {
+      ...point,
+      x,
+      y,
+      width: Math.max(barWidth - 12, 16),
+      height: heightValue,
+      centerX: x + Math.max(barWidth - 12, 16) / 2,
+    };
+  });
+
+  container.innerHTML = `
+    <div class="interactive-chart interactive-chart-bar">
+      <div class="interactive-chart-heading">
+        <div>
+          <div class="interactive-chart-title">${escapeHtml(options.title ?? "Chart")}</div>
+          <div class="interactive-chart-subtitle">${escapeHtml(options.subtitle ?? "")}</div>
+        </div>
+      </div>
+      <div class="interactive-chart-frame">
+        <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="${escapeHtml(options.title ?? "chart")}">
+          <line x1="${padding.left}" y1="${padding.top + chartHeight}" x2="${width - padding.right}" y2="${padding.top + chartHeight}" class="chart-axis"></line>
+          ${geometry
+            .map(
+              (point) => `
+                <rect x="${point.x}" y="${point.y}" width="${point.width}" height="${point.height}" rx="7" fill="${accent}" fill-opacity="0.82"></rect>
+                <text x="${point.centerX}" y="${padding.top + chartHeight + 16}" text-anchor="middle" class="chart-bar-label">${escapeHtml(point.label)}</text>
+              `,
+            )
+            .join("")}
+          <line class="chart-crosshair" x1="${geometry.at(-1).centerX}" x2="${geometry.at(-1).centerX}" y1="${padding.top}" y2="${padding.top + chartHeight}"></line>
+          <circle class="chart-marker" cx="${geometry.at(-1).centerX}" cy="${geometry.at(-1).y}" r="4.5" fill="${accent}"></circle>
+        </svg>
+        <div class="chart-tooltip">
+          <strong></strong>
+          <span></span>
+          <small></small>
+        </div>
+      </div>
+    </div>
+  `;
+
+  bindInteractiveChart(container, geometry.map((point) => ({ ...point, x: point.centerX })), {
+    valueFormatter: options.valueFormatter ?? ((value) => String(value)),
+    labelFormatter: options.labelFormatter ?? ((value) => value),
+    viewWidth: width,
+    viewHeight: height,
+  });
+}
+
+function bindInteractiveChart(container, coords, options) {
+  const frame = container.querySelector(".interactive-chart-frame");
+  const tooltip = container.querySelector(".chart-tooltip");
+  const crosshair = container.querySelector(".chart-crosshair");
+  const marker = container.querySelector(".chart-marker");
+  if (!frame || !tooltip || !crosshair || !marker || !coords.length) {
+    return;
+  }
+
+  const update = (index) => {
+    const point = coords[clamp(index, 0, coords.length - 1)];
+    tooltip.querySelector("strong").textContent = options.valueFormatter(point.value);
+    tooltip.querySelector("span").textContent = options.labelFormatter(point.label);
+    tooltip.querySelector("small").textContent = point.meta ?? "";
+    crosshair.setAttribute("x1", String(point.x));
+    crosshair.setAttribute("x2", String(point.x));
+    marker.setAttribute("cx", String(point.x));
+    marker.setAttribute("cy", String(point.y));
+    const viewWidth = options.viewWidth ?? 760;
+    const viewHeight = options.viewHeight ?? 280;
+    const tooltipLeft = clamp((point.x / viewWidth) * frame.clientWidth - 70, 8, Math.max(frame.clientWidth - 148, 8));
+    const tooltipTop = clamp((point.y / viewHeight) * frame.clientHeight - 68, 8, Math.max(frame.clientHeight - 70, 8));
+    tooltip.style.left = `${tooltipLeft}px`;
+    tooltip.style.top = `${tooltipTop}px`;
+  };
+
+  update(coords.length - 1);
+  frame.addEventListener("mousemove", (event) => {
+    const rect = frame.getBoundingClientRect();
+    const relative = clamp((event.clientX - rect.left) / Math.max(rect.width, 1), 0, 1);
+    update(Math.round(relative * (coords.length - 1)));
+  });
+  frame.addEventListener("mouseenter", () => {
+    tooltip.hidden = false;
+  });
+  frame.addEventListener("mouseleave", () => {
+    tooltip.hidden = false;
+    update(coords.length - 1);
+  });
+}
+
+function mountGeoExposureChart(container, geography) {
+  if (!container) {
+    return;
+  }
+  const groups = [
+    { title: "Revenue", items: geography.revenueMix ?? [] },
+    { title: "Manufacturing", items: geography.manufacturing ?? [] },
+    { title: "Supply", items: geography.supplyRegions ?? [] },
+  ].filter((group) => group.items.length);
+
+  if (!groups.length) {
+    container.innerHTML = "<p class='muted'>No geographic exposure mapped.</p>";
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="geo-board">
+      ${groups
+        .map(
+          (group) => `
+            <section class="geo-column">
+              <div class="geo-column-title">${escapeHtml(group.title)}</div>
+              <div class="geo-column-body">
+                ${group.items
+                  .slice(0, 4)
+                  .map(
+                    (item) => `
+                      <button type="button" class="geo-row">
+                        <div class="geo-row-head">
+                          <strong>${escapeHtml(item.label)}</strong>
+                          <span>${escapeHtml(String(item.weight))}</span>
+                        </div>
+                        <div class="geo-row-bar"><span style="width:${clamp(item.weight * 20, 12, 100)}%"></span></div>
+                        <div class="geo-row-note">${escapeHtml(item.commentary ?? "")}</div>
+                      </button>
+                    `,
+                  )
+                  .join("")}
+              </div>
+            </section>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function mountIntelGraph(container, graph, symbol) {
+  if (!container) {
+    return;
+  }
+  container.innerHTML = renderIntelGraphNetwork(graph, symbol);
+}
+
+function renderIntelGraphNetwork(graph, symbol) {
+  const root = graph.nodes.find((node) => node.id === symbol) ?? { id: symbol, label: symbol, kind: "issuer" };
+  const edgeByTarget = new Map((graph.edges ?? []).map((edge) => [edge.target, edge]));
+  const nodes = (graph.nodes ?? []).filter((node) => node.id !== symbol);
+  const lanes = {
+    corporate: nodes.filter((node) => ["subsidiary", "investment", "corporate"].includes(String(node.kind))),
+    supply: nodes.filter((node) => ["supplier", "partner"].includes(String(node.kind))),
+    customer: nodes.filter((node) => String(node.kind) === "customer"),
+    market: nodes.filter((node) => ["competitor", "ecosystem"].includes(String(node.kind))),
+  };
+
+  const width = 860;
+  const height = 460;
+  const hub = { x: width / 2, y: height / 2 };
+  const positioned = [
+    ...layoutGraphLane(lanes.corporate, { xFrom: 170, xTo: 690, y: 72 }),
+    ...layoutGraphLane(lanes.supply, { xFrom: 84, xTo: 84, yFrom: 146, yTo: 370 }),
+    ...layoutGraphLane(lanes.customer, { xFrom: 776, xTo: 776, yFrom: 146, yTo: 370 }),
+    ...layoutGraphLane(lanes.market, { xFrom: 170, xTo: 690, y: 396 }),
+  ];
+  const nodeMap = new Map(positioned.map((node) => [node.id, node]));
+
+  const lines = (graph.edges ?? [])
+    .map((edge) => {
+      const target = nodeMap.get(edge.target);
+      if (!target) {
+        return "";
+      }
+      const controlX = target.x < hub.x ? hub.x - 110 : target.x > hub.x ? hub.x + 110 : hub.x;
+      const controlY = target.y < hub.y ? hub.y - 80 : target.y > hub.y ? hub.y + 80 : hub.y;
+      return `<path d="M ${hub.x} ${hub.y} C ${controlX} ${controlY}, ${target.x} ${target.y}, ${target.x} ${target.y}" class="graph-network-edge graph-edge-${escapeHtml(edge.domain)}"></path>`;
+    })
+    .join("");
+
+  return `
+    <div class="graph-network">
+      <div class="graph-network-legend">
+        <span class="graph-legend-item supply">Supply / Partner</span>
+        <span class="graph-legend-item customer">Customer</span>
+        <span class="graph-legend-item corporate">Corporate</span>
+        <span class="graph-legend-item market">Competition / Ecosystem</span>
+      </div>
+      <div class="graph-lane-label graph-lane-top">Corporate</div>
+      <div class="graph-lane-label graph-lane-left">Supply Chain</div>
+      <div class="graph-lane-label graph-lane-right">Customers</div>
+      <div class="graph-lane-label graph-lane-bottom">Market Map</div>
+      <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" class="graph-network-lines" aria-hidden="true">
+        ${lines}
+      </svg>
+      <div class="graph-network-hub">
+        <span class="graph-hub-kicker">Issuer</span>
+        <strong>${escapeHtml(root.label)}</strong>
+        <small>${escapeHtml(symbol)}</small>
+      </div>
+      ${positioned
+        .map((node) => {
+          const edge = edgeByTarget.get(node.id);
+          return `
+            <button
+              type="button"
+              class="graph-network-node graph-network-node-${escapeHtml(graphToneForKind(node.kind))}"
+              style="left:${node.x}px; top:${node.y}px;"
+              title="${escapeHtml(`${node.label} | ${edge?.relation ?? node.kind}${edge?.label ? ` | ${edge.label}` : ""}`)}"
+            >
+              <span class="graph-network-node-title">${escapeHtml(node.label)}</span>
+              <span class="graph-network-node-meta">${escapeHtml(edge?.relation ?? String(node.kind))}</span>
+              <span class="graph-network-node-note">${escapeHtml(compactLabel(edge?.label ?? "", 60))}</span>
+            </button>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function layoutGraphLane(nodes, spec) {
+  const list = nodes.slice(0, 10);
+  if (!list.length) {
+    return [];
+  }
+
+  return list.map((node, index) => {
+    const progress = list.length === 1 ? 0.5 : index / (list.length - 1);
+    const x = spec.xFrom === spec.xTo || spec.xTo == null
+      ? spec.xFrom
+      : spec.xFrom + progress * (spec.xTo - spec.xFrom);
+    const y = spec.yFrom === spec.yTo || spec.yTo == null
+      ? spec.y
+      : spec.yFrom + progress * (spec.yTo - spec.yFrom);
+    return { ...node, x, y };
+  });
+}
+
+function graphToneForKind(kind) {
+  if (["supplier", "partner"].includes(String(kind))) {
+    return "supply";
+  }
+  if (String(kind) === "customer") {
+    return "customer";
+  }
+  if (["subsidiary", "investment", "corporate"].includes(String(kind))) {
+    return "corporate";
+  }
+  return "market";
 }
 
 function renderIntelGraph(graph, symbol) {

@@ -415,7 +415,8 @@ async function handleApi(request, response, url, context) {
   if (request.method === "GET" && url.pathname === "/api/news") {
     const symbols = splitList(url.searchParams.get("symbols"));
     const focusSymbol = url.searchParams.get("focusSymbol") ?? null;
-    return sendJson(response, 200, await market.getDeskNews(symbols, cleanSymbol(focusSymbol)));
+    const query = String(url.searchParams.get("q") ?? "").trim().slice(0, 80) || null;
+    return sendJson(response, 200, await market.getDeskNews(symbols, cleanSymbol(focusSymbol), query));
   }
 
   if (request.method === "GET" && url.pathname === "/api/earnings") {
@@ -683,6 +684,7 @@ function sanitizePreferencePatch(body) {
       ? body.researchPinnedSymbols.map(cleanSymbol).filter(Boolean).slice(0, 32)
       : undefined,
     detailSymbol: typeof body.detailSymbol === "string" ? cleanSymbol(body.detailSymbol) : undefined,
+    newsFocus: typeof body.newsFocus === "string" ? String(body.newsFocus).trim().slice(0, 80) : undefined,
     cryptoProducts: Array.isArray(body.cryptoProducts)
       ? body.cryptoProducts.map(cleanSymbol).filter(Boolean).slice(0, 12)
       : undefined,
@@ -740,6 +742,7 @@ function sanitizeWorkspaceSnapshot(snapshot) {
       ? snapshot.researchPinnedSymbols.map(cleanSymbol).filter(Boolean).slice(0, 32)
       : [],
     detailSymbol: typeof snapshot.detailSymbol === "string" ? cleanSymbol(snapshot.detailSymbol) : "AAPL",
+    newsFocus: typeof snapshot.newsFocus === "string" ? String(snapshot.newsFocus).trim().slice(0, 80) : "",
     cryptoProducts: Array.isArray(snapshot.cryptoProducts)
       ? snapshot.cryptoProducts.map(cleanSymbol).filter(Boolean).slice(0, 12)
       : config.defaultCryptoProducts,
@@ -766,7 +769,7 @@ function cleanSymbol(value) {
 }
 
 function normalizePage(value) {
-  return ["overview", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
+  return ["overview", "news", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
     ? String(value).trim().toLowerCase()
     : "overview";
 }

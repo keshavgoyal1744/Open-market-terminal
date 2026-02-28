@@ -15,6 +15,7 @@
         </div>
         <nav class="topbar-nav">
           <button type="button" class="topbar-nav-btn" data-page="overview">Markets</button>
+          <button type="button" class="topbar-nav-btn" data-page="news">News</button>
           <button type="button" class="topbar-nav-btn" data-page="research">Research</button>
           <button type="button" class="topbar-nav-btn" data-page="ops">Ops</button>
         </nav>
@@ -586,11 +587,18 @@
         <section id="section-news" class="panel panel-news">
           <div class="panel-header">
             <div>
-              <p class="section-label">Market News</p>
-              <h2>Live public headlines with market tags</h2>
+              <p class="section-label">Newswire</p>
+              <h2>Live public headlines, linked sources, and symbol search</h2>
             </div>
-            <button id="refreshNewsButton" type="button" class="secondary">Refresh</button>
+            <form id="newsSearchForm" class="inline-form news-search-form">
+              <input id="newsFocusInput" type="text" placeholder="Search symbol or company" />
+              <button type="submit">Search</button>
+              <button id="clearNewsFocusButton" type="button" class="secondary">Clear</button>
+              <button id="refreshNewsButton" type="button" class="secondary">Refresh</button>
+            </form>
           </div>
+          <div id="newsSummary" class="watchlist-summary-grid"></div>
+          <div id="newsStatus" class="panel-status-strip compact-status"></div>
           <div id="newsList" class="news-list"></div>
         </section>
 

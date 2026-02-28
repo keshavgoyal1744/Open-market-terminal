@@ -54,6 +54,7 @@ export function defaultUserPreferences() {
     watchlistSymbols: [...config.defaultWatchlist],
     researchPinnedSymbols: [],
     detailSymbol: "AAPL",
+    newsFocus: "",
     cryptoProducts: [...config.defaultCryptoProducts],
     activePage: "overview",
     screenConfig: {

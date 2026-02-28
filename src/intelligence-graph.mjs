@@ -843,10 +843,55 @@ function buildGraph(symbol, entry) {
     });
   }
 
+  for (const item of entry.customerConcentration ?? []) {
+    const target = {
+      id: `customer-${item.name}`,
+      label: item.name,
+      kind: "customer",
+    };
+    nodes.set(target.id, target);
+    edges.push({
+      source: symbol,
+      target: target.id,
+      relation: item.level,
+      domain: "customer",
+      label: item.commentary,
+      weight: concentrationWeight(item.level),
+    });
+  }
+
+  for (const item of entry.ecosystems ?? []) {
+    const target = {
+      id: `ecosystem-${item.name}`,
+      label: item.name,
+      kind: "ecosystem",
+    };
+    nodes.set(target.id, target);
+    edges.push({
+      source: symbol,
+      target: target.id,
+      relation: "ecosystem",
+      domain: "ecosystem",
+      label: (item.stages ?? []).join(" -> "),
+      weight: 2,
+    });
+  }
+
   return {
     nodes: [...nodes.values()],
     edges,
   };
+}
+
+function concentrationWeight(level) {
+  const text = String(level ?? "").toLowerCase();
+  if (text.includes("high")) {
+    return 5;
+  }
+  if (text.includes("moderate")) {
+    return 3;
+  }
+  return 2;
 }
 
 function filterRelationships(relationships, domains) {

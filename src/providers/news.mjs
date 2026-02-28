@@ -2,13 +2,20 @@ import { fetchText } from "../http.mjs";
 
 const GOOGLE_NEWS_URL = "https://news.google.com/rss/search";
 
-export async function getMarketNews({ symbols = [], focusSymbol = null } = {}) {
+export async function getMarketNews({ symbols = [], focusSymbol = null, query = null } = {}) {
   const feeds = [
     {
       category: "macro",
       query: '"stock market" OR "Federal Reserve" OR inflation OR earnings OR tariffs OR oil OR treasury yields',
     },
   ];
+
+  if (query) {
+    feeds.push({
+      category: "focus",
+      query: `${query} stock OR ${query} earnings OR ${query} guidance OR ${query} outlook`,
+    });
+  }
 
   if (focusSymbol) {
     feeds.push({

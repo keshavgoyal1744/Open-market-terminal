@@ -418,14 +418,15 @@ export class MarketDataService {
     );
   }
 
-  async getDeskNews(symbols, focusSymbol) {
+  async getDeskNews(symbols, focusSymbol, query = null) {
     const universe = [...new Set(symbols.map((symbol) => symbol?.trim().toUpperCase()).filter(Boolean))].slice(0, 8);
-    const key = `${focusSymbol ?? "desk"}:${universe.join(",")}`;
+    const cleanQuery = String(query ?? "").trim().slice(0, 80);
+    const key = `${focusSymbol ?? "desk"}:${cleanQuery || "all"}:${universe.join(",")}`;
     return this.cache.getOrSet(
       `news:${key}`,
       async () => ({
         asOf: new Date().toISOString(),
-        items: await getMarketNews({ symbols: universe, focusSymbol }),
+        items: await getMarketNews({ symbols: universe, focusSymbol, query: cleanQuery || null }),
       }),
       { ttlMs: config.newsTtlMs, staleMs: config.newsTtlMs * 2 },
     );
@@ -1128,10 +1129,10 @@ function heatmapColumnSpan(weight) {
     return 1;
   }
   if (weight >= 6) {
-    return 4;
+    return 3;
   }
   if (weight >= 3) {
-    return 3;
+    return 2;
   }
   if (weight >= 1) {
     return 2;
@@ -1144,7 +1145,7 @@ function heatmapRowSpan(weight) {
     return 1;
   }
   if (weight >= 6) {
-    return 3;
+    return 2;
   }
   if (weight >= 2) {
     return 2;
