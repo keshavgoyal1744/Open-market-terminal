@@ -905,6 +905,8 @@ export class MarketDataService {
               symbol,
               shortName: quote?.shortName ?? company?.market?.shortName ?? symbol,
               sector: company?.market?.sector ?? "Unclassified",
+              instrumentType: quote?.type ?? company?.market?.type ?? null,
+              exchange: quote?.exchange ?? company?.market?.exchange ?? null,
               price: quote?.price ?? null,
               changePercent: quote?.changePercent ?? null,
               shareVolume: quote?.volume ?? null,

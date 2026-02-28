@@ -239,12 +239,12 @@ const PAGE_PANEL_ORDERS = {
   },
   ops: {
     "section-portfolio": 0,
-    "section-alerts": 1,
-    "section-intel-ops": 2,
+    "section-intel-ops": 1,
+    "section-workspaces": 2,
     "section-activity": 3,
-    "section-crypto": 4,
-    "section-workspaces": 5,
-    "section-notes": 6,
+    "section-alerts": 4,
+    "section-notes": 5,
+    "section-crypto": 6,
     "section-limitations": 7,
   },
 };
@@ -267,12 +267,12 @@ const PAGE_PANEL_COLUMNS = {
   },
   ops: {
     "section-portfolio": "1 / span 4",
+    "section-intel-ops": "5 / span 5",
+    "section-workspaces": "10 / span 3",
+    "section-activity": "1 / span 4",
     "section-alerts": "5 / span 4",
-    "section-intel-ops": "9 / span 4",
-    "section-activity": "1 / span 6",
-    "section-crypto": "7 / span 6",
-    "section-workspaces": "1 / span 6",
-    "section-notes": "7 / span 6",
+    "section-notes": "9 / span 4",
+    "section-crypto": "1 / -1",
     "section-limitations": "1 / -1",
   },
 };
@@ -295,12 +295,12 @@ const PAGE_PANEL_ROWS = {
   },
   ops: {
     "section-portfolio": "1",
-    "section-alerts": "1",
     "section-intel-ops": "1",
+    "section-workspaces": "1",
     "section-activity": "2",
-    "section-crypto": "2",
-    "section-workspaces": "3",
-    "section-notes": "3",
+    "section-alerts": "2",
+    "section-notes": "2",
+    "section-crypto": "3",
     "section-limitations": "4",
   },
 };
@@ -4340,15 +4340,17 @@ function renderCompactNewsFeed(items) {
 }
 
 function renderFlowSummary(summary) {
+  const optionsCoverage = summary.optionsCoverage ?? 0;
+  const symbols = summary.symbols ?? 0;
   return [
-    renderTerminalStat("Symbols", String(summary.symbols ?? 0), "watchlist coverage"),
+    renderTerminalStat("Symbols", String(symbols), "watchlist coverage"),
     renderTerminalStat("Shares", formatCompact(summary.shareVolume), "aggregate tape"),
     renderTerminalStat(
       "Options",
-      Number.isFinite(summary.optionsVolume) && (summary.optionsCoverage ?? 0) > 0 ? formatCompact(summary.optionsVolume) : "Partial",
-      `${summary.optionsCoverage ?? 0} / ${summary.symbols ?? 0} names`,
+      Number.isFinite(summary.optionsVolume) && optionsCoverage > 0 ? formatCompact(summary.optionsVolume) : optionsCoverage ? "Partial" : "Share-only",
+      `${optionsCoverage} / ${symbols} names`,
     ),
-    renderTerminalStat("P/C", formatRatio(summary.averagePutCall), (summary.optionsCoverage ?? 0) > 0 ? "watchlist mean" : "options source limited"),
+    renderTerminalStat("P/C", formatRatio(summary.averagePutCall), optionsCoverage > 0 ? "watchlist mean" : "no listed chain"),
     renderTerminalStat("Elevated", String(summary.elevated ?? 0), "high rel-vol / short"),
   ].join("");
 }
@@ -4367,7 +4369,7 @@ function renderFlowRows(rows) {
               <div>
                 <div class="terminal-symbol-line">
                   <strong>${escapeHtml(row.symbol)}</strong>
-                  <span class="terminal-chip">${escapeHtml(compactLabel(row.sector ?? "Unclassified", 14))}</span>
+                  <span class="terminal-chip">${escapeHtml(flowCategoryLabel(row))}</span>
                 </div>
                 <div class="meta">${escapeHtml(compactLabel(row.shortName ?? row.symbol, 28))}</div>
               </div>
@@ -4376,29 +4378,83 @@ function renderFlowRows(rows) {
           <td>
             <div class="terminal-price-stack">
               <strong>${formatCompact(row.shareVolume)}</strong>
-              <div class="meta">avg ${formatCompact(row.averageShareVolume)}</div>
+              <div class="meta">${flowAverageVolumeLabel(row)}</div>
             </div>
           </td>
-          <td>${formatRatio(row.relativeVolume)}</td>
+          <td>${flowRelativeVolumeLabel(row)}</td>
           <td>
             <div class="terminal-price-stack">
-              <strong>${row.optionsAvailable ? `${formatCompact(row.callVolume)} / ${formatCompact(row.putVolume)}` : "No chain"}</strong>
-              <div class="meta">last ${formatMoney(row.price)}</div>
+              <strong>${row.optionsAvailable ? `${formatCompact(row.callVolume)} / ${formatCompact(row.putVolume)}` : formatMoney(row.price)}</strong>
+              <div class="meta">${row.optionsAvailable ? `last ${formatMoney(row.price)}` : flowOptionsMetaLabel(row)}</div>
             </div>
           </td>
-          <td>${row.optionsAvailable ? formatRatio(row.putCallRatio) : "n/a"}</td>
+          <td>${row.optionsAvailable ? formatRatio(row.putCallRatio) : "share-only"}</td>
           <td>${row.optionsAvailable ? formatCompact(row.openInterest) : "n/a"}</td>
           <td>
             <div class="terminal-price-stack">
-              <strong>${formatNumber(row.shortRatio, 2)}</strong>
-              <div class="meta">${formatCompact(row.sharesShort)}</div>
+              <strong>${Number.isFinite(row.shortRatio) ? formatNumber(row.shortRatio, 2) : "n/a"}</strong>
+              <div class="meta">${Number.isFinite(row.sharesShort) ? formatCompact(row.sharesShort) : flowShortMetaLabel(row)}</div>
             </div>
           </td>
-          <td>${escapeHtml(row.analystRating ?? "n/a")}</td>
+          <td>${escapeHtml(row.analystRating ?? flowStreetFallback(row))}</td>
         </tr>
       `,
     )
     .join("");
+}
+
+function flowCategoryLabel(row) {
+  const sector = String(row?.sector ?? "").trim();
+  if (sector && sector !== "Unclassified") {
+    return compactLabel(sector, 2);
+  }
+  return compactLabel(flowInstrumentLabel(row), 2);
+}
+
+function flowInstrumentLabel(row) {
+  const raw = String(row?.instrumentType ?? "").trim();
+  if (!raw) {
+    return row?.exchange ?? "Security";
+  }
+  return raw
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function flowAverageVolumeLabel(row) {
+  if (Number.isFinite(row?.averageShareVolume)) {
+    return `avg ${formatCompact(row.averageShareVolume)}`;
+  }
+  return row?.exchange ? `${row.exchange} tape` : "live tape";
+}
+
+function flowRelativeVolumeLabel(row) {
+  if (Number.isFinite(row?.relativeVolume)) {
+    return formatRatio(row.relativeVolume);
+  }
+  return '<span class="muted">tape only</span>';
+}
+
+function flowOptionsMetaLabel(row) {
+  if (String(row?.symbol ?? "").includes("=") || String(row?.symbol ?? "").startsWith("^")) {
+    return "no listed chain";
+  }
+  return "share-only";
+}
+
+function flowShortMetaLabel(row) {
+  return row?.instrumentType ? compactLabel(flowInstrumentLabel(row), 2) : "short n/a";
+}
+
+function flowStreetFallback(row) {
+  if (String(row?.symbol ?? "").startsWith("^")) {
+    return "index";
+  }
+  if (String(row?.symbol ?? "").includes("=")) {
+    return "macro";
+  }
+  return flowInstrumentLabel(row).toLowerCase();
 }
 
 function renderCompanyMapSummary(payload) {

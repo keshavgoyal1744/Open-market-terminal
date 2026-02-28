@@ -1887,28 +1887,93 @@ button:hover {
   min-width: 0;
 }
 
-#dashboardGrid[data-page="ops"] #section-portfolio,
-#dashboardGrid[data-page="ops"] #section-alerts,
-#dashboardGrid[data-page="ops"] #section-intel-ops {
+#dashboardGrid[data-page="ops"] .panel {
+  align-content: start;
+}
+
+#dashboardGrid[data-page="ops"] #section-portfolio {
   grid-column: span 4;
 }
 
+#dashboardGrid[data-page="ops"] #section-intel-ops {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-column: span 5;
+  gap: 0;
+}
+
+#dashboardGrid[data-page="ops"] #section-intel-ops > .panel-header,
+#dashboardGrid[data-page="ops"] #section-intel-ops > #opsGuard {
+  grid-column: 1 / -1;
+}
+
+#dashboardGrid[data-page="ops"] #section-intel-ops > .subpanel {
+  min-height: 0;
+  border-top: 0;
+}
+
+#dashboardGrid[data-page="ops"] #section-workspaces {
+  grid-column: span 3;
+}
+
 #dashboardGrid[data-page="ops"] #section-activity,
-#dashboardGrid[data-page="ops"] #section-crypto,
-#dashboardGrid[data-page="ops"] #section-workspaces,
+#dashboardGrid[data-page="ops"] #section-alerts,
 #dashboardGrid[data-page="ops"] #section-notes {
-  grid-column: span 6;
+  grid-column: span 4;
+}
+
+#dashboardGrid[data-page="ops"] #section-crypto {
+  grid-column: 1 / -1;
 }
 
 #dashboardGrid[data-page="ops"] #section-activity .list-stack,
 #dashboardGrid[data-page="ops"] #section-workspaces .list-stack,
-#dashboardGrid[data-page="ops"] #section-notes .list-stack {
+#dashboardGrid[data-page="ops"] #section-notes .list-stack,
+#dashboardGrid[data-page="ops"] #section-intel-ops #destinationsList,
+#dashboardGrid[data-page="ops"] #section-intel-ops #digestsList {
   max-height: 380px;
   overflow: auto;
 }
 
 #dashboardGrid[data-page="ops"] #section-notes textarea {
   min-height: 160px;
+}
+
+#dashboardGrid[data-page="ops"] #section-portfolio .stacked-form,
+#dashboardGrid[data-page="ops"] #section-alerts .stacked-form,
+#dashboardGrid[data-page="ops"] #section-workspaces .stacked-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#dashboardGrid[data-page="ops"] #section-workspaces .stacked-form {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+#dashboardGrid[data-page="ops"] #section-portfolio .stacked-form button,
+#dashboardGrid[data-page="ops"] #section-alerts .stacked-form button,
+#dashboardGrid[data-page="ops"] #section-workspaces .stacked-form button,
+#dashboardGrid[data-page="ops"] #section-workspaces .stacked-form .toggle {
+  grid-column: 1 / -1;
+}
+
+#dashboardGrid[data-page="ops"] #section-portfolio .table-wrap,
+#dashboardGrid[data-page="ops"] #section-crypto .table-wrap,
+#dashboardGrid[data-page="ops"] #section-workspaces .list-stack,
+#dashboardGrid[data-page="ops"] #section-activity .list-stack {
+  max-height: 340px;
+  overflow: auto;
+}
+
+#dashboardGrid[data-page="ops"] #section-crypto .crypto-board {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#dashboardGrid[data-page="ops"] #section-crypto .orderbook-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#dashboardGrid[data-page="ops"] #section-limitations {
+  grid-column: 1 / -1;
 }
 
 .heatmap-shell {
