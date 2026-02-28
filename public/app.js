@@ -1747,14 +1747,20 @@ async function loadHeatmap(force = false) {
     }
 
     if (normalizePage(state.preferences.activePage) === "sectors") {
-      renderSectorBoardPanel(state.sectorBoard ?? {
-        sector: state.preferences.sectorFocus,
-        sectors: payload.sectors ?? [],
-        items: payload.tiles ?? [],
-        news: state.sectorBoard?.news ?? [],
-        asOf: payload.asOf,
-        warnings: payload.warnings ?? [],
-      });
+      if (state.sectorBoard) {
+        renderSectorBoardPanel(state.sectorBoard);
+      } else {
+        const previewSector = sanitizeSectorFocus(state.preferences.sectorFocus, payload.sectors ?? DEFAULT_SECTORS);
+        const previewItems = filterSectorBoardItems(payload.tiles ?? [], previewSector);
+        renderSectorBoardPanel({
+          sector: previewSector,
+          sectors: payload.sectors ?? [],
+          items: previewItems,
+          news: [],
+          asOf: payload.asOf,
+          warnings: payload.warnings ?? [],
+        });
+      }
     }
   } catch (error) {
     setFeedStatus("Degraded");
@@ -1769,10 +1775,11 @@ async function loadSectorBoard(force = false) {
   try {
     const selectedSector = sanitizeSectorFocus(sector, [...(state.heatmap?.sectors ?? []), ...DEFAULT_SECTORS]);
     if (state.heatmap?.tiles?.length) {
+      const previewItems = filterSectorBoardItems(state.heatmap.tiles, selectedSector);
       renderSectorBoardPanel({
         sector: selectedSector,
         sectors: state.heatmap.sectors ?? DEFAULT_SECTORS,
-        items: state.heatmap.tiles,
+        items: previewItems,
         news: [],
         asOf: state.heatmap.asOf,
         warnings: [],
@@ -2964,12 +2971,9 @@ function deriveSectorBoardItems(payload, selectedSector) {
   const payloadItems = Array.isArray(payload?.items) ? payload.items : [];
   const filteredLive = filterSectorBoardItems(liveItems, selectedSector);
   const filteredPayload = filterSectorBoardItems(payloadItems, selectedSector);
-  const payloadMatchesSelected = normalizeSectorKey(payload?.sector) === normalizeSectorKey(selectedSector);
   const primary = filteredPayload.length
     ? filteredPayload
-    : payloadMatchesSelected && payloadItems.length
-      ? payloadItems
-      : filteredLive;
+    : filteredLive;
   const payloadBySymbol = new Map(payloadItems.map((item) => [item.symbol, item]));
 
   return primary.map((item) => {
