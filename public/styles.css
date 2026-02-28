@@ -1813,54 +1813,11 @@ button:hover {
   grid-area: board;
 }
 
-#dashboardGrid[data-page="research"] #section-workbench {
-  grid-column: span 6;
-  align-self: start;
-}
-
-#dashboardGrid[data-page="research"] #section-intelligence {
-  grid-column: span 4;
-  align-self: start;
-}
-
-#dashboardGrid[data-page="research"] #section-screening {
-  grid-column: span 4;
-  align-self: start;
-}
-
-#dashboardGrid[data-page="research"] #section-events {
-  grid-column: 3 / -1;
-  align-self: start;
-}
-
-#dashboardGrid[data-page="research"] #section-research-rail {
-  grid-column: span 2;
-  order: 0;
-  grid-row: 1 / span 3;
-  align-self: start;
-}
-
-#dashboardGrid[data-page="research"] #section-workbench,
-#dashboardGrid[data-page="research"] #section-intelligence,
-#dashboardGrid[data-page="research"] #section-screening,
-#dashboardGrid[data-page="research"] #section-events {
-  order: 1;
-}
-
 #dashboardGrid[data-page="research"] {
-  grid-auto-flow: row dense;
+  grid-template-columns: 220px minmax(0, 1.5fr) minmax(340px, 0.98fr);
+  grid-auto-flow: row;
+  grid-auto-rows: minmax(min-content, max-content);
   align-items: start;
-}
-
-#dashboardGrid[data-page="research"] .panel {
-  align-content: start;
-}
-
-#dashboardGrid[data-page="research"] #section-workbench,
-#dashboardGrid[data-page="research"] #section-intelligence,
-#dashboardGrid[data-page="research"] #section-screening,
-#dashboardGrid[data-page="research"] #section-events {
-  min-height: 0;
 }
 
 #dashboardGrid[data-page="research"] .panel,
@@ -1870,76 +1827,112 @@ button:hover {
   min-width: 0;
 }
 
-#dashboardGrid[data-page="research"] #section-workbench .detail-grid {
-  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
-  gap: 8px;
-}
-
-#dashboardGrid[data-page="research"] #section-intelligence .intel-top-grid,
-#dashboardGrid[data-page="research"] #section-intelligence .intel-graph-grid {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
-}
-
-#dashboardGrid[data-page="research"] #section-intelligence .intel-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-#dashboardGrid[data-page="research"] #section-intelligence .subpanel,
-#dashboardGrid[data-page="research"] #section-screening .subpanel,
-#dashboardGrid[data-page="research"] #section-events .subpanel {
+#dashboardGrid[data-page="research"] .panel {
+  align-content: start;
   min-height: 0;
 }
 
+#dashboardGrid[data-page="research"] #section-research-rail {
+  order: 0;
+  grid-row: 1 / span 3;
+  align-self: start;
+  padding: 8px;
+}
+
+#dashboardGrid[data-page="research"] #section-workbench,
+#dashboardGrid[data-page="research"] #section-intelligence,
 #dashboardGrid[data-page="research"] #section-screening,
 #dashboardGrid[data-page="research"] #section-events {
+  order: 1;
+  align-self: start;
   min-height: 0;
 }
 
-#dashboardGrid[data-page="research"] #section-intelligence .list-stack,
-#dashboardGrid[data-page="research"] #section-intelligence .terminal-table-wrap,
-#dashboardGrid[data-page="research"] #section-screening .terminal-table-wrap,
-#dashboardGrid[data-page="research"] #section-screening .list-stack,
-#dashboardGrid[data-page="research"] #section-events .list-stack,
-#dashboardGrid[data-page="research"] #section-events .terminal-table-wrap {
-  max-height: 260px;
-  overflow: auto;
+#dashboardGrid[data-page="research"] #section-workbench .panel-header,
+#dashboardGrid[data-page="research"] #section-intelligence .panel-header,
+#dashboardGrid[data-page="research"] #section-screening .panel-header,
+#dashboardGrid[data-page="research"] #section-events .panel-header {
+  padding-bottom: 10px;
 }
 
-#dashboardGrid[data-page="research"] #section-intelligence #intelGraph {
-  min-height: 240px;
+#dashboardGrid[data-page="research"] #section-workbench .detail-grid {
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.95fr);
+  gap: 8px;
+  padding: 0;
+  align-items: start;
 }
 
-#dashboardGrid[data-page="research"] #section-workbench #priceChart {
-  min-height: 360px;
+#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(1) {
+  grid-row: 1 / span 2;
+  min-height: 0;
 }
 
-#dashboardGrid[data-page="research"] #section-screening .screen-form {
-  grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, 0.85fr)) auto;
+#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(2),
+#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(3),
+#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(4) {
+  min-height: 0;
 }
 
-#dashboardGrid[data-page="research"] #section-events .table-wrap,
-#dashboardGrid[data-page="research"] #section-screening .table-wrap {
-  max-height: 340px;
-  overflow: auto;
+#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(4) {
+  grid-column: 1 / -1;
 }
 
 #dashboardGrid[data-page="research"] #section-workbench .watchlist-summary-grid,
-#dashboardGrid[data-page="research"] #section-intelligence .metric-strip,
-#dashboardGrid[data-page="research"] #section-intelligence .intel-signal-grid,
-#dashboardGrid[data-page="research"] #section-screening .screen-form {
+#dashboardGrid[data-page="research"] #section-workbench .metric-strip {
   gap: 6px;
-}
-
-#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(3),
-#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(4) {
-  max-height: 420px;
-  overflow: hidden;
 }
 
 #dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(3) .list-stack,
 #dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(4) .terminal-table-wrap {
+  max-height: 320px;
+  overflow: auto;
+}
+
+#dashboardGrid[data-page="research"] #section-workbench #priceChart {
+  min-height: 340px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence {
+  gap: 8px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-top-grid,
+#dashboardGrid[data-page="research"] #section-intelligence .intel-graph-grid,
+#dashboardGrid[data-page="research"] #section-intelligence .intel-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .metric-strip,
+#dashboardGrid[data-page="research"] #section-intelligence .intel-signal-grid {
+  gap: 6px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .list-stack,
+#dashboardGrid[data-page="research"] #section-intelligence .terminal-table-wrap {
+  max-height: 252px;
+  overflow: auto;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence #intelGraph {
+  min-height: 280px;
+}
+
+#dashboardGrid[data-page="research"] #section-screening {
+  gap: 8px;
+}
+
+#dashboardGrid[data-page="research"] #section-screening .screen-form {
+  grid-template-columns: minmax(0, 1.45fr) repeat(4, minmax(0, 0.8fr)) auto;
+  gap: 6px;
+}
+
+#dashboardGrid[data-page="research"] #section-screening .table-wrap {
+  max-height: 280px;
+  overflow: auto;
+}
+
+#dashboardGrid[data-page="research"] #section-events .list-stack {
   max-height: 320px;
   overflow: auto;
 }
@@ -1949,7 +1942,7 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] .research-rail-list {
-  padding: 6px;
+  padding: 4px;
 }
 
 #dashboardGrid[data-page="research"] .panel-header,
