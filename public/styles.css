@@ -821,6 +821,8 @@ svg {
 }
 
 .command-pill {
+  border: 1px solid rgba(108, 138, 171, 0.2);
+  border-radius: 12px;
   display: inline-flex;
   flex-direction: column;
   gap: 0.28rem;
@@ -828,6 +830,15 @@ svg {
   color: var(--accent);
   font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: none;
+  text-align: left;
+}
+
+.command-pill.active {
+  border-color: rgba(124, 247, 212, 0.38);
+  background: linear-gradient(180deg, rgba(124, 247, 212, 0.12), rgba(92, 200, 255, 0.06));
+  color: #effaff;
 }
 
 .list-stack {
@@ -846,6 +857,62 @@ svg {
 .list-item strong {
   display: block;
   margin-bottom: 0.16rem;
+}
+
+.intel-console-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1.14fr) minmax(260px, 0.86fr);
+}
+
+.intel-detail-body {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+
+.intel-detail-block {
+  display: grid;
+  gap: 8px;
+}
+
+.intel-mini-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.intel-mini-heading strong {
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.intel-inline-note,
+.intel-summary-card {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+}
+
+.intel-summary-card p {
+  line-height: 1.45;
+}
+
+.intel-inline-chart {
+  min-height: 220px;
+}
+
+.intel-inline-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .terminal-list-item,
@@ -1903,10 +1970,18 @@ button:hover {
   gap: 8px;
 }
 
-#dashboardGrid[data-page="research"] #section-intelligence .intel-top-grid,
-#dashboardGrid[data-page="research"] #section-intelligence .intel-graph-grid,
-#dashboardGrid[data-page="research"] #section-intelligence .intel-grid {
+#dashboardGrid[data-page="research"] #section-intelligence .intel-top-grid {
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 8px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-graph-grid {
   grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-console-grid {
+  grid-template-columns: minmax(0, 1.08fr) minmax(260px, 0.92fr);
   gap: 8px;
 }
 
@@ -1926,12 +2001,17 @@ button:hover {
 
 #dashboardGrid[data-page="research"] #section-intelligence .list-stack,
 #dashboardGrid[data-page="research"] #section-intelligence .terminal-table-wrap {
-  max-height: 252px;
+  max-height: 232px;
   overflow: auto;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence #intelGraph {
   min-height: 280px;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .intel-detail-body .list-stack {
+  max-height: 260px;
+  overflow: auto;
 }
 
 #dashboardGrid[data-page="research"] #section-screening {
@@ -4022,7 +4102,8 @@ th {
   .calendar-day-grid,
   .company-map-shell,
   .company-map-compare-shell,
-  .company-map-compare-mini-grid {
+  .company-map-compare-mini-grid,
+  .intel-console-grid {
     grid-template-columns: 1fr;
   }
 
@@ -4079,6 +4160,7 @@ th {
   .options-grid,
   .intel-top-grid,
   .intel-graph-grid,
+  .intel-console-grid,
   .intel-grid,
   .stacked-form,
   .screen-form,

@@ -84,6 +84,7 @@ const DEFAULT_SECTORS = [
   "Basic Materials",
 ];
 const COMPACT_LAYOUT_BREAKPOINT = 1080;
+const INTEL_VIEWS = ["SPLC", "REL", "OWN", "BMAP", "RV", "FA", "DES"];
 
 const PAGE_DEFINITIONS = {
   overview: {
@@ -323,6 +324,7 @@ const state = {
   workspaces: [],
   activity: [],
   intelligence: null,
+  intelView: "SPLC",
   heatmap: null,
   researchRailItems: [],
   heatmapFocusSymbol: null,
@@ -917,6 +919,15 @@ function bindGlobalActions() {
       return;
     }
     await selectDetailSymbol(trigger.dataset.graphSymbol, { jump: true, page: "research" });
+  });
+
+  document.querySelector("#intelCommandBar")?.addEventListener("click", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-intel-view]") : null;
+    if (!trigger?.dataset.intelView) {
+      return;
+    }
+    state.intelView = normalizeIntelView(trigger.dataset.intelView);
+    rerenderIntelligenceConsole();
   });
 
   document.querySelector("#companyMapGraph")?.addEventListener("click", async (event) => {
@@ -3508,9 +3519,19 @@ async function loadIntelligence(symbol) {
   try {
     const payload = await api(`/api/intelligence?symbol=${encodeURIComponent(symbol)}`);
     state.intelligence = payload;
+    const holders = topIntelHolders(payload);
+    const defaultView = normalizeIntelView(payload.commands?.[0]?.code);
+    state.intelView = state.intelligence?.symbol === payload.symbol ? normalizeIntelView(state.intelView) : defaultView;
 
     document.querySelector("#intelCommandBar").innerHTML = payload.commands
-      .map((command) => `<div class="command-pill">${escapeHtml(command.code)}<span>${escapeHtml(command.label)}</span></div>`)
+      .map(
+        (command) => `
+          <button type="button" class="command-pill" data-intel-view="${escapeHtml(normalizeIntelView(command.code))}">
+            ${escapeHtml(command.code)}
+            <span>${escapeHtml(command.label)}</span>
+          </button>
+        `,
+      )
       .join("");
 
     document.querySelector("#intelHeadline").innerHTML = `
@@ -3519,9 +3540,12 @@ async function loadIntelligence(symbol) {
       <p>${escapeHtml(payload.summary ?? payload.coverage.notes[0] ?? "No intelligence summary available.")}</p>
     `;
 
-    document.querySelector("#intelCoverageNotes").innerHTML = payload.coverage.notes
-      .map((note, index) => renderIntelNote(note, index))
-      .join("");
+    const previewNotes = (payload.coverage.notes ?? []).slice(0, 2).map((note, index) => renderIntelNote(note, index)).join("");
+    document.querySelector("#intelCoverageNotes").innerHTML =
+      (previewNotes || renderIntelEmpty("No coverage notes were returned.")) +
+      ((payload.coverage.notes?.length ?? 0) > 2
+        ? `<div class="intel-inline-note">+${payload.coverage.notes.length - 2} more notes in DES</div>`
+        : "");
 
     document.querySelector("#intelOwnershipFacts").innerHTML = [
       metric("Inst. Held", formatPercentScaled(payload.ownership.institutionPercentHeld)),
@@ -3530,89 +3554,9 @@ async function loadIntelligence(symbol) {
       metric("Short Int", formatCompact(payload.ownership.sharesShort)),
     ].join("");
 
-    const holders = [...(payload.ownership.topInstitutionalHolders ?? []), ...(payload.ownership.topFundHolders ?? [])]
-      .filter((holder, index, all) => holder.holder && all.findIndex((entry) => entry.holder === holder.holder) === index)
-      .slice(0, 12);
-
     document.querySelector("#intelSignalGrid").innerHTML = renderIntelSignals(payload, holders);
-    document.querySelector("#intelHoldersBody").innerHTML = holders
-      .map(
-        (holder, index) => `
-          <tr class="intel-row">
-            <td>
-              <div class="holder-cell">
-                <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
-                <div>
-                  <strong>${escapeHtml(holder.holder ?? "n/a")}</strong>
-                  <div class="muted">ownership filing</div>
-                </div>
-              </div>
-            </td>
-            <td>${formatPercentScaled(holder.pctHeld)}</td>
-            <td>${formatCompact(holder.shares)}</td>
-          </tr>
-        `,
-      )
-      .join("");
-
-    document.querySelector("#intelSupplyList").innerHTML = renderIntelList(
-      ...payload.supplyChain.suppliers.map((item) => renderIntelListItem(item.relation, item.target, item.label)),
-      ...payload.supplyChain.ecosystem.map((item) => renderIntelListItem(item.relation, item.target, item.label)),
-    );
-
-    document.querySelector("#intelCustomerList").innerHTML = renderIntelList(
-      ...(payload.customerConcentration ?? []).map((item) =>
-        renderIntelListItem(item.level, item.name, item.commentary),
-      ),
-      ...(payload.supplyChain.customers ?? []).map((item) =>
-        renderIntelListItem(item.relation, item.target, item.label),
-      ),
-    );
-
-    document.querySelector("#intelCorporateList").innerHTML = renderIntelList(
-      ...(payload.corporate.tree ?? []).map((item) => renderIntelListItem(item.type, item.name, item.description)),
-      ...(payload.corporate.relations ?? []).map((item) =>
-        renderIntelListItem(item.relation, item.target, item.label),
-      ),
-    );
-
-    document.querySelector("#intelExecList").innerHTML = (payload.executives ?? [])
-      .map((item) =>
-        renderIntelListItem(
-          item.role ?? "Executive",
-          item.name,
-          item.background?.length ? item.background.join(" -> ") : item.compensation ? `Comp ${formatMoney(item.compensation)}` : "Public-company officer listing",
-        ),
-      )
-      .join("") || renderIntelEmpty("No executive network data mapped.");
-
-    document.querySelector("#intelImpactList").innerHTML = (payload.eventChains ?? [])
-      .map((chain, index) => renderImpactChain(chain, index))
-      .join("") || renderIntelEmpty("No impact chains mapped.");
-
-    document.querySelector("#intelCompetitorBody").innerHTML = (payload.competitors ?? [])
-      .map(
-        (item, index) => `
-          <tr class="intel-row ${tone(item.changePercent)}">
-            <td>
-              <div class="holder-cell">
-                <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
-                <div>
-                  <strong>${escapeHtml(item.symbol)}</strong>
-                  <div class="muted">${escapeHtml(item.companyName ?? "n/a")}</div>
-                </div>
-              </div>
-            </td>
-            <td>${escapeHtml(item.companyName ?? "n/a")}</td>
-            <td>${formatMoney(item.price)}</td>
-            <td class="${tone(item.changePercent)}">${formatPercent(item.changePercent)}</td>
-          </tr>
-        `,
-      )
-      .join("");
-
     mountIntelGraph(document.querySelector("#intelGraph"), payload.graph, payload.symbol);
-    mountGeoExposureChart(document.querySelector("#intelGeoChart"), payload.geography);
+    rerenderIntelligenceConsole();
   } catch (error) {
     showStatus(error.message, true);
   }
@@ -4924,6 +4868,284 @@ function renderIntelSignals(payload, holders) {
     renderTerminalStat("Impact Chains", String(payload.eventChains?.length ?? 0), "mapped catalysts"),
     renderTerminalStat("Holders", String(holders.length), "unique top owners"),
   ].join("");
+}
+
+function topIntelHolders(payload) {
+  return [...(payload?.ownership?.topInstitutionalHolders ?? []), ...(payload?.ownership?.topFundHolders ?? [])]
+    .filter((holder, index, all) => holder.holder && all.findIndex((entry) => entry.holder === holder.holder) === index)
+    .slice(0, 12);
+}
+
+function renderIntelHolderRows(holders) {
+  return holders.length
+    ? holders
+        .map(
+          (holder, index) => `
+            <tr class="intel-row">
+              <td>
+                <div class="holder-cell">
+                  <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
+                  <div>
+                    <strong>${escapeHtml(holder.holder ?? "n/a")}</strong>
+                    <div class="muted">ownership filing</div>
+                  </div>
+                </div>
+              </td>
+              <td>${formatPercentScaled(holder.pctHeld)}</td>
+              <td>${formatCompact(holder.shares)}</td>
+            </tr>
+          `,
+        )
+        .join("")
+    : `<tr class="intel-row"><td colspan="3"><div class="muted">No public holder rows are available.</div></td></tr>`;
+}
+
+function renderIntelCompetitorRows(items) {
+  return (items ?? []).length
+    ? (items ?? [])
+        .map(
+          (item, index) => `
+            <tr class="intel-row ${tone(item.changePercent)}">
+              <td>
+                <div class="holder-cell">
+                  <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
+                  <div>
+                    <strong>${escapeHtml(item.symbol)}</strong>
+                    <div class="muted">${escapeHtml(item.companyName ?? "n/a")}</div>
+                  </div>
+                </div>
+              </td>
+              <td>${escapeHtml(item.companyName ?? "n/a")}</td>
+              <td>${formatMoney(item.price)}</td>
+              <td class="${tone(item.changePercent)}">${formatPercent(item.changePercent)}</td>
+            </tr>
+          `,
+        )
+        .join("")
+    : `<tr class="intel-row"><td colspan="4"><div class="muted">No competitor rows are available.</div></td></tr>`;
+}
+
+function normalizeIntelView(view) {
+  const next = String(view ?? "").toUpperCase();
+  return INTEL_VIEWS.includes(next) ? next : "SPLC";
+}
+
+function intelCommandLabel(payload, view) {
+  return (payload?.commands ?? []).find((command) => normalizeIntelView(command.code) === view)?.label ?? view;
+}
+
+function renderIntelSection(title, body, meta = "") {
+  return `
+    <section class="intel-detail-block">
+      <div class="intel-mini-heading">
+        <strong>${escapeHtml(title)}</strong>
+        ${meta ? `<span>${escapeHtml(meta)}</span>` : ""}
+      </div>
+      ${body}
+    </section>
+  `;
+}
+
+function buildIntelConsoleView(payload, holders, view) {
+  const supplyRows = renderIntelList(
+    ...payload.supplyChain.suppliers.map((item) => renderIntelListItem(item.relation, item.target, item.label)),
+    ...payload.supplyChain.ecosystem.map((item) => renderIntelListItem(item.relation, item.target, item.label)),
+  );
+  const customerRows = renderIntelList(
+    ...(payload.customerConcentration ?? []).map((item) => renderIntelListItem(item.level, item.name, item.commentary)),
+    ...(payload.supplyChain.customers ?? []).map((item) => renderIntelListItem(item.relation, item.target, item.label)),
+  );
+  const corporateRows = renderIntelList(
+    ...(payload.corporate.tree ?? []).map((item) => renderIntelListItem(item.type, item.name, item.description)),
+    ...(payload.corporate.relations ?? []).map((item) => renderIntelListItem(item.relation, item.target, item.label)),
+  );
+  const executiveRows =
+    (payload.executives ?? [])
+      .map((item) =>
+        renderIntelListItem(
+          item.role ?? "Executive",
+          item.name,
+          item.background?.length ? item.background.join(" -> ") : item.compensation ? `Comp ${formatMoney(item.compensation)}` : "Public-company officer listing",
+        ),
+      )
+      .join("") || renderIntelEmpty("No executive network data mapped.");
+  const coverageRows =
+    (payload.coverage?.notes ?? []).map((note, index) => renderIntelNote(note, index)).join("") ||
+    renderIntelEmpty("No coverage notes were returned.");
+  const impactRows =
+    (payload.eventChains ?? []).map((chain, index) => renderImpactChain(chain, index)).join("") ||
+    renderIntelEmpty("No impact chains mapped.");
+  const competitorsTable = `
+    <div class="table-wrap compact terminal-table-wrap">
+      <table class="terminal-table intel-table">
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Company</th>
+            <th>Last</th>
+            <th>% Change</th>
+          </tr>
+        </thead>
+        <tbody>${renderIntelCompetitorRows(payload.competitors ?? [])}</tbody>
+      </table>
+    </div>
+  `;
+  const holdersTable = `
+    <div class="table-wrap compact terminal-table-wrap">
+      <table class="terminal-table intel-table">
+        <thead>
+          <tr>
+            <th>Holder</th>
+            <th>% Held</th>
+            <th>Shares</th>
+          </tr>
+        </thead>
+        <tbody>${renderIntelHolderRows(holders)}</tbody>
+      </table>
+    </div>
+  `;
+
+  switch (view) {
+    case "REL":
+      return {
+        title: "Relationships",
+        meta: intelCommandLabel(payload, view),
+        detailHtml:
+          renderIntelSection("Corporate Tree & M&A", `<div class="list-stack">${corporateRows}</div>`, `${payload.corporate.tree?.length ?? 0} mapped nodes`) +
+          renderIntelSection("Customer Concentration", `<div class="list-stack">${customerRows}</div>`, `${payload.customerConcentration?.length ?? 0} disclosed themes`),
+        secondaryTitle: "Executive Network",
+        secondaryMeta: `${payload.executives?.length ?? 0} named leaders`,
+        secondaryHtml: `<div class="list-stack">${executiveRows}</div>`,
+      };
+    case "OWN":
+      return {
+        title: "Ownership",
+        meta: intelCommandLabel(payload, view),
+        detailHtml:
+          renderIntelSection("Top Holders", holdersTable, `${holders.length} named institutions`) +
+          renderIntelSection(
+            "Ownership Snapshot",
+            `<div class="metric-strip intel-inline-metrics">
+              ${metric("Inst. Held", formatPercentScaled(payload.ownership.institutionPercentHeld))}
+              ${metric("Insider Held", formatPercentScaled(payload.ownership.insiderPercentHeld))}
+              ${metric("Float", formatCompact(payload.ownership.floatShares))}
+              ${metric("Short Int", formatCompact(payload.ownership.sharesShort))}
+            </div>`,
+          ),
+        secondaryTitle: "Coverage Notes",
+        secondaryMeta: `${payload.coverage.notes?.length ?? 0} notes`,
+        secondaryHtml: `<div class="list-stack">${coverageRows}</div>`,
+      };
+    case "BMAP":
+      return {
+        title: "Geographic Exposure",
+        meta: intelCommandLabel(payload, view),
+        detailHtml:
+          renderIntelSection("Geographic Mix", `<div id="intelDetailGeoChart" class="chart-card small intel-inline-chart"></div>`, "relative public-exposure signals") +
+          renderIntelSection(
+            "Coverage Note",
+            `<div class="intel-inline-note">Scores are relative public-exposure signals, not exact revenue percentages.</div>`,
+          ),
+        secondaryTitle: "Impact Chains",
+        secondaryMeta: `${payload.eventChains?.length ?? 0} mapped catalysts`,
+        secondaryHtml: `<div class="list-stack">${impactRows}</div>`,
+        mount() {
+          mountGeoExposureChart(document.querySelector("#intelDetailGeoChart"), payload.geography);
+        },
+      };
+    case "RV":
+      return {
+        title: "Peer Network",
+        meta: intelCommandLabel(payload, view),
+        detailHtml:
+          renderIntelSection("Competitor Network", competitorsTable, `${payload.competitors?.length ?? 0} tracked rivals`) +
+          renderIntelSection(
+            "Competition / Ecosystem",
+            `<div class="list-stack">${renderIntelList(...payload.supplyChain.ecosystem.map((item) => renderIntelListItem(item.relation, item.target, item.label)))}</div>`,
+          ),
+        secondaryTitle: "Impact Chains",
+        secondaryMeta: `${payload.eventChains?.length ?? 0} mapped catalysts`,
+        secondaryHtml: `<div class="list-stack">${impactRows}</div>`,
+      };
+    case "FA":
+      return {
+        title: "Financial Analysis",
+        meta: intelCommandLabel(payload, view),
+        detailHtml:
+          renderIntelSection(
+            "Coverage Signals",
+            `<div class="metric-strip intel-inline-metrics">
+              ${renderTerminalStat("Coverage", payload.coverage.curated ? "Curated" : "Fallback", "source mode")}
+              ${renderTerminalStat("Peers", String(payload.competitors?.length ?? 0), "tracked rivals")}
+              ${renderTerminalStat("Impact Chains", String(payload.eventChains?.length ?? 0), "mapped catalysts")}
+              ${renderTerminalStat("Holders", String(holders.length), "named owners")}
+            </div>`,
+          ) +
+          renderIntelSection("Customer Concentration", `<div class="list-stack">${customerRows}</div>`),
+        secondaryTitle: "Coverage Notes",
+        secondaryMeta: `${payload.coverage.notes?.length ?? 0} notes`,
+        secondaryHtml: `<div class="list-stack">${coverageRows}</div>`,
+      };
+    case "DES":
+      return {
+        title: "Description",
+        meta: intelCommandLabel(payload, view),
+        detailHtml:
+          renderIntelSection(
+            payload.companyName ?? payload.symbol,
+            `<div class="intel-summary-card">
+              <p>${escapeHtml(payload.summary ?? "No intelligence summary available.")}</p>
+            </div>`,
+          ) +
+          renderIntelSection("Coverage Notes", `<div class="list-stack">${coverageRows}</div>`),
+        secondaryTitle: "Corporate Context",
+        secondaryMeta: `${payload.corporate.tree?.length ?? 0} mapped corporate links`,
+        secondaryHtml: `<div class="list-stack">${corporateRows}</div>`,
+      };
+    case "SPLC":
+    default:
+      return {
+        title: "Supply Chain",
+        meta: intelCommandLabel(payload, "SPLC"),
+        detailHtml:
+          renderIntelSection(
+            "Suppliers & Partners",
+            `<div class="list-stack">${supplyRows}</div>`,
+            `${payload.supplyChain.suppliers?.length ?? 0} supplier links`,
+          ) +
+          renderIntelSection(
+            "Customer Concentration",
+            `<div class="list-stack">${customerRows}</div>`,
+            `${payload.supplyChain.customers?.length ?? 0} customer themes`,
+          ),
+        secondaryTitle: "Impact Chains",
+        secondaryMeta: `${payload.eventChains?.length ?? 0} mapped catalysts`,
+        secondaryHtml: `<div class="list-stack">${impactRows}</div>`,
+      };
+  }
+}
+
+function rerenderIntelligenceConsole() {
+  const payload = state.intelligence;
+  if (!payload) {
+    return;
+  }
+  const availableViews = (payload.commands ?? []).map((command) => normalizeIntelView(command.code));
+  const fallbackView = normalizeIntelView(availableViews[0]);
+  state.intelView = availableViews.includes(normalizeIntelView(state.intelView)) ? normalizeIntelView(state.intelView) : fallbackView;
+  document.querySelectorAll("#intelCommandBar [data-intel-view]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.intelView === state.intelView);
+  });
+
+  const holders = topIntelHolders(payload);
+  const view = buildIntelConsoleView(payload, holders, state.intelView);
+  setText("#intelDetailTitle", view.title);
+  setText("#intelDetailMeta", view.meta);
+  document.querySelector("#intelDetailBody").innerHTML = view.detailHtml;
+  setText("#intelSecondaryTitle", view.secondaryTitle);
+  setText("#intelSecondaryMeta", view.secondaryMeta);
+  document.querySelector("#intelSecondaryBody").innerHTML = view.secondaryHtml;
+  view.mount?.();
 }
 
 function renderTerminalStat(label, value, meta) {
