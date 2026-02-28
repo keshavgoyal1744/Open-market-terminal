@@ -92,22 +92,46 @@ export class MarketDataService {
       `company:${symbol}`,
       async () => {
         const upper = symbol.toUpperCase();
-        const [secResult, marketResult] = await Promise.allSettled([
+        const [secResult, marketResult, quoteResult] = await Promise.allSettled([
           getCompanySnapshot(upper),
           getCompanyOverview(upper),
+          this.getQuotes([upper]).then((quotes) => quotes[0] ?? null),
         ]);
         const warnings = [];
         const sec = secResult.status === "fulfilled" ? secResult.value : emptySecSnapshot(upper, secResult.reason);
-        const market =
+        const quote = quoteResult.status === "fulfilled" ? quoteResult.value : null;
+        const marketBase =
           marketResult.status === "fulfilled"
             ? marketResult.value
             : emptyMarketOverview(upper, sec.title, marketResult.reason);
+        const derivedSharesOutstanding = numeric(sec.facts?.sharesOutstanding?.value);
+        const derivedMarketCap =
+          numeric(marketBase.marketCap)
+          ?? numeric(quote?.marketCap)
+          ?? (
+            Number.isFinite(numeric(quote?.price)) && Number.isFinite(derivedSharesOutstanding)
+              ? numeric(quote.price) * derivedSharesOutstanding
+              : null
+          );
+        const market = {
+          ...marketBase,
+          shortName: marketBase.shortName ?? quote?.shortName ?? sec.title ?? upper,
+          type: marketBase.type ?? quote?.type ?? null,
+          exchange: marketBase.exchange ?? quote?.exchange ?? null,
+          marketCap: derivedMarketCap,
+          trailingPe: marketBase.trailingPe ?? quote?.trailingPe ?? null,
+          fiftyTwoWeekHigh: marketBase.fiftyTwoWeekHigh ?? quote?.yearHigh ?? null,
+          fiftyTwoWeekLow: marketBase.fiftyTwoWeekLow ?? quote?.yearLow ?? null,
+        };
 
         if (secResult.status === "rejected" && !shouldSuppressSecWarning(upper, market)) {
           warnings.push(`SEC data unavailable for ${upper}: ${secResult.reason?.message ?? "source error"}`);
         }
         if (marketResult.status === "rejected") {
           warnings.push(`Market profile unavailable for ${upper}: ${marketResult.reason?.message ?? "source error"}`);
+        }
+        if (quoteResult.status === "rejected") {
+          warnings.push(`Quote fallback unavailable for ${upper}: ${quoteResult.reason?.message ?? "source error"}`);
         }
 
         return {
@@ -581,7 +605,7 @@ export class MarketDataService {
     return this.cache.getOrSet(
       `quote-monitor:${upper}:${range}:${interval}:${peerUniverse.join(",")}`,
       async () => {
-        const [company, companyMap, history, optionsPayload, news, events] = await Promise.all([
+        const [company, companyMap] = await Promise.all([
           this.getCompany(upper).catch((error) => ({
             symbol: upper,
             sec: emptySecSnapshot(upper, error),
@@ -589,16 +613,91 @@ export class MarketDataService {
             warnings: [error.message],
           })),
           this.getCompanyMap(upper).catch(() => null),
+        ]);
+        const focusedQuery = [companyMap?.companyName, company.market.shortName, company.sec.title]
+          .map((value) => String(value ?? "").trim())
+          .find((value) => value && value.toUpperCase() !== upper) ?? upper;
+        const [history, optionsPayload, news, earnings] = await Promise.all([
           this.getHistory(upper, range, interval).catch(() => []),
           this.getOptions(upper).catch((error) => emptyOptions(upper, error)),
-          this.getDeskNews([upper, ...peerUniverse], upper).catch(() => ({ items: [] })),
-          this.getMarketEvents([upper, ...peerUniverse], upper).catch(() => ({ events: [] })),
+          this.getDeskNews([upper], upper, focusedQuery).catch(() => ({ items: [] })),
+          this.getEarningsIntel(upper, peerUniverse).catch(() => null),
         ]);
 
         const quote = companyMap?.quote ?? (await this.getQuotes([upper]).catch(() => [null]))[0] ?? null;
         const filings = company.sec?.filings?.slice(0, 8) ?? [];
         const peers = (companyMap?.competitors ?? []).slice(0, 8);
         const holders = (companyMap?.holders ?? []).slice(0, 10);
+        const timeline = [
+          ...filings.slice(0, 6).map((filing) => ({
+            id: `quote-filing-${upper}-${filing.accessionNumber ?? filing.filingDate ?? filing.form}`,
+            kind: "filing",
+            category: "filing",
+            timestamp: filing.filingDate ?? null,
+            title: `${upper} filed ${filing.form ?? "SEC filing"}`,
+            source: "SEC",
+            note: filing.primaryDocument ?? "Recent issuer filing",
+            link: filing.filingUrl ?? filing.filingIndexUrl ?? null,
+          })),
+          ...(earnings?.earningsWindow?.start
+            ? [{
+                id: `quote-earnings-${upper}`,
+                kind: "earnings",
+                category: "earnings",
+                timestamp: earnings.earningsWindow.start,
+                title: `${upper} earnings window`,
+                source: "Yahoo Finance",
+                note: earnings.companyName ?? upper,
+                link: null,
+              }]
+            : []),
+          ...((companyMap?.acquisitionsTimeline ?? []).slice(0, 4).map((item, index) => ({
+            id: `quote-corporate-${upper}-${index}`,
+            kind: item.kind ?? "corporate",
+            category: "corporate",
+            timestamp: item.date ?? null,
+            title: item.title ?? "Corporate event",
+            source: item.source ?? "Relationship console",
+            note: item.note ?? "Issuer corporate context",
+            link: item.url ?? null,
+          }))),
+          ...((companyMap?.corporate?.tree ?? []).slice(0, 3).map((item, index) => ({
+            id: `quote-tree-${upper}-${index}`,
+            kind: item.type ?? "corporate",
+            category: "corporate",
+            timestamp: item.date ?? null,
+            title: item.name ?? item.target ?? "Corporate link",
+            source: "Relationship console",
+            note: item.description ?? "Corporate relationship",
+            link: null,
+          }))),
+          ...((companyMap?.graph?.nodes ?? [])
+            .filter((node) => node?.kind === "issuer")
+            .slice(0, 1)
+            .flatMap(() => (companyMap?.ownershipTrend ?? []).slice(-2).map((item, index) => ({
+              id: `quote-ownership-${upper}-${index}`,
+              kind: "ownership",
+              category: "ownership",
+              timestamp: item.date ?? null,
+              title: `${upper} ownership snapshot`,
+              source: "Public ownership",
+              note: item.note ?? "Institutional / insider reporting",
+              link: null,
+            })))),
+          ...(news.items ?? []).slice(0, 6).map((item) => ({
+            id: `quote-news-${item.id}`,
+            kind: "news",
+            category: item.category ?? "focus",
+            timestamp: item.publishedAt,
+            title: item.title,
+            source: item.source,
+            note: "Symbol-focused public headline",
+            link: item.link ?? null,
+          })),
+        ]
+          .filter((item) => Number.isFinite(Date.parse(item.timestamp)))
+          .sort((left, right) => compareDatesDescending(left.timestamp, right.timestamp))
+          .slice(0, 12);
 
         return {
           symbol: upper,
@@ -618,7 +717,7 @@ export class MarketDataService {
           holders,
           board: (companyMap?.board ?? []).slice(0, 8),
           news: (news.items ?? []).slice(0, 10),
-          timeline: (events.events ?? []).slice(0, 10),
+          timeline,
         };
       },
       { ttlMs: config.quoteTtlMs * 2, staleMs: config.quoteTtlMs * 6 },

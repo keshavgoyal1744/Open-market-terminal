@@ -1297,6 +1297,21 @@
       </aside>
     </div>
 
+    <div id="sectorOverflowOverlay" class="sector-overflow-overlay" hidden>
+      <div class="sector-overflow-backdrop" data-close-sector-overflow="true"></div>
+      <aside id="sectorOverflowModal" class="sector-overflow-modal" role="dialog" aria-modal="true" aria-label="Expanded sector board" hidden>
+        <div class="panel-header compact-header sector-overflow-header">
+          <div>
+            <p class="section-label">Sector Expansion</p>
+            <h3 id="sectorOverflowTitle">Selected-sector mosaic</h3>
+          </div>
+          <button id="closeSectorOverflowButton" type="button" class="secondary">Close</button>
+        </div>
+        <div id="sectorOverflowSummary" class="watchlist-summary-grid"></div>
+        <div id="sectorOverflowGrid" class="sector-board-tiles sector-overflow-grid"></div>
+      </aside>
+    </div>
+
     <div id="statusToast" class="status-toast" hidden></div>
     <script defer src="/_vercel/insights/script.js"></script>
     <script defer src="/_vercel/speed-insights/script.js"></script>

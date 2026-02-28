@@ -418,6 +418,9 @@ const state = {
   dragPanelId: null,
   resizePanelId: null,
   earningsDrawerOpen: false,
+  sectorOverflowOpen: false,
+  sectorOverflowItems: [],
+  sectorOverflowSector: "",
 };
 
 const SECTION_COMMANDS = [
@@ -1002,6 +1005,11 @@ function bindGlobalActions() {
   });
 
   document.querySelector("#sectorBoardTiles")?.addEventListener("click", async (event) => {
+    const overflowTrigger = event.target instanceof Element ? event.target.closest("[data-open-sector-overflow='true']") : null;
+    if (overflowTrigger) {
+      toggleSectorOverflowModal(true);
+      return;
+    }
     const trigger = event.target instanceof Element ? event.target.closest("[data-sector-symbol]") : null;
     if (!trigger?.dataset.sectorSymbol) {
       return;
@@ -1168,6 +1176,24 @@ function bindGlobalActions() {
     }
   });
 
+  document.querySelector("#closeSectorOverflowButton")?.addEventListener("click", () => {
+    toggleSectorOverflowModal(false);
+  });
+
+  document.querySelector("#sectorOverflowOverlay")?.addEventListener("click", async (event) => {
+    const closeTrigger = event.target instanceof Element ? event.target.closest("[data-close-sector-overflow='true']") : null;
+    if (closeTrigger) {
+      toggleSectorOverflowModal(false);
+      return;
+    }
+    const symbolTrigger = event.target instanceof Element ? event.target.closest("[data-sector-symbol]") : null;
+    if (!symbolTrigger?.dataset.sectorSymbol) {
+      return;
+    }
+    toggleSectorOverflowModal(false);
+    await selectDetailSymbol(symbolTrigger.dataset.sectorSymbol, { jump: true, page: "research" });
+  });
+
   document.addEventListener("keydown", async (event) => {
     const target = event.target;
     const editable = target instanceof HTMLElement && (target.closest("input, textarea, select") || target.isContentEditable);
@@ -1215,6 +1241,12 @@ function bindGlobalActions() {
     if (state.earningsDrawerOpen && event.key === "Escape") {
       event.preventDefault();
       toggleEarningsDrawer(false);
+      return;
+    }
+
+    if (state.sectorOverflowOpen && event.key === "Escape") {
+      event.preventDefault();
+      toggleSectorOverflowModal(false);
       return;
     }
 
@@ -1418,6 +1450,9 @@ function setActivePage(pageId, options = {}) {
   state.preferences.activePage = normalizePage(pageId);
   if (state.preferences.activePage !== "research" && state.earningsDrawerOpen) {
     toggleEarningsDrawer(false);
+  }
+  if (state.preferences.activePage !== "sectors" && state.sectorOverflowOpen) {
+    toggleSectorOverflowModal(false);
   }
   applyPanelLayout();
   rerenderPageScopedPanels();
@@ -3020,19 +3055,69 @@ function heatmapSectorSpan(weight) {
   if (!Number.isFinite(weight)) {
     return 4;
   }
-  if (weight >= 24) {
+  if (weight >= 26) {
+    return 10;
+  }
+  if (weight >= 18) {
     return 8;
   }
-  if (weight >= 16) {
+  if (weight >= 10) {
     return 7;
   }
-  if (weight >= 10) {
+  if (weight >= 6) {
     return 6;
   }
-  if (weight >= 5) {
+  if (weight >= 3) {
     return 5;
   }
   return 4;
+}
+
+function heatmapSectorColumns(weight) {
+  if (!Number.isFinite(weight)) {
+    return 8;
+  }
+  if (weight >= 18) {
+    return 14;
+  }
+  if (weight >= 10) {
+    return 12;
+  }
+  if (weight >= 5) {
+    return 10;
+  }
+  return 8;
+}
+
+function heatmapSectorVisibleCount(weight) {
+  if (!Number.isFinite(weight)) {
+    return 10;
+  }
+  if (weight >= 18) {
+    return 28;
+  }
+  if (weight >= 10) {
+    return 22;
+  }
+  if (weight >= 5) {
+    return 16;
+  }
+  return 12;
+}
+
+function heatmapTilePlacement(tile, sectorWeight) {
+  const baseColumn = Math.max(Number(tile?.columnSpan) || 1, 1);
+  const baseRow = Math.max(Number(tile?.rowSpan) || 1, 1);
+  if (sectorWeight >= 18) {
+    return { column: Math.min(baseColumn, 6), row: Math.min(baseRow, 6) };
+  }
+  if (sectorWeight >= 10) {
+    return { column: Math.min(baseColumn, 5), row: Math.min(baseRow, 5) };
+  }
+  if (sectorWeight >= 5) {
+    return { column: Math.min(baseColumn, 4), row: Math.min(baseRow, 4) };
+  }
+  return { column: Math.min(baseColumn, 3), row: Math.min(baseRow, 3) };
 }
 
 function startHudClock() {
@@ -4058,6 +4143,65 @@ function toggleEarningsDrawer(open) {
   }
 }
 
+function toggleSectorOverflowModal(open) {
+  state.sectorOverflowOpen = open;
+  const overlay = document.querySelector("#sectorOverflowOverlay");
+  const modal = document.querySelector("#sectorOverflowModal");
+  if (!overlay || !modal) {
+    return;
+  }
+  overlay.hidden = !open;
+  modal.hidden = !open;
+  overlay.classList.toggle("open", open);
+  modal.classList.toggle("open", open);
+  document.body.classList.toggle("sector-overflow-open", open);
+  if (open) {
+    document.querySelector("#closeSectorOverflowButton")?.focus();
+  }
+}
+
+function renderSectorOverflowTiles(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No additional sector names are available right now.");
+  }
+
+  const totalWeight = sum(items.map((item) => item.weight)) ?? 1;
+  return items
+    .map((item) => {
+      const relativeWeight = Number.isFinite(item.weight) ? item.weight / totalWeight : 0.02;
+      const span = relativeWeight >= 0.08 ? 4 : relativeWeight >= 0.04 ? 3 : relativeWeight >= 0.015 ? 2 : 1;
+      return `
+        <button
+          type="button"
+          class="sector-board-tile ${tone(item.changePercent)}"
+          data-sector-symbol="${escapeHtml(item.symbol)}"
+          style="grid-column: span ${span};"
+        >
+          <span class="sector-board-weight">${formatPercent(item.weight)}</span>
+          <strong>${escapeHtml(item.symbol)}</strong>
+          <div class="meta">${escapeHtml(truncateText(item.name ?? item.symbol, 28))}</div>
+          <div class="sector-board-move ${tone(item.changePercent)}">${formatPercent(item.changePercent)}</div>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function renderSectorOverflowModal(items, sectorLabel) {
+  state.sectorOverflowItems = Array.isArray(items) ? items : [];
+  state.sectorOverflowSector = sectorLabel ?? "";
+  const summary = summarizeSectorBoardItems(state.sectorOverflowItems);
+  setText("#sectorOverflowTitle", `${sectorLabel} sector mosaic`);
+  document.querySelector("#sectorOverflowSummary").innerHTML = [
+    renderTerminalStat("Sector", sectorLabel ?? "n/a", "expanded board"),
+    renderTerminalStat("Names", String(summary.names), "selected-sector universe"),
+    renderTerminalStat("Avg Move", formatPercent(summary.averageMove), "sector mean"),
+    renderTerminalStat("Weight", formatPercent(summary.weight), "index share"),
+    renderTerminalStat("Volume", formatCompact(summary.aggregateVolume), "aggregate"),
+  ].join("");
+  document.querySelector("#sectorOverflowGrid").innerHTML = renderSectorOverflowTiles(state.sectorOverflowItems);
+}
+
 function renderEarningsDrawer(payload, errorMessage = null) {
   document.querySelector("#earningsDrawerTitle").textContent = payload?.notApplicable
     ? `${payload?.companyName ?? payload?.symbol ?? "Instrument"} issuer context`
@@ -4752,12 +4896,16 @@ function renderHeatmapTiles(payload) {
         weight: sum(items.map((item) => item.weight)),
       };
       const sectorSpan = heatmapSectorSpan(sector.weight);
-      const visibleCount = sector.weight >= 22 ? 32 : sector.weight >= 12 ? 24 : sector.weight >= 6 ? 18 : 14;
+      const sectorColumns = heatmapSectorColumns(sector.weight);
+      const visibleCount = heatmapSectorVisibleCount(sector.weight);
       const visibleItems = items.slice(0, visibleCount);
       const hiddenCount = Math.max(items.length - visibleItems.length, 0);
 
       return `
-        <section class="heatmap-sector ${tone(sector.averageMove)}" style="grid-column: span ${sectorSpan};">
+        <section
+          class="heatmap-sector ${tone(sector.averageMove)}"
+          style="grid-column: span ${sectorSpan}; --sector-columns: ${sectorColumns};"
+        >
           <button type="button" class="heatmap-sector-header" data-heatmap-sector="${escapeHtml(sector.sector ?? "Sector")}">
             <div>
               <h3>${escapeHtml(sector.sector ?? "Sector")}</h3>
@@ -4770,13 +4918,14 @@ function renderHeatmapTiles(payload) {
               .map((tile) => {
                 const intensity = Math.min(Math.abs(tile.changePercent ?? 0) / 4, 1);
                 const tileSize = Math.max(tile.columnSpan ?? 1, tile.rowSpan ?? 1);
+                const tilePlacement = heatmapTilePlacement(tile, sector.weight);
                 return `
                   <button
                     type="button"
                     class="heatmap-tile ${tone(tile.changePercent)}${tile.symbol === state.heatmapFocusSymbol ? " active" : ""}"
                     data-heatmap-symbol="${escapeHtml(tile.symbol)}"
                     data-size="${tileSize}"
-                    style="grid-column: span ${tile.columnSpan}; grid-row: span ${tile.rowSpan}; --heat-opacity: ${0.18 + intensity * 0.46};"
+                    style="grid-column: span ${tilePlacement.column}; grid-row: span ${tilePlacement.row}; --heat-opacity: ${0.18 + intensity * 0.46};"
                   >
                     <div class="heatmap-tile-top">
                       <span class="heatmap-weight">${formatPercent(tile.weight)}</span>
@@ -4902,11 +5051,15 @@ function renderSectorBoardTiles(items) {
     }),
     overflowCount
       ? `
-        <div class="sector-board-tile sector-board-tile-overflow">
+        <button
+          type="button"
+          class="sector-board-tile sector-board-tile-overflow"
+          data-open-sector-overflow="true"
+        >
           <span class="sector-board-weight">Table</span>
           <strong>+${overflowCount}</strong>
           <div class="meta">More selected-sector names continue below in the constituent board.</div>
-        </div>
+        </button>
       `
       : "",
   ].join("");
@@ -4956,6 +5109,7 @@ function renderSectorBoardPanel(payload) {
     .slice(0, 6);
   const pageState = paginateItems(sortedItems, state.sectorBoardPage, SECTOR_TABLE_PAGE_SIZE);
   state.sectorBoardPage = pageState.page;
+  renderSectorOverflowModal(sortedItems, sectorLabel);
 
   syncSectorSelector(payload?.sectors?.length ? payload.sectors : state.heatmap?.sectors ?? DEFAULT_SECTORS, sectorLabel);
   document.querySelector("#sectorBoardSummary").innerHTML = renderSectorBoardSummary({
