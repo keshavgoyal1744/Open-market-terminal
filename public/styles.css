@@ -1774,6 +1774,8 @@ button:hover {
 #dashboardGrid[data-page="research"] #section-research-rail {
   grid-column: span 3;
   order: 0;
+  grid-row: 1 / span 4;
+  align-self: start;
 }
 
 #dashboardGrid[data-page="research"] #section-workbench,
@@ -1781,6 +1783,11 @@ button:hover {
 #dashboardGrid[data-page="research"] #section-screening,
 #dashboardGrid[data-page="research"] #section-events {
   order: 1;
+  grid-column: 4 / -1;
+}
+
+#dashboardGrid[data-page="research"] {
+  grid-auto-flow: row dense;
 }
 
 #dashboardGrid[data-page="ops"] #section-portfolio,
@@ -1814,6 +1821,7 @@ button:hover {
   position: sticky;
   top: 10px;
   align-self: start;
+  height: fit-content;
 }
 
 .research-rail-list {
@@ -1956,7 +1964,7 @@ button:hover {
 
 .sp500-heatmap {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 5px;
   align-content: start;
 }
@@ -1964,7 +1972,7 @@ button:hover {
 .heatmap-sector {
   display: grid;
   gap: 6px;
-  min-height: 190px;
+  min-height: 168px;
   padding: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
@@ -2002,8 +2010,8 @@ button:hover {
 
 .heatmap-sector-grid {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-auto-rows: 24px;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  grid-auto-rows: 22px;
   gap: 3px;
 }
 
@@ -2080,7 +2088,7 @@ button:hover {
 }
 
 .heatmap-tile strong {
-  font-size: 16px;
+  font-size: 15px;
   line-height: 0.95;
 }
 
@@ -2091,7 +2099,7 @@ button:hover {
 }
 
 .heatmap-move {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1;
 }
@@ -2526,6 +2534,34 @@ textarea:focus {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.chart-axis-muted {
+  opacity: 0.5;
+}
+
+.candle-wick,
+.candle-body,
+.candle-volume {
+  shape-rendering: geometricPrecision;
+}
+
+.candle-wick.positive,
+.candle-body.positive,
+.candle-volume.positive {
+  stroke: rgba(124, 247, 212, 0.95);
+  fill: rgba(124, 247, 212, 0.72);
+}
+
+.candle-wick.negative,
+.candle-body.negative,
+.candle-volume.negative {
+  stroke: rgba(255, 108, 134, 0.95);
+  fill: rgba(255, 108, 134, 0.72);
+}
+
+.chart-marker {
+  fill: #f4fbff;
 }
 
 .interactive-chart-subtitle,

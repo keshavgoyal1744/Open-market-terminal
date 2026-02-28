@@ -323,6 +323,7 @@ export class MarketDataService {
           .slice(0, 8);
         const competitorQuotes = competitorUniverse.length ? await this.getQuotes(competitorUniverse).catch(() => []) : [];
         const competitorMap = new Map(competitorQuotes.map((quote) => [quote.symbol, quote]));
+        const derived = buildDerivedRelationshipIntel(upper, company);
 
         return {
           symbol: upper,
@@ -330,7 +331,7 @@ export class MarketDataService {
           summary: company.market.businessSummary ?? curated.headline,
           coverage: {
             curated: curated.curated,
-            notes: [...(curated.coverageNotes ?? []), ...(company.warnings ?? [])].slice(0, 8),
+            notes: [...(curated.coverageNotes ?? []), ...(derived.coverageNotes ?? []), ...(company.warnings ?? [])].slice(0, 8),
             supportedSymbols: listSupportedIntelligenceSymbols(),
           },
           commands: [
@@ -354,21 +355,24 @@ export class MarketDataService {
             insiderTransactions: company.market.insiderTransactions ?? [],
             filingSignals: company.sec.relationshipSignals ?? null,
           },
-          executives: mergeExecutives(curated.executives, company.market.companyOfficers),
+          executives: mergeExecutives([...(curated.executives ?? []), ...(derived.executives ?? [])], company.market.companyOfficers),
           supplyChain: {
-            suppliers: curated.supplyChain.filter((item) => item.relation.includes("supplier") || item.relation.includes("logistics")),
-            customers: curated.customers,
-            ecosystem: curated.ecosystemRelations,
+            suppliers: mergeRelationshipLists(
+              curated.supplyChain.filter((item) => item.relation.includes("supplier") || item.relation.includes("logistics")),
+              derived.supplyChain.suppliers,
+            ),
+            customers: mergeRelationshipLists(curated.customers, derived.customers),
+            ecosystem: mergeRelationshipLists(curated.ecosystemRelations, derived.ecosystemRelations),
           },
           corporate: {
-            relations: curated.corporateRelations,
-            tree: curated.corporate,
+            relations: mergeRelationshipLists(curated.corporateRelations, derived.corporateRelations),
+            tree: mergeNamedLists(curated.corporate, derived.corporate),
           },
-          customerConcentration: curated.customerConcentration,
-          geography: curated.geography,
-          ecosystems: curated.ecosystems,
-          eventChains: curated.eventChains,
-          graph: curated.graph,
+          customerConcentration: mergeNamedLists(curated.customerConcentration, derived.customerConcentration),
+          geography: mergeGeography(curated.geography, derived.geography),
+          ecosystems: mergeNamedLists(curated.ecosystems, derived.ecosystems),
+          eventChains: mergeNamedLists(curated.eventChains, derived.eventChains),
+          graph: mergeGraphs(curated.graph, derived.graph),
           competitors: competitorUniverse.map((entry) => ({
             symbol: entry,
             companyName: competitorMap.get(entry)?.shortName ?? null,
@@ -784,6 +788,243 @@ function mergeExecutives(curatedExecutives = [], officers = []) {
   }
 
   return [...merged.values()].slice(0, 12);
+}
+
+function mergeRelationshipLists(primary = [], secondary = []) {
+  const seen = new Set();
+  return [...(primary ?? []), ...(secondary ?? [])].filter((item) => {
+    const key = `${item?.target ?? ""}:${item?.relation ?? ""}:${item?.label ?? ""}`;
+    if (!key.trim() || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function mergeNamedLists(primary = [], secondary = []) {
+  const seen = new Set();
+  return [...(primary ?? []), ...(secondary ?? [])].filter((item) => {
+    const key = `${item?.name ?? item?.title ?? ""}:${item?.level ?? item?.type ?? item?.role ?? ""}`;
+    if (!key.trim() || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function mergeGeography(primary = {}, secondary = {}) {
+  return {
+    revenueMix: mergeLabeledLists(primary?.revenueMix ?? [], secondary?.revenueMix ?? []),
+    manufacturing: mergeLabeledLists(primary?.manufacturing ?? [], secondary?.manufacturing ?? []),
+    supplyRegions: mergeLabeledLists(primary?.supplyRegions ?? [], secondary?.supplyRegions ?? []),
+  };
+}
+
+function mergeLabeledLists(primary = [], secondary = []) {
+  const seen = new Set();
+  return [...(primary ?? []), ...(secondary ?? [])].filter((item) => {
+    const key = `${item?.label ?? ""}:${item?.commentary ?? ""}`;
+    if (!key.trim() || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function mergeGraphs(primary = { nodes: [], edges: [] }, secondary = { nodes: [], edges: [] }) {
+  const nodes = new Map();
+  for (const node of [...(primary?.nodes ?? []), ...(secondary?.nodes ?? [])]) {
+    if (node?.id && !nodes.has(node.id)) {
+      nodes.set(node.id, node);
+    }
+  }
+
+  const edgeSeen = new Set();
+  const edges = [...(primary?.edges ?? []), ...(secondary?.edges ?? [])].filter((edge) => {
+    const key = `${edge?.source ?? ""}:${edge?.target ?? ""}:${edge?.relation ?? ""}:${edge?.domain ?? ""}`;
+    if (!edge?.source || !edge?.target || edgeSeen.has(key)) {
+      return false;
+    }
+    edgeSeen.add(key);
+    return true;
+  });
+
+  return {
+    nodes: [...nodes.values()],
+    edges,
+  };
+}
+
+function buildDerivedRelationshipIntel(symbol, company) {
+  const market = company?.market ?? {};
+  const issuerName = market.shortName ?? company?.sec?.title ?? symbol;
+  const graphNodes = [{ id: symbol, label: issuerName, kind: "issuer", symbol }];
+  const graphEdges = [];
+  const coverageNotes = ["Fallback graph derived from public holders, officers, sector, industry, and positioning data."];
+  const executives = [];
+  const ecosystemRelations = [];
+  const corporate = [];
+  const ecosystems = [];
+  const eventChains = [];
+
+  const addNode = (node) => {
+    if (node?.id && !graphNodes.find((entry) => entry.id === node.id)) {
+      graphNodes.push(node);
+    }
+  };
+
+  const addEdge = (edge) => {
+    const key = `${edge.source}:${edge.target}:${edge.relation}:${edge.domain}`;
+    if (edge.source && edge.target && !graphEdges.find((entry) => `${entry.source}:${entry.target}:${entry.relation}:${entry.domain}` === key)) {
+      graphEdges.push(edge);
+    }
+  };
+
+  if (market.sector) {
+    const sectorId = `sector:${market.sector}`;
+    addNode({ id: sectorId, label: market.sector, kind: "ecosystem" });
+    addEdge({
+      source: symbol,
+      target: sectorId,
+      relation: "sector",
+      domain: "ecosystem",
+      label: market.industry ?? "public market classification",
+      weight: 2,
+    });
+    ecosystemRelations.push({
+      target: market.sector,
+      relation: "sector map",
+      label: market.industry ?? "public market classification",
+      domain: "ecosystem",
+      weight: 2,
+    });
+  }
+
+  if (market.industry) {
+    const industryId = `industry:${market.industry}`;
+    addNode({ id: industryId, label: market.industry, kind: "ecosystem" });
+    addEdge({
+      source: symbol,
+      target: industryId,
+      relation: "industry",
+      domain: "ecosystem",
+      label: "industry peer cluster",
+      weight: 2,
+    });
+    ecosystems.push({ name: market.industry, stages: [market.sector ?? "Sector", "Peer set", "Public market comp set"] });
+  }
+
+  for (const holder of [...(market.topInstitutionalHolders ?? []), ...(market.topFundHolders ?? [])].slice(0, 5)) {
+    if (!holder?.holder) {
+      continue;
+    }
+    const id = `holder:${holder.holder}`;
+    addNode({ id, label: holder.holder, kind: "investment" });
+    addEdge({
+      source: symbol,
+      target: id,
+      relation: "holder",
+      domain: "investment",
+      label: holder.pctHeld != null ? `${roundTo(holder.pctHeld * 100, 2)}% public hold` : "public holder",
+      weight: 3,
+    });
+  }
+
+  for (const officer of (market.companyOfficers ?? []).slice(0, 4)) {
+    if (!officer?.name) {
+      continue;
+    }
+    const id = `officer:${officer.name}`;
+    addNode({ id, label: officer.name, kind: "corporate" });
+    addEdge({
+      source: symbol,
+      target: id,
+      relation: officer.title ?? "executive",
+      domain: "corporate",
+      label: officer.totalPay != null ? `Pay ${Math.round(officer.totalPay).toLocaleString()}` : "public officer listing",
+      weight: 2,
+    });
+    executives.push({
+      name: officer.name,
+      role: officer.title ?? "Executive",
+      background: [officer.age != null ? `Age ${officer.age}` : null, officer.yearBorn != null ? `Born ${officer.yearBorn}` : null].filter(Boolean),
+      compensation: officer.totalPay ?? null,
+    });
+    corporate.push({
+      root: symbol,
+      type: "officer",
+      name: officer.name,
+      description: officer.title ?? "Public officer listing",
+    });
+  }
+
+  if (market.analystRating) {
+    const ratingId = `rating:${market.analystRating}`;
+    addNode({ id: ratingId, label: `Street ${market.analystRating}`, kind: "ecosystem" });
+    addEdge({
+      source: symbol,
+      target: ratingId,
+      relation: "analyst stance",
+      domain: "ecosystem",
+      label: "public recommendation snapshot",
+      weight: 2,
+    });
+    eventChains.push({
+      title: "Street stance shifts",
+      steps: [
+        `${symbol} recommendation changes`,
+        "Public holders and active desks rebalance",
+        "Peer sentiment and relative volume reprice",
+      ],
+    });
+  }
+
+  if (market.sharesShort != null || market.shortRatio != null) {
+    const shortId = `short:${symbol}`;
+    addNode({ id: shortId, label: "Short interest", kind: "competitor" });
+    addEdge({
+      source: symbol,
+      target: shortId,
+      relation: "positioning",
+      domain: "competition",
+      label: market.shortRatio != null ? `${roundTo(market.shortRatio, 2)} days to cover` : "public short-interest signal",
+      weight: 2,
+    });
+    eventChains.push({
+      title: "Positioning unwind",
+      steps: [
+        `${symbol} volume accelerates`,
+        "Short positioning or de-risking becomes visible",
+        "Nearby peer basket names can react with it",
+      ],
+    });
+  }
+
+  return {
+    coverageNotes,
+    executives,
+    supplyChain: { suppliers: [], customers: [], ecosystem: ecosystemRelations },
+    customers: [],
+    ecosystemRelations,
+    corporateRelations: [],
+    corporate,
+    customerConcentration: [],
+    geography: { revenueMix: [], manufacturing: [], supplyRegions: [] },
+    ecosystems,
+    eventChains,
+    graph: {
+      nodes: graphNodes,
+      edges: graphEdges,
+    },
+  };
+}
+
+function roundTo(value, decimals) {
+  const factor = 10 ** decimals;
+  return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
 }
 
 function emptySecSnapshot(symbol, error) {

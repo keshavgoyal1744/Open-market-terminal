@@ -157,6 +157,36 @@ const PAGE_PANEL_SPANS = {
   },
 };
 
+const PAGE_PANEL_ORDERS = {
+  research: {
+    "section-research-rail": 0,
+    "section-workbench": 1,
+    "section-intelligence": 2,
+    "section-events": 3,
+    "section-screening": 4,
+  },
+};
+
+const PAGE_PANEL_COLUMNS = {
+  research: {
+    "section-research-rail": "1 / span 3",
+    "section-workbench": "4 / -1",
+    "section-intelligence": "4 / -1",
+    "section-events": "4 / -1",
+    "section-screening": "4 / -1",
+  },
+};
+
+const PAGE_PANEL_ROWS = {
+  research: {
+    "section-research-rail": "1 / span 4",
+    "section-workbench": "1",
+    "section-intelligence": "2",
+    "section-events": "3",
+    "section-screening": "4",
+  },
+};
+
 const SECTION_TO_PAGE = Object.fromEntries(
   Object.entries(PAGE_DEFINITIONS).flatMap(([pageId, page]) => page.sections.map((sectionId) => [sectionId, pageId])),
 );
@@ -641,7 +671,15 @@ function bindGlobalActions() {
     if (!trigger) {
       return;
     }
-    await selectDetailSymbol(trigger.dataset.heatmapSymbol, { jump: true });
+    await selectDetailSymbol(trigger.dataset.heatmapSymbol, { jump: true, page: "research" });
+  });
+
+  document.querySelector("#intelGraph")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-graph-symbol]") : null;
+    if (!trigger?.dataset.graphSymbol) {
+      return;
+    }
+    await selectDetailSymbol(trigger.dataset.graphSymbol, { jump: true, page: "research" });
   });
 
   document.querySelector("#commandPaletteInput")?.addEventListener("input", (event) => {
@@ -856,16 +894,22 @@ function movePanel(sourceId, targetId, direction) {
 
 function applyPanelLayout() {
   const layout = normalizePanelLayout(state.preferences.panelLayout);
+  const activePage = normalizePage(state.preferences.activePage);
+  const pageOrders = PAGE_PANEL_ORDERS[activePage] ?? {};
+  const pageColumns = PAGE_PANEL_COLUMNS[activePage] ?? {};
+  const pageRows = PAGE_PANEL_ROWS[activePage] ?? {};
   state.preferences.panelLayout = layout;
   state.preferences.panelSizes = normalizePanelSizes(state.preferences.panelSizes);
   document.querySelectorAll("#dashboardGrid > section.panel").forEach((panel) => {
-    const order = layout.indexOf(panel.id);
+    const order = Number.isFinite(pageOrders[panel.id]) ? pageOrders[panel.id] : layout.indexOf(panel.id);
     panel.style.order = String(order === -1 ? DEFAULT_PANEL_LAYOUT.length : order);
     if (window.innerWidth <= 1320) {
       panel.style.gridColumn = "";
+      panel.style.gridRow = "";
       return;
     }
-    panel.style.gridColumn = `span ${panelSpan(panel.id)}`;
+    panel.style.gridColumn = pageColumns[panel.id] ?? `span ${panelSpan(panel.id)}`;
+    panel.style.gridRow = pageRows[panel.id] ?? "";
   });
   applyPageState();
 }
@@ -904,7 +948,7 @@ function setActivePage(pageId, options = {}) {
   if (state.preferences.activePage !== "research" && state.earningsDrawerOpen) {
     toggleEarningsDrawer(false);
   }
-  applyPageState();
+  applyPanelLayout();
   schedulePreferenceSync();
   if (options.scroll) {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1288,13 +1332,14 @@ async function loadWatchlistEvents() {
 
 async function loadDetail(symbol) {
   const range = document.querySelector("#historyRange").value;
+  const interval = resolveHistoryInterval(range);
   state.currentHistoryRange = range;
 
   try {
     const [quoteResult, companyResult, historyResult, optionsResult] = await Promise.allSettled([
       api(`/api/quote?symbols=${encodeURIComponent(symbol)}`),
       api(`/api/company?symbol=${encodeURIComponent(symbol)}`),
-      api(`/api/history?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(range)}&interval=1d`),
+      api(`/api/history?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`),
       api(`/api/options?symbol=${encodeURIComponent(symbol)}`),
     ]);
 
@@ -1311,7 +1356,7 @@ async function loadDetail(symbol) {
     const history =
       historyResult.status === "fulfilled"
         ? historyResult.value
-        : { symbol, range, interval: "1d", points: [] };
+        : { symbol, range, interval, points: [] };
     const options =
       optionsResult.status === "fulfilled"
         ? optionsResult.value
@@ -2462,6 +2507,7 @@ function scheduleRefresh() {
   setInterval(() => void loadWatchlist(state.preferences.watchlistSymbols), 30000);
   setInterval(() => void loadResearchRail(false), 180000);
   setInterval(() => void loadWatchlistEvents(), 120000);
+  setInterval(() => void loadDetail(state.preferences.detailSymbol), 60000);
   setInterval(() => void loadIntelligence(state.preferences.detailSymbol), 180000);
   setInterval(() => void loadDeskCalendar(false), 300000);
   setInterval(() => void loadDeskNews(false), 120000);
@@ -2478,6 +2524,9 @@ async function selectDetailSymbol(symbol, options = {}) {
   schedulePreferenceSync();
   renderSymbolRibbon();
   renderHud();
+  if (options.page) {
+    setActivePage(options.page, { scroll: false });
+  }
   if (options.jump) {
     jumpToSection("section-workbench");
   }
@@ -3077,11 +3126,12 @@ function renderOptions(options, quote) {
           <td>${formatMoney(contract.lastPrice)}</td>
           <td>${formatMoney(contract.bid)} / ${formatMoney(contract.ask)}</td>
           <td>${formatPercent((contract.impliedVolatility ?? 0) * 100)}</td>
+          <td>${formatCompact(contract.volume)} / ${formatCompact(contract.openInterest)}</td>
         </tr>
       `,
     )
     .join("")
-    : `<tr><td colspan="4" class="muted">${escapeHtml(emptyMessage)}</td></tr>`;
+    : `<tr><td colspan="5" class="muted">${escapeHtml(emptyMessage)}</td></tr>`;
   document.querySelector("#putsBody").innerHTML = puts.length
     ? puts
     .slice(0, 12)
@@ -3100,11 +3150,12 @@ function renderOptions(options, quote) {
           <td>${formatMoney(contract.lastPrice)}</td>
           <td>${formatMoney(contract.bid)} / ${formatMoney(contract.ask)}</td>
           <td>${formatPercent((contract.impliedVolatility ?? 0) * 100)}</td>
+          <td>${formatCompact(contract.volume)} / ${formatCompact(contract.openInterest)}</td>
         </tr>
       `,
     )
     .join("")
-    : `<tr><td colspan="4" class="muted">${escapeHtml(emptyMessage)}</td></tr>`;
+    : `<tr><td colspan="5" class="muted">${escapeHtml(emptyMessage)}</td></tr>`;
 }
 
 function renderPriceChart(points, symbol) {
@@ -3114,16 +3165,20 @@ function renderPriceChart(points, symbol) {
     return;
   }
 
-  mountLineChart(document.querySelector("#priceChart"), {
+  mountCandlestickChart(document.querySelector("#priceChart"), {
     title: symbol,
-    subtitle: `${historyRangeLabel(state.currentHistoryRange)} price history`,
+    subtitle: `${historyRangeLabel(state.currentHistoryRange)} OHLC + volume`,
     points: validPoints.map((point) => ({
       label: point.date ?? point.timestamp ?? "",
+      open: point.open,
+      high: point.high,
+      low: point.low,
+      close: point.close,
       value: point.close,
       meta: point.volume ? `Vol ${formatCompact(point.volume)}` : "",
+      volume: point.volume,
     })),
     valueFormatter: (value) => formatMoney(value),
-    accent: "#35f0d2",
   });
 }
 
@@ -3582,8 +3637,9 @@ function renderWorkbenchSummary(quote, company, points) {
   return [
     renderTerminalStat("Last", formatMoney(quote?.price), "current print"),
     renderTerminalStat(`${rangeLabel} Trend`, formatSignedMoney(trend), "window move"),
+    renderTerminalStat("Share Vol", formatCompact(quote?.volume), formatCompact(quote?.averageVolume ?? null) !== "n/a" ? `avg ${formatCompact(quote?.averageVolume)}` : "public tape"),
     renderTerminalStat("52W Range", `${formatMoney(company?.market?.fiftyTwoWeekLow)} / ${formatMoney(company?.market?.fiftyTwoWeekHigh)}`, "low / high"),
-    renderTerminalStat(company?.market?.analystRating ? "Rating" : "Instrument", ratingValue, ratingMeta),
+    renderTerminalStat(company?.market?.analystRating ? "Analyst" : "Instrument", ratingValue, ratingMeta),
   ].join("");
 }
 
@@ -3592,9 +3648,15 @@ function renderOptionsSummary(options, quote) {
   const puts = options?.puts ?? [];
   const frontCall = calls[0] ?? null;
   const frontPut = puts[0] ?? null;
+  const callVolume = sum(calls.map((contract) => contract.volume)) ?? null;
+  const putVolume = sum(puts.map((contract) => contract.volume)) ?? null;
+  const openInterest = sum([...calls, ...puts].map((contract) => contract.openInterest)) ?? null;
   return [
     renderTerminalStat("Calls", String(calls?.length ?? 0), "visible contracts"),
     renderTerminalStat("Puts", String(puts?.length ?? 0), "visible contracts"),
+    renderTerminalStat("Call Vol", formatCompact(callVolume), "session"),
+    renderTerminalStat("Put Vol", formatCompact(putVolume), "session"),
+    renderTerminalStat("Open Int", formatCompact(openInterest), "listed contracts"),
     renderTerminalStat("Front Call IV", formatPercent((frontCall?.impliedVolatility ?? NaN) * 100), frontCall ? "top-of-book" : humanizeInstrumentType(quote)),
     renderTerminalStat("Front Put IV", formatPercent((frontPut?.impliedVolatility ?? NaN) * 100), frontPut ? "top-of-book" : options?.warning ? "feed blocked" : "no contract"),
   ].join("");
@@ -3686,6 +3748,15 @@ function inferNewsFocusSymbol(query) {
   }
   const normalized = clean.toUpperCase();
   return /^[A-Z0-9.^=\-]{1,12}$/.test(normalized) ? normalized : null;
+}
+
+function resolveHistoryInterval(range) {
+  return {
+    "1mo": "1h",
+    "3mo": "1d",
+    "6mo": "1d",
+    "1y": "1wk",
+  }[range] ?? "1d";
 }
 
 function buildLinePath(values, width, height) {
@@ -3891,6 +3962,122 @@ function bindInteractiveChart(container, coords, options) {
   });
 }
 
+function mountCandlestickChart(container, options) {
+  if (!container) {
+    return;
+  }
+
+  const points = (options.points ?? []).filter(
+    (point) => Number.isFinite(point.open) && Number.isFinite(point.high) && Number.isFinite(point.low) && Number.isFinite(point.close),
+  );
+  if (!points.length) {
+    container.innerHTML = "<p class='muted'>No chart data available.</p>";
+    return;
+  }
+
+  const sample = points.slice(-Math.min(points.length, 52));
+  const width = 760;
+  const height = 320;
+  const padding = { top: 40, right: 18, bottom: 34, left: 16 };
+  const volumeBand = 58;
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom - volumeBand;
+  const min = Math.min(...sample.map((point) => point.low));
+  const max = Math.max(...sample.map((point) => point.high));
+  const range = max - min || 1;
+  const maxVolume = Math.max(...sample.map((point) => point.volume ?? 0), 0);
+  const candleWidth = Math.max(Math.min(chartWidth / sample.length - 4, 12), 3);
+  const coords = sample.map((point, index) => {
+    const slotX = padding.left + (index / Math.max(sample.length - 1, 1)) * chartWidth;
+    const x = slotX - candleWidth / 2;
+    const openY = padding.top + chartHeight - ((point.open - min) / range) * chartHeight;
+    const closeY = padding.top + chartHeight - ((point.close - min) / range) * chartHeight;
+    const highY = padding.top + chartHeight - ((point.high - min) / range) * chartHeight;
+    const lowY = padding.top + chartHeight - ((point.low - min) / range) * chartHeight;
+    const volumeHeight = maxVolume ? ((point.volume ?? 0) / maxVolume) * (volumeBand - 18) : 0;
+    return {
+      ...point,
+      x,
+      centerX: slotX,
+      openY,
+      closeY,
+      highY,
+      lowY,
+      bodyY: Math.min(openY, closeY),
+      bodyHeight: Math.max(Math.abs(closeY - openY), 1.5),
+      width: candleWidth,
+      volumeHeight,
+    };
+  });
+  const last = coords.at(-1);
+
+  container.innerHTML = `
+    <div class="interactive-chart interactive-chart-candle">
+      <div class="interactive-chart-heading">
+        <div>
+          <div class="interactive-chart-title">${escapeHtml(options.title ?? "Chart")}</div>
+          <div class="interactive-chart-subtitle">${escapeHtml(options.subtitle ?? "")}</div>
+        </div>
+        <div class="interactive-chart-range">
+          <span>High ${escapeHtml((options.valueFormatter ?? String)(max))}</span>
+          <span>Low ${escapeHtml((options.valueFormatter ?? String)(min))}</span>
+        </div>
+      </div>
+      <div class="interactive-chart-frame">
+        <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-label="${escapeHtml(options.title ?? "chart")}">
+          <line x1="${padding.left}" y1="${padding.top + chartHeight}" x2="${width - padding.right}" y2="${padding.top + chartHeight}" class="chart-axis"></line>
+          <line x1="${padding.left}" y1="${padding.top + chartHeight + volumeBand}" x2="${width - padding.right}" y2="${padding.top + chartHeight + volumeBand}" class="chart-axis chart-axis-muted"></line>
+          ${coords
+            .map(
+              (point) => `
+                <line x1="${point.centerX}" x2="${point.centerX}" y1="${point.highY}" y2="${point.lowY}" class="candle-wick ${point.close >= point.open ? "positive" : "negative"}"></line>
+                <rect
+                  x="${point.x}"
+                  y="${point.bodyY}"
+                  width="${point.width}"
+                  height="${point.bodyHeight}"
+                  class="candle-body ${point.close >= point.open ? "positive" : "negative"}"
+                ></rect>
+                <rect
+                  x="${point.x}"
+                  y="${padding.top + chartHeight + volumeBand - point.volumeHeight}"
+                  width="${point.width}"
+                  height="${point.volumeHeight}"
+                  class="candle-volume ${point.close >= point.open ? "positive" : "negative"}"
+                ></rect>
+              `,
+            )
+            .join("")}
+          <line class="chart-crosshair" x1="${last.centerX}" x2="${last.centerX}" y1="${padding.top}" y2="${padding.top + chartHeight + volumeBand}"></line>
+          <circle class="chart-marker" cx="${last.centerX}" cy="${last.closeY}" r="4.5"></circle>
+        </svg>
+        <div class="chart-tooltip">
+          <strong></strong>
+          <span></span>
+          <small></small>
+        </div>
+      </div>
+    </div>
+  `;
+
+  bindInteractiveChart(
+    container,
+    coords.map((point) => ({
+      ...point,
+      x: point.centerX,
+      y: point.closeY,
+      value: point.close,
+      meta: `O ${formatMoney(point.open)} | H ${formatMoney(point.high)} | L ${formatMoney(point.low)}${point.volume ? ` | Vol ${formatCompact(point.volume)}` : ""}`,
+    })),
+    {
+      valueFormatter: options.valueFormatter ?? ((value) => String(value)),
+      labelFormatter: options.labelFormatter ?? ((value) => formatDateShort(value)),
+      viewWidth: width,
+      viewHeight: height,
+    },
+  );
+}
+
 function mountGeoExposureChart(container, geography) {
   if (!container) {
     return;
@@ -4007,6 +4194,7 @@ function renderIntelGraphNetwork(graph, symbol) {
               type="button"
               class="graph-network-node graph-network-node-${escapeHtml(graphToneForKind(node.kind))}"
               style="left:${node.x}px; top:${node.y}px;"
+              ${node.symbol ? `data-graph-symbol="${escapeHtml(node.symbol)}"` : ""}
               title="${escapeHtml(`${node.label} | ${edge?.relation ?? node.kind}${edge?.label ? ` | ${edge.label}` : ""}`)}"
             >
               <span class="graph-network-node-title">${escapeHtml(node.label)}</span>
