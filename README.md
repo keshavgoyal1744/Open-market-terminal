@@ -1,233 +1,477 @@
 # Open Market Terminal
 
-Open Market Terminal is a self-hosted market workstation built around free and public data sources. It is designed for traders, researchers, and technically inclined users who want a Bloomberg-terminal-style workspace without paying for licensed market-data infrastructure.
-It combines public quotes, filings, macro calendars, public news, relationship mapping, and saved desk workflows into a single terminal-style interface.
+Open Market Terminal is a self-hosted market workstation built around public and free-to-access data sources. It combines market monitoring, single-name research, sector drilldowns, company relationship mapping, alerts, workspaces, notes, and a shared daily AI idea board in a terminal-style interface.
 
-## What The App Currently Does
+## Overview
 
-The current build includes:
+The app is organized as a multi-page desk:
 
-- A multi-page market desk with dedicated views for `Markets`, `Boards`, `Sectors`, `Calendar`, `Map`, `Quote`, `News`, `AI`, `Research`, and `Ops`
-- A terminal command bar with symbol-first commands and page routing
-- S&P 500 heatmap / sector-board workflows
-- A security workbench with price history, filings, company facts, options snapshots, and earnings/issuer intel
-- A relationship console with supply-chain, ownership, competition, corporate, geography, and impact-chain views
-- A company-map page with supplier/customer views, board context, holders, geography, interlocks, and index membership
-- A quote-monitor page with chart, filings, options, holders, peers, news, and event timeline windows
-- News, calendar, and market-event pages built from public feeds
-- An `AI` page that ranks `20 bullish` and `20 bearish` S&P 500 names for a `1-4 week` horizon and can use Gemini with Groq fallback for hosted reasoning
-- Watchlists, portfolio state, alerts, workspaces, notes, and activity history
-- Live crypto ticker / order-book surfaces from Coinbase public endpoints
-- A dark terminal-style UI with draggable/resizable desk panels and saved layout state
+- `Markets`
+- `Boards`
+- `Sectors`
+- `Calendar`
+- `Map`
+- `Quote`
+- `News`
+- `AI`
+- `Research`
+- `Ops`
 
-## Current Page Model
+Core product themes:
+
+- live market monitoring with public quote sources
+- single-name research and relationship mapping
+- calendar, news, filings, and event tracking
+- saved desk state, alerts, notes, and activity history
+- optional hosted AI reasoning with Gemini primary and Groq fallback
+
+## Feature Inventory
+
+### Market Monitoring
+
+- Cross-asset market pulse board
+- S&P 500 heatmap with sector grouping
+- Heatmap hover intelligence and references
+- Sector drilldowns with leaders, laggards, headlines, and constituent board
+- Market-moving events board
+- Flow monitor for share volume, relative volume, options availability, and short-interest context
+- Rates and macro panel with Treasury curve and macro snapshot
+- Market monitor boards for:
+  - leaders
+  - laggards
+  - most active
+  - unusual volume
+  - gap proxies
+  - sector performance
+  - ETF tape proxies
+  - macro board
+
+### Research Workflows
+
+- Research rail with watchlist symbols, grouping, pins, and sparklines
+- Security workbench with:
+  - quote summary
+  - price history
+  - candlestick-style chart
+  - SEC filings
+  - company facts
+  - degraded options snapshot
+  - earnings intel drawer
+- Relationship console with view switching for:
+  - `SPLC`
+  - `REL`
+  - `OWN`
+  - `BMAP`
+  - `RV`
+  - `FA`
+  - `DES`
+- Relationship graph with:
+  - supplier / partner nodes
+  - customer nodes
+  - corporate links
+  - competition / ecosystem nodes
+  - impact chains
+  - geography exposure
+
+### Company Mapping
+
+- Dedicated `Map` page
+- Supplier and customer breakdowns
+- Corporate structure and acquisitions
+- Competition and ecosystem context
+- Top holders view
+- Board and officer view
+- Insider ownership / insider rows
+- Geographic exposure
+- Index membership
+- Board interlock context
+- Side-by-side company comparison
+- Click-through drilldowns when a related ticker is known
+
+### Quote Monitoring
+
+- Dedicated `Quote` page for one symbol
+- Quote / tape summary
+- Linked chart
+- Symbol-specific news
+- Symbol-specific event timeline
+- SEC filings tape
+- Options summary and front chain snapshot
+- Peer table
+- Holders table
+
+### News and Event Coverage
+
+- General market news page
+- Ticker / company / theme news search
+- Sector-linked news on the sector page
+- Desk calendar with:
+  - earnings events
+  - macro events
+  - policy events
+  - pagination and filter controls
+- Market-moving events timeline across:
+  - policy
+  - earnings
+  - filings
+  - live headlines
+
+### AI Idea Board
+
+- Dedicated `AI` page
+- S&P 500-only universe
+- `1-4 week` horizon
+- `20 bullish` and `20 bearish` names
+- Shared daily snapshot instead of per-user reruns
+- Scheduled for `10:00 AM` `America/New_York`
+- Gemini primary hosted provider
+- Groq hosted fallback
+- Deterministic rules-based fallback when hosted AI is unavailable
+- Snapshot reused for all viewers during the same day to limit token usage
+
+### User, Persistence, and Operations
+
+- Account registration and sign-in
+- Signed session cookies
+- Guest mode
+- Saved profile preferences
+- Saved workspaces
+- Desk notes
+- Activity stream
+- Server-side alerts
+- Digest destinations
+- Webhook and email notification support
+- Background jobs for refresh and alert evaluation
+- JSON-backed persistence
+- Docker and docker-compose support
+- Vercel deployment support
+
+### Crypto
+
+- Coinbase public ticker data
+- Coinbase public order book
+- Crypto panel on the `Ops` page
+
+## Page Guide
 
 ### `Markets`
 
-- Market pulse
-- S&P 500 heatmap
-- Ranked market-moving events
-- Watchlist monitor
-- Flow monitor
-- Rates and macro snapshot
+Primary market overview page.
+
+- Market Pulse
+- S&P 500 Heatmap
+- Market-Moving Events
+- Watchlist
+- Flow Monitor
+- Rates & Macro
 
 ### `Boards`
 
-- Leaders / laggards
-- Most active
-- Unusual volume
-- Gap-up / gap-down proxies
-- Sector performance board
-- ETF tape-flow proxy board
-- Macro regime board
+Classic monitor boards page.
+
+- Leaders
+- Laggards
+- Most Active
+- Unusual Volume
+- Gap Up / Gap Down proxies
+- Sector Performance
+- ETF Tape
+- Macro Board
 
 ### `Sectors`
 
-- Sector dropdown / sector drilldown
-- Sector board tiles
-- Leaders and laggards for the selected sector
-- Sector-linked headlines
-- Paginated constituent board
+Sector-specific drilldown page.
+
+- sector selector
+- sector board tiles
+- leaders
+- laggards
+- sector headlines
+- paginated constituent board
+- sector overflow modal for additional names
 
 ### `Calendar`
 
-- Earnings and macro calendar
-- Paginated event table
-- Windowed event browsing
+Event browsing page.
+
+- earnings calendar
+- macro and policy dates
+- page size controls
+- date window filters
+- paginated event table
 
 ### `Map`
 
-- Detailed company map
-- Supplier and customer views
-- Competition and corporate context
-- Holders, board/officer rows, insider context
-- Geography and index membership
-- Side-by-side company comparison
+Company relationship page.
+
+- suppliers
+- customers
+- competition
+- holders
+- board and officers
+- insiders
+- geography
+- index membership
+- corporate events
+- side-by-side comparison
 
 ### `Quote`
 
-- Single-name quote monitor
-- Candlestick / price chart
-- News and filings windows
-- Options snapshot
-- Holders and peers
-- Event timeline
+Single-name monitor page.
+
+- headline quote block
+- chart
+- symbol-specific news
+- event timeline
+- filings
+- options
+- peers
+- holders
 
 ### `News`
 
-- Broad market headlines
-- Query / ticker-specific search
-- Source-linked newswire layout
+Market and ticker news page.
+
+- general market headlines
+- search by symbol or company
+- linked sources
+- source and category metadata
+- pagination
 
 ### `AI`
 
-- Hosted AI-assisted long / short idea board
-- S&P 500-only universe
-- `20 bullish` and `20 bearish` names
-- `1-4 week` horizon
-- Gemini primary with Groq fallback when keys are configured
-- Deterministic rules-based fallback when hosted AI is unavailable
+Daily long / short snapshot page.
+
+- daily shared AI snapshot
+- market frame
+- monitor list
+- bullish 20
+- bearish 20
+- provider and snapshot metadata
 
 ### `Research`
 
-- Research rail
-- Security workbench
-- Relationship console
-- Screening and compare
-- Watchlist SEC events
+Deep research workspace.
+
+- research rail
+- security workbench
+- relationship console
+- screening and compare
+- watchlist SEC events
 
 ### `Ops`
 
-- Portfolio state
-- Alerts
-- Digests / notification targets
-- Saved workspaces
-- Notes
-- Activity stream
-- Crypto tape
+Operational workspace.
 
-## Data Sources In The Current Build
+- portfolio state
+- alerts
+- Intel Ops destinations and digests
+- workspace vault
+- notes
+- activity
+- crypto tape
 
-This build uses public or free-to-access data paths already integrated into the codebase.
+## Command Workflow
 
-### Market / Reference Sources
+The app includes a terminal-style command bar and keyboard navigation.
 
-- Yahoo Finance public endpoints (`query1.finance.yahoo.com` / `query2.finance.yahoo.com`)
+Examples:
+
+- `AAPL US <Equity> DES`
+- `QUOTE NVDA`
+- `MAP AAPL MSFT`
+- `PAGE NEWS`
+- `SECTOR Technology`
+
+Keyboard behavior:
+
+- `Ctrl/Cmd + K` opens the command palette
+- `[` and `]` cycle through watchlist symbols
+
+## Data Sources
+
+The current build uses the following sources that are already integrated into the codebase.
+
+### Market and Company Data
+
+- Yahoo Finance public endpoints
   - quotes
-  - history
+  - price history
   - company overview
   - options snapshots
   - earnings details
 - SEC EDGAR and `data.sec.gov`
-  - ticker / CIK resolution via `company_tickers.json`
   - company submissions
   - company facts
   - filing history
-  - filing archive links
-- U.S. Treasury
-  - daily Treasury yield curve page
-- BLS
-  - macro snapshot inputs via the BLS public API
-  - release calendar data via the BLS ICS calendar
-- Federal Reserve
-  - FOMC calendar parsing from the Federal Reserve calendar page
-- Nasdaq public endpoints / pages
-  - earnings calendar API
-  - earnings detail links
-  - Nasdaq-100 constituent page
-- Coinbase Exchange
-  - public crypto ticker
-  - order book
-  - websocket market data
-- State Street SPY holdings
-  - primary S&P 500 universe input
-- Google News RSS
-  - public market/news search feeds used by the news and sector headline surfaces
-- Gemini API
-  - optional hosted reasoning for the AI page
-- Groq
-  - optional hosted fallback reasoning for the AI page
-- Wikipedia constituent fallbacks
-  - S&P 500 companies
+  - filing document links
+
+### Macro and Calendar Data
+
+- U.S. Treasury daily yield curve page
+- BLS public API
+- BLS release calendar
+- Federal Reserve FOMC calendars
+- Nasdaq earnings calendar and related public pages
+
+### Universe and Index Inputs
+
+- State Street SPY holdings workbook
+- Nasdaq-100 public constituents page
+- Wikipedia fallbacks for:
+  - S&P 500
   - Nasdaq-100
   - Dow Jones Industrial Average
 
-### Source Mapping By Feature
+### News and Crypto
+
+- Google News RSS
+- Coinbase Exchange public market data
+
+### Optional Hosted AI
+
+- Gemini API
+- Groq
+
+## Source Mapping By Feature
 
 - `Quotes / history / options / company / earnings`
   - Yahoo Finance public endpoints
 - `Filings / company facts / insider-related filing tape`
   - SEC EDGAR and `data.sec.gov`
 - `Yield curve`
-  - U.S. Treasury daily yield curve page
+  - U.S. Treasury
 - `Macro snapshot`
   - BLS public API
 - `Fed / policy calendar`
-  - Federal Reserve FOMC calendars
+  - Federal Reserve
 - `Earnings calendar`
-  - Nasdaq earnings calendar API
-- `S&P 500 heatmap / sector boards`
-  - State Street SPY holdings workbook, with Wikipedia S&P 500 fallback and Yahoo quote enrichment
+  - Nasdaq public earnings calendar
+- `Heatmap / sector boards`
+  - State Street SPY holdings with sector normalization and quote enrichment
 - `Index membership`
-  - Nasdaq-100 public constituents page, with Wikipedia Nasdaq-100 and Dow 30 fallbacks
+  - Nasdaq public constituents pages plus Wikipedia fallbacks
+- `News / sector headlines`
+  - Google News RSS
 - `Crypto tape / order book`
-  - Coinbase Exchange REST and websocket market data
-- `Newswire / sector headlines`
-  - Google News RSS search feeds
-- `AI bullish / bearish idea page`
-  - S&P 500 live universe from the heatmap / quote stack
-  - macro / yield-curve context from BLS and Treasury inputs
-  - optional hosted reasoning via Gemini and Groq
-
-### Important Note On Attribution
-
-This repository does **not** currently integrate Financial Modeling Prep, Unusual Whales, Quartr, Fiscal.ai, S&P Global, or Polymarket. If you wire any of those providers into the app later, update the website footer and your product disclosures so the provider attribution matches the actual implementation.
+  - Coinbase Exchange
+- `AI page`
+  - live S&P 500 universe from the heatmap stack
+  - macro and curve context from BLS and Treasury inputs
+  - optional hosted reasoning from Gemini and Groq
 
 ## Architecture
 
 ### Backend
 
-- [`server.mjs`](/home/grads/keshavgoyal/open-market-terminal/server.mjs)
+- [server.mjs](/home/grads/keshavgoyal/open-market-terminal/server.mjs)
   - HTTP server
-  - API routing
+  - API routes
   - auth/session handling
-  - profile/workspace CRUD
-  - market-data endpoints
-- [`src/market.mjs`](/home/grads/keshavgoyal/open-market-terminal/src/market.mjs)
-  - main service layer
-  - quote aggregation
-  - heatmap / sector board generation
-  - research / map / quote monitor assembly
-- [`src/storage.mjs`](/home/grads/keshavgoyal/open-market-terminal/src/storage.mjs)
+  - profile and workspace routes
+- [src/market.mjs](/home/grads/keshavgoyal/open-market-terminal/src/market.mjs)
+  - market-data service layer
+  - page payload assembly
+  - heatmap, sector, quote, map, research, AI, and board logic
+- [src/storage.mjs](/home/grads/keshavgoyal/open-market-terminal/src/storage.mjs)
   - JSON persistence
-- [`src/jobs.mjs`](/home/grads/keshavgoyal/open-market-terminal/src/jobs.mjs)
-  - background refresh and alert jobs
-- [`src/notify.mjs`](/home/grads/keshavgoyal/open-market-terminal/src/notify.mjs)
-  - webhook/email delivery
+  - sessions
+  - workspaces
+  - alerts
+  - notes
+  - activity
+  - AI snapshot persistence
+- [src/jobs.mjs](/home/grads/keshavgoyal/open-market-terminal/src/jobs.mjs)
+  - background jobs
+  - alert evaluation
+  - digest delivery
+  - AI daily snapshot refresh
+- [src/notify.mjs](/home/grads/keshavgoyal/open-market-terminal/src/notify.mjs)
+  - webhook and email delivery
 
 ### Frontend
 
-- [`public/index.html`](/home/grads/keshavgoyal/open-market-terminal/public/index.html)
-  - shell / page structure
-- [`public/app.js`](/home/grads/keshavgoyal/open-market-terminal/public/app.js)
-  - all app state, rendering, command routing, and UI behavior
-- [`public/styles.css`](/home/grads/keshavgoyal/open-market-terminal/public/styles.css)
-  - terminal-style presentation and per-page layout rules
+- [public/index.html](/home/grads/keshavgoyal/open-market-terminal/public/index.html)
+  - shell
+  - page sections
+  - modals and overlays
+- [public/app.js](/home/grads/keshavgoyal/open-market-terminal/public/app.js)
+  - state
+  - rendering
+  - command routing
+  - keyboard behavior
+  - page transitions
+- [public/styles.css](/home/grads/keshavgoyal/open-market-terminal/public/styles.css)
+  - terminal-style presentation
+  - page-specific layouts
+  - heatmap, map, quote, and AI page styling
 
 ### Serverless / Vercel
 
-- [`api/[...route].js`](/home/grads/keshavgoyal/open-market-terminal/api/[...route].js)
-  - catch-all serverless API entry
-- [`api/auth/session.js`](/home/grads/keshavgoyal/open-market-terminal/api/auth/session.js)
-  - explicit auth-session route for Vercel
-- [`api/session.js`](/home/grads/keshavgoyal/open-market-terminal/api/session.js)
+- [api/[...route].js](/home/grads/keshavgoyal/open-market-terminal/api/[...route].js)
+  - catch-all serverless entry
+- [api/auth/session.js](/home/grads/keshavgoyal/open-market-terminal/api/auth/session.js)
+  - auth-session route
+- [api/session.js](/home/grads/keshavgoyal/open-market-terminal/api/session.js)
   - compatibility alias
-- [`vercel.json`](/home/grads/keshavgoyal/open-market-terminal/vercel.json)
-  - Vercel function config
+- [vercel.json](/home/grads/keshavgoyal/open-market-terminal/vercel.json)
+  - function config
+  - daily AI cron schedule
+
+## API Surface
+
+The backend currently exposes routes for:
+
+- auth and session
+  - `/api/auth/register`
+  - `/api/auth/login`
+  - `/api/auth/logout`
+  - `/api/auth/session`
+  - `/api/session`
+- user persistence
+  - `/api/profile`
+  - `/api/workspaces`
+  - `/api/alerts`
+  - `/api/notes`
+  - `/api/activity`
+  - `/api/destinations`
+  - `/api/digests`
+- market and research data
+  - `/api/market-pulse`
+  - `/api/compare`
+  - `/api/watchlist-events`
+  - `/api/research-rail`
+  - `/api/calendar`
+  - `/api/news`
+  - `/api/earnings`
+  - `/api/market-events`
+  - `/api/heatmap`
+  - `/api/heatmap-context`
+  - `/api/sector-board`
+  - `/api/flow`
+  - `/api/market-boards`
+  - `/api/ai-lab`
+  - `/api/quote-monitor`
+  - `/api/quote`
+  - `/api/history`
+  - `/api/options`
+  - `/api/company`
+  - `/api/intelligence`
+  - `/api/company-map`
+  - `/api/filings`
+  - `/api/yield-curve`
+  - `/api/macro`
+  - `/api/screener`
+- crypto
+  - `/api/crypto/orderbook`
+  - `/api/crypto/ticker`
+  - `/api/stream/crypto`
+- scheduled AI generation
+  - `/api/cron/ai-daily`
 
 ## Local Development
 
-### Run
+### Run Locally
 
 ```bash
 cd /home/grads/keshavgoyal/open-market-terminal
@@ -235,7 +479,7 @@ cp .env.example .env
 node server.mjs
 ```
 
-Then open:
+Open:
 
 ```text
 http://127.0.0.1:3000
@@ -251,44 +495,67 @@ docker compose up --build
 
 ## Environment Variables
 
-The most important environment values are:
+Core app settings:
 
 - `SESSION_SECRET`
-  - required for real deployments
-  - use a long random string
 - `SECURE_COOKIES`
-  - set `true` behind HTTPS
 - `APP_URL`
-  - public application URL
 - `SEC_USER_AGENT`
-  - recommended for SEC calls
 - `DATA_DIR`
-  - JSON storage location
-- `SMTP_*` or `SENDMAIL_PATH`
-  - optional, only needed for email notifications
+
+Notification settings:
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_STARTTLS`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `SENDMAIL_PATH`
+- `EMAIL_FROM`
+
+AI settings:
+
 - `GEMINI_API_KEY` or `GOOGLE_API_KEY`
-  - optional, enables Gemini on the AI page
 - `GROQ_API_KEY`
-  - optional, enables Groq fallback on the AI page
-- `AI_PRIMARY_PROVIDER` / `AI_FALLBACK_PROVIDER`
-  - optional, default to `gemini` then `groq`
-- `AI_GEMINI_MODEL` / `AI_GROQ_MODEL`
-  - optional hosted-model overrides
+- `AI_PRIMARY_PROVIDER`
+- `AI_FALLBACK_PROVIDER`
+- `AI_GEMINI_MODEL`
+- `AI_GROQ_MODEL`
+- `AI_TIMEOUT_MS`
+- `AI_TTL_MS`
+- `AI_DAILY_TIMEZONE`
+- `AI_DAILY_HOUR`
+- `AI_DAILY_MINUTE`
 
 See:
 
-- [`.env.example`](/home/grads/keshavgoyal/open-market-terminal/.env.example)
-- [`DEPLOYMENT.md`](/home/grads/keshavgoyal/open-market-terminal/DEPLOYMENT.md)
+- [.env.example](/home/grads/keshavgoyal/open-market-terminal/.env.example)
+- [DEPLOYMENT.md](/home/grads/keshavgoyal/open-market-terminal/DEPLOYMENT.md)
+
+## Daily AI Snapshot Behavior
+
+The `AI` page no longer behaves like a per-user “run query now” tool.
+
+Current behavior:
+
+- one shared snapshot per day
+- scheduled for `10:00 AM` `America/New_York`
+- same snapshot served to all viewers for the rest of the day
+- background refresh in always-on environments
+- cron-triggered refresh on Vercel
+
+This is intended to reduce repeated token usage across Gemini and Groq.
 
 ## Testing
 
-Run the test suite with:
+Run:
 
 ```bash
 npm test
 ```
 
-The repository currently includes tests for:
+Current test coverage includes:
 
 - auth
 - caching
@@ -296,7 +563,7 @@ The repository currently includes tests for:
 - index membership logic
 - intelligence graph fallbacks
 - SEC provider logic
-- S&P 500 universe parsing / fallback
+- S&P 500 universe parsing and fallback
 - storage
 - Yahoo provider fallbacks
 
@@ -304,38 +571,46 @@ The repository currently includes tests for:
 
 ### Vercel
 
-The app can run on Vercel, but Vercel is best treated as a request/response deployment target for this project.
+The app can run on Vercel and includes:
 
-Tradeoffs on Vercel:
+- serverless route entry
+- explicit session route support
+- AI daily cron route
+- shared snapshot behavior for the AI page
 
-- works for most API endpoints
-- works for the frontend shell
-- works for guest mode and profile/session APIs
-- less ideal for long-lived streams, heavier background jobs, and persistent state
+Recommended Vercel checklist:
 
-If you want a more reliable always-on deployment for background tasks and stateful behavior, a VM / Render / Railway / Fly / similar host is a better fit.
-
-### Vercel Setup Checklist
-
-- project root must be `open-market-terminal`
+- set project root to `open-market-terminal`
 - set `SESSION_SECRET`
 - set `SECURE_COOKIES=true`
 - set `APP_URL`
 - set `SEC_USER_AGENT`
+- set AI keys if you want hosted AI
 - redeploy after env changes
+
+### Stateful Hosting
+
+If you want more reliable persistent behavior for:
+
+- background jobs
+- long-lived streams
+- notification delivery
+- shared state
+
+then a more always-on host such as Render, Railway, Fly, or a VM is a better fit than pure serverless hosting.
 
 ## Product / Legal Notes
 
 Open Market Terminal is an informational research interface. It is not a broker, not a registered advisor, and not a source of trading instructions. Data may be delayed, incomplete, unofficial, or unavailable depending on the upstream provider.
 
-The global website footer now reflects the current integrated provider model and includes an informational-use disclaimer. If you add or remove data vendors, update that disclosure text accordingly.
+If you add or remove providers, update the footer and attribution copy so the public disclosure matches the actual implementation.
 
 ## Suggested Next Steps
 
-If you want to keep evolving this repository, the highest-value directions are:
+Useful next directions for the project:
 
 1. Replace JSON persistence with SQLite or Postgres.
-2. Add more provider failover for quotes/options/news.
-3. Add stronger sector / market internals pages.
-4. Improve the company-map graph depth with more public-source inference.
-5. Add stronger caching and job orchestration for production deployments.
+2. Add stronger quote/options/news provider failover.
+3. Add more market internals and breadth studies.
+4. Deepen the public company-map inference layer.
+5. Move AI snapshots to a persistent shared store for fully reliable once-per-day generation on serverless hosts.
