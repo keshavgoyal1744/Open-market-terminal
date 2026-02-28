@@ -954,7 +954,13 @@ export class MarketDataService {
       async () => {
         const universe = await getSp500Universe();
         const heatmap = await this.getSp500Heatmap();
-        const availableSectors = heatmap.sectors ?? [];
+        const availableSectors = [...groupBySector(universe.constituents).entries()]
+          .map(([name, items]) => ({
+            sector: name,
+            count: items.length,
+            weight: sum(items.map((item) => numeric(item.sourceWeight))),
+          }))
+          .sort((left, right) => (numeric(right.weight) ?? 0) - (numeric(left.weight) ?? 0));
         const availableSectorNames = [
           ...new Set(
             [
@@ -1037,6 +1043,7 @@ export class MarketDataService {
         return {
           sector: matchedSector,
           sectors: availableSectors,
+          symbols: hydratedItems.map((item) => item.symbol),
           asOf: heatmap.asOf,
           source: heatmap.source,
           warnings: heatmap.warnings ?? [],

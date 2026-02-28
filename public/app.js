@@ -2969,10 +2969,21 @@ function filterSectorBoardItems(items, selectedSector) {
 function deriveSectorBoardItems(payload, selectedSector) {
   const liveItems = Array.isArray(state.heatmap?.tiles) ? state.heatmap.tiles : [];
   const payloadItems = Array.isArray(payload?.items) ? payload.items : [];
+  const selectedSymbols = new Set((payload?.symbols ?? []).map((symbol) => String(symbol ?? "").trim().toUpperCase()).filter(Boolean));
+  const bySelectedSymbols = (items) =>
+    Array.isArray(items) && selectedSymbols.size
+      ? items.filter((item) => selectedSymbols.has(String(item?.symbol ?? "").trim().toUpperCase()))
+      : [];
   const filteredLive = filterSectorBoardItems(liveItems, selectedSector);
   const filteredPayload = filterSectorBoardItems(payloadItems, selectedSector);
+  const symbolMatchedPayload = bySelectedSymbols(payloadItems);
+  const symbolMatchedLive = bySelectedSymbols(liveItems);
   const primary = filteredPayload.length
     ? filteredPayload
+    : symbolMatchedPayload.length
+      ? symbolMatchedPayload
+      : symbolMatchedLive.length
+        ? symbolMatchedLive
     : filteredLive;
   const payloadBySymbol = new Map(payloadItems.map((item) => [item.symbol, item]));
 
