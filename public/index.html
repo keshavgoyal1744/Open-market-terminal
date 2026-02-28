@@ -14,16 +14,16 @@
           <h1>Global market operations console</h1>
         </div>
         <nav class="topbar-nav">
-          <button type="button" class="topbar-nav-btn" data-page="overview">Markets</button>
-          <button type="button" class="topbar-nav-btn" data-page="boards">Boards</button>
-          <button type="button" class="topbar-nav-btn" data-page="sectors">Sectors</button>
-          <button type="button" class="topbar-nav-btn" data-page="calendar">Calendar</button>
-          <button type="button" class="topbar-nav-btn" data-page="map">Map</button>
-          <button type="button" class="topbar-nav-btn" data-page="quote">Quote</button>
-          <button type="button" class="topbar-nav-btn" data-page="news">News</button>
-          <button type="button" class="topbar-nav-btn" data-page="ai">AI</button>
-          <button type="button" class="topbar-nav-btn" data-page="research">Research</button>
-          <button type="button" class="topbar-nav-btn" data-page="ops">Ops</button>
+          <button type="button" class="topbar-nav-btn" data-page="overview">Market Desk</button>
+          <button type="button" class="topbar-nav-btn" data-page="quote">Quote Monitor</button>
+          <button type="button" class="topbar-nav-btn" data-page="research">Research Lab</button>
+          <button type="button" class="topbar-nav-btn" data-page="map">Company Map</button>
+          <button type="button" class="topbar-nav-btn" data-page="sectors">Sector Explorer</button>
+          <button type="button" class="topbar-nav-btn" data-page="boards">Monitor Boards</button>
+          <button type="button" class="topbar-nav-btn" data-page="news">Newswire</button>
+          <button type="button" class="topbar-nav-btn" data-page="calendar">Event Calendar</button>
+          <button type="button" class="topbar-nav-btn" data-page="ai">AI Ideas</button>
+          <button type="button" class="topbar-nav-btn" data-page="ops">Ops Center</button>
         </nav>
         <div class="topbar-strip">
           <button id="resetLayoutButton" type="button" class="topbar-chip topbar-chip-action">
@@ -56,7 +56,7 @@
             id="terminalCommandInput"
             type="text"
             autocomplete="off"
-            placeholder="AAPL US <Equity> DES · QUOTE NVDA · MAP AAPL MSFT · PAGE NEWS · SECTOR Technology"
+            placeholder="AAPL US <Equity> DES · QUOTE NVDA · MAP AAPL MSFT · PAGE NEWSWIRE · SECTOR Technology"
           />
           <button type="submit">Run</button>
         </form>
@@ -68,10 +68,10 @@
 
       <section class="hero">
         <div class="hero-copy">
-          <p id="pageSectionLabel" class="section-label">Overview Desk</p>
-          <h2 id="pageTitle">Live market command workspace built on public feeds.</h2>
+          <p id="pageSectionLabel" class="section-label">Market Desk</p>
+          <h2 id="pageTitle">Opening market screen for breadth, catalysts, watchlists, flow, and cross-asset context.</h2>
           <p id="pageDescription">
-            Heatmap, market pulse, ranked events, watchlists, macro dates, and live public headlines in one terminal page.
+            Use this as the main session screen: track the S&P 500 heatmap, cross-asset pulse, ranked market-moving events, watchlist flow, and rates without leaving the desk.
           </p>
           <div id="pageTags" class="hero-tags">
             <span>Heatmap</span>
@@ -98,18 +98,18 @@
             </div>
             <div class="desk-line muted">
               <span class="desk-label">Page</span>
-              <span id="hudPageLabel">Overview</span>
+              <span id="hudPageLabel">Market Desk</span>
             </div>
             <div class="desk-line muted">
               <span class="desk-label">Guide</span>
-              <span id="deskPageGuide">Markets: pulse, heatmap, events, and flow in one board</span>
+              <span id="deskPageGuide">Market Desk: opening screen for breadth, catalysts, watchlists, flow, and rates.</span>
             </div>
             <div id="symbolRibbon" class="symbol-ribbon"></div>
           </div>
           <div class="signal-log">
             <div class="signal-row"><span>ROUTING</span><strong>Ctrl/⌘ + K opens the terminal palette</strong></div>
             <div class="signal-row"><span>SYMBOLS</span><strong>[ and ] cycle through watchlist names</strong></div>
-            <div class="signal-row"><span>PAGES</span><strong>Markets: live board · Boards: movers and breadth · Sectors: drilldowns · Calendar: earnings and macro · Map: company relationships · Quote: single-name monitor · News: searchable wire · AI: daily long-short snapshot · Research: deep single-name work · Ops: alerts, notes, portfolio</strong></div>
+            <div class="signal-row"><span>PAGES</span><strong>Market Desk: market open screen · Quote Monitor: one-name tape view · Research Lab: deep workbench · Company Map: supplier and ownership graph · Sector Explorer: sector drilldowns · Monitor Boards: movers and breadth · Newswire: searchable market wire · Event Calendar: earnings and macro schedule · AI Ideas: daily long-short board · Ops Center: alerts, notes, and portfolio</strong></div>
           </div>
         </div>
         <aside class="auth-card control-card">
@@ -644,7 +644,7 @@
                 <button id="clearCompanyMapCompareButton" type="button" class="secondary">Solo</button>
               </form>
               <button id="refreshCompanyMapButton" type="button" class="secondary">Refresh</button>
-              <button id="openCompanyMapExplorerButton" type="button" class="secondary">Expand</button>
+              <button id="openCompanyMapExplorerButton" type="button" class="secondary">Expand Graph</button>
             </div>
           </div>
           <div id="companyMapSummary" class="watchlist-summary-grid"></div>
@@ -658,7 +658,7 @@
                   <h3>Overview</h3>
                   <div class="muted">issuer summary and graph preview</div>
                 </div>
-                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="overview">Expand</button>
+                <button type="button" class="secondary compact-chip" data-open-company-map-explorer="graph">Expand</button>
               </div>
               <div id="companyMapHeadline" class="intel-headline"></div>
               <div id="companyMapCoverage" class="list-stack"></div>

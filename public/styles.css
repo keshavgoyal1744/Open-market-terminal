@@ -4377,6 +4377,11 @@ body.company-map-explorer-open {
   gap: 10px;
 }
 
+.company-map-explorer-focus-shell {
+  display: grid;
+  gap: 10px;
+}
+
 .company-map-explorer-top-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
@@ -4429,6 +4434,10 @@ body.company-map-explorer-open {
 
 .company-map-explorer-chart {
   min-height: 560px;
+}
+
+.company-map-explorer-chart-large {
+  min-height: 720px;
 }
 
 .company-map-explorer-section .chart-card.small {
