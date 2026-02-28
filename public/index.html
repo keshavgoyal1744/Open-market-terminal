@@ -300,6 +300,10 @@
             <button id="refreshEventsButton" type="button" class="secondary">Refresh</button>
           </div>
           <div id="marketEventsSummary" class="watchlist-summary-grid"></div>
+          <div class="panel-toolbar compact-toolbar">
+            <div id="marketEventsPageMeta" class="muted">Top-ranked market movers</div>
+            <div id="marketEventsPager" class="pagination-strip"></div>
+          </div>
           <div id="marketEventsList" class="calendar-list"></div>
         </section>
 
@@ -550,13 +554,19 @@
             <div class="workbench-header-actions">
               <form id="companyMapForm" class="inline-form compact-inline-form">
                 <input id="companyMapSymbol" type="text" placeholder="AAPL" />
+                <span class="inline-form-separator">vs</span>
+                <input id="companyMapCompareSymbol" type="text" placeholder="MSFT" />
                 <button type="submit">Load Map</button>
+                <button id="swapCompanyMapButton" type="button" class="secondary">Swap</button>
+                <button id="clearCompanyMapCompareButton" type="button" class="secondary">Solo</button>
               </form>
               <button id="refreshCompanyMapButton" type="button" class="secondary">Refresh</button>
             </div>
           </div>
           <div id="companyMapSummary" class="watchlist-summary-grid"></div>
           <div id="companyMapWarnings" class="panel-status-strip"></div>
+          <div id="companyMapCompareSummary" class="watchlist-summary-grid"></div>
+          <div id="companyMapCompareShell" class="company-map-compare-shell"></div>
           <div class="company-map-shell">
             <article class="subpanel company-map-hero-panel">
               <div id="companyMapHeadline" class="intel-headline"></div>
@@ -779,11 +789,20 @@
                 <option value="30" selected>30d</option>
                 <option value="90">90d</option>
               </select>
+              <select id="calendarPageSize">
+                <option value="10">10 / page</option>
+                <option value="15" selected>15 / page</option>
+                <option value="25">25 / page</option>
+              </select>
               <button type="submit">Refresh</button>
             </form>
           </div>
           <div id="calendarSummary" class="watchlist-summary-grid"></div>
           <div id="calendarWarnings" class="panel-status-strip"></div>
+          <div class="panel-toolbar compact-toolbar">
+            <div id="calendarPageMeta" class="muted">Calendar pages</div>
+            <div id="calendarPager" class="pagination-strip"></div>
+          </div>
           <div id="calendarList" class="calendar-list"></div>
         </section>
 
@@ -802,6 +821,10 @@
           </div>
           <div id="newsSummary" class="watchlist-summary-grid"></div>
           <div id="newsStatus" class="panel-status-strip compact-status"></div>
+          <div class="panel-toolbar compact-toolbar">
+            <div id="newsPageMeta" class="muted">General market news</div>
+            <div id="newsPager" class="pagination-strip"></div>
+          </div>
           <div id="newsList" class="news-list"></div>
         </section>
 

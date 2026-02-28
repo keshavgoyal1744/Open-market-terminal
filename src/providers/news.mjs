@@ -6,21 +6,25 @@ export async function getMarketNews({ symbols = [], focusSymbol = null, query = 
   const feeds = [
     {
       category: "macro",
-      query: '"stock market" OR "Federal Reserve" OR inflation OR earnings OR tariffs OR oil OR treasury yields',
+      query: '"stock market" OR "S&P 500" OR Nasdaq OR "Dow Jones" OR "Wall Street"',
+    },
+    {
+      category: "policy",
+      query: '"Federal Reserve" OR inflation OR payrolls OR "treasury yields" OR recession OR tariffs OR oil',
     },
   ];
 
   if (query) {
     feeds.push({
       category: "focus",
-      query: `${query} stock OR ${query} earnings OR ${query} guidance OR ${query} outlook`,
+      query: `${query} stock OR ${query} shares OR ${query} earnings OR ${query} guidance OR ${query} outlook OR ${query} analyst`,
     });
   }
 
   if (focusSymbol) {
     feeds.push({
       category: "focus",
-      query: `${focusSymbol} stock OR ${focusSymbol} earnings OR ${focusSymbol} guidance`,
+      query: `${focusSymbol} stock OR ${focusSymbol} earnings OR ${focusSymbol} guidance OR ${focusSymbol} analyst`,
     });
   }
 
@@ -46,8 +50,8 @@ export async function getMarketNews({ symbols = [], focusSymbol = null, query = 
   }
 
   return dedupeHeadlines(headlines)
-    .sort((left, right) => new Date(right.publishedAt) - new Date(left.publishedAt))
-    .slice(0, 24);
+    .sort((left, right) => rankHeadline(right, focusSymbol, cleanQuery(query)) - rankHeadline(left, focusSymbol, cleanQuery(query)))
+    .slice(0, 40);
 }
 
 function buildGoogleNewsUrl(query) {
@@ -157,6 +161,52 @@ function dedupeHeadlines(items) {
     seen.add(key);
     return true;
   });
+}
+
+function rankHeadline(item, focusSymbol, query) {
+  const title = String(item.title ?? "").toLowerCase();
+  const source = String(item.source ?? "").toLowerCase();
+  const ageHours = Math.max((Date.now() - Date.parse(item.publishedAt)) / (1000 * 60 * 60), 0);
+  const recencyScore = Math.max(48 - ageHours, 0);
+  const credibilityScore = sourceWeight(source);
+  const impactScore = item.impact === "high" ? 24 : item.impact === "medium" ? 12 : 4;
+  const focusScore = query && title.includes(query) ? 26 : focusSymbol && title.includes(String(focusSymbol).toLowerCase()) ? 22 : 0;
+  return recencyScore + credibilityScore + impactScore + focusScore;
+}
+
+function sourceWeight(source) {
+  if (!source) {
+    return 0;
+  }
+
+  const trusted = {
+    reuters: 28,
+    "associated press": 26,
+    bloomberg: 24,
+    "wall street journal": 24,
+    financial: 22,
+    cnbc: 20,
+    marketwatch: 18,
+    barron: 18,
+    yahoo: 16,
+    "investing.com": 14,
+    "the motley fool": 10,
+  };
+
+  for (const [needle, score] of Object.entries(trusted)) {
+    if (source.includes(needle)) {
+      return score;
+    }
+  }
+
+  return 8;
+}
+
+function cleanQuery(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 function slug(value) {

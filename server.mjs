@@ -700,6 +700,8 @@ function sanitizePreferencePatch(body) {
       ? body.researchPinnedSymbols.map(cleanSymbol).filter(Boolean).slice(0, 32)
       : undefined,
     detailSymbol: typeof body.detailSymbol === "string" ? cleanSymbol(body.detailSymbol) : undefined,
+    companyMapCompareSymbol:
+      typeof body.companyMapCompareSymbol === "string" ? cleanSymbol(body.companyMapCompareSymbol) : undefined,
     newsFocus: typeof body.newsFocus === "string" ? String(body.newsFocus).trim().slice(0, 80) : undefined,
     sectorFocus: typeof body.sectorFocus === "string" ? String(body.sectorFocus).trim().slice(0, 80) : undefined,
     cryptoProducts: Array.isArray(body.cryptoProducts)
@@ -759,6 +761,8 @@ function sanitizeWorkspaceSnapshot(snapshot) {
       ? snapshot.researchPinnedSymbols.map(cleanSymbol).filter(Boolean).slice(0, 32)
       : [],
     detailSymbol: typeof snapshot.detailSymbol === "string" ? cleanSymbol(snapshot.detailSymbol) : "AAPL",
+    companyMapCompareSymbol:
+      typeof snapshot.companyMapCompareSymbol === "string" ? cleanSymbol(snapshot.companyMapCompareSymbol) : "",
     newsFocus: typeof snapshot.newsFocus === "string" ? String(snapshot.newsFocus).trim().slice(0, 80) : "",
     sectorFocus: typeof snapshot.sectorFocus === "string" ? String(snapshot.sectorFocus).trim().slice(0, 80) : "Technology",
     cryptoProducts: Array.isArray(snapshot.cryptoProducts)

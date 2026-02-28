@@ -54,6 +54,7 @@ export function defaultUserPreferences() {
     watchlistSymbols: [...config.defaultWatchlist],
     researchPinnedSymbols: [],
     detailSymbol: "AAPL",
+    companyMapCompareSymbol: "",
     newsFocus: "",
     sectorFocus: "Technology",
     cryptoProducts: [...config.defaultCryptoProducts],

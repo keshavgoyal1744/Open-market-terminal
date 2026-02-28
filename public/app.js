@@ -2,6 +2,7 @@ const DEFAULT_PREFERENCES = {
   watchlistSymbols: ["AAPL", "MSFT", "NVDA", "SPY", "TLT", "GLD", "EURUSD=X", "^GSPC"],
   researchPinnedSymbols: [],
   detailSymbol: "AAPL",
+  companyMapCompareSymbol: "",
   newsFocus: "",
   sectorFocus: "Technology",
   cryptoProducts: ["BTC-USD", "ETH-USD", "SOL-USD"],
@@ -281,6 +282,10 @@ const state = {
   sectorBoard: null,
   flow: null,
   companyMap: null,
+  companyMapCompare: null,
+  calendarPage: 1,
+  newsPage: 1,
+  marketEventsPage: 1,
   paletteCommands: [],
   commandPaletteOpen: false,
   paletteIndex: 0,
@@ -454,11 +459,45 @@ function bindForms() {
 
   document.querySelector("#companyMapForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    await selectDetailSymbol(document.querySelector("#companyMapSymbol")?.value.trim().toUpperCase(), { page: "map", jump: false });
+    const primary = document.querySelector("#companyMapSymbol")?.value.trim().toUpperCase() ?? "";
+    const compare = document.querySelector("#companyMapCompareSymbol")?.value.trim().toUpperCase() ?? "";
+    state.preferences.companyMapCompareSymbol = compare && compare !== primary ? compare : "";
+    schedulePreferenceSync();
+    await selectDetailSymbol(primary, { page: "map", jump: false });
   });
 
   document.querySelector("#refreshCompanyMapButton")?.addEventListener("click", async () => {
     await loadCompanyMap(state.preferences.detailSymbol, true);
+  });
+
+  document.querySelector("#swapCompanyMapButton")?.addEventListener("click", async () => {
+    const primaryInput = document.querySelector("#companyMapSymbol");
+    const compareInput = document.querySelector("#companyMapCompareSymbol");
+    const primary = primaryInput?.value.trim().toUpperCase() ?? state.preferences.detailSymbol;
+    const compare = compareInput?.value.trim().toUpperCase() ?? state.preferences.companyMapCompareSymbol;
+    if (!compare) {
+      return;
+    }
+    state.preferences.companyMapCompareSymbol = primary;
+    schedulePreferenceSync();
+    if (compareInput) {
+      compareInput.value = primary;
+    }
+    await selectDetailSymbol(compare, { page: "map", jump: false });
+  });
+
+  document.querySelector("#clearCompanyMapCompareButton")?.addEventListener("click", async () => {
+    state.preferences.companyMapCompareSymbol = "";
+    state.companyMapCompare = null;
+    const compareInput = document.querySelector("#companyMapCompareSymbol");
+    if (compareInput) {
+      compareInput.value = "";
+    }
+    renderCompanyMapCompare(null, null);
+    schedulePreferenceSync();
+    if (normalizePage(state.preferences.activePage) === "map") {
+      await loadCompanyMap(state.preferences.detailSymbol, true);
+    }
   });
 
   document.querySelector("#sectorBoardForm")?.addEventListener("submit", async (event) => {
@@ -686,12 +725,29 @@ function bindForms() {
 
   document.querySelector("#calendarForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    state.calendarPage = 1;
+    await loadDeskCalendar(true);
+  });
+
+  document.querySelector("#calendarPageSize")?.addEventListener("change", () => {
+    state.calendarPage = 1;
+    rerenderPageScopedPanels();
+  });
+
+  document.querySelector("#calendarFilter")?.addEventListener("change", () => {
+    state.calendarPage = 1;
+    rerenderPageScopedPanels();
+  });
+
+  document.querySelector("#calendarWindow")?.addEventListener("change", async () => {
+    state.calendarPage = 1;
     await loadDeskCalendar(true);
   });
 
   document.querySelector("#newsSearchForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     state.preferences.newsFocus = document.querySelector("#newsFocusInput")?.value.trim() ?? "";
+    state.newsPage = 1;
     schedulePreferenceSync();
     await loadDeskNews(true);
   });
@@ -833,9 +889,37 @@ function bindGlobalActions() {
 
   document.querySelector("#clearNewsFocusButton")?.addEventListener("click", async () => {
     state.preferences.newsFocus = "";
+    state.newsPage = 1;
     applyPreferencesToInputs();
     schedulePreferenceSync();
     await loadDeskNews(true);
+  });
+
+  document.querySelector("#calendarPager")?.addEventListener("click", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-calendar-page]") : null;
+    if (!trigger) {
+      return;
+    }
+    state.calendarPage = Number(trigger.dataset.calendarPage);
+    rerenderPageScopedPanels();
+  });
+
+  document.querySelector("#newsPager")?.addEventListener("click", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-news-page]") : null;
+    if (!trigger) {
+      return;
+    }
+    state.newsPage = Number(trigger.dataset.newsPage);
+    rerenderPageScopedPanels();
+  });
+
+  document.querySelector("#marketEventsPager")?.addEventListener("click", (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-market-events-page]") : null;
+    if (!trigger) {
+      return;
+    }
+    state.marketEventsPage = Number(trigger.dataset.marketEventsPage);
+    rerenderPageScopedPanels();
   });
 
   document.querySelector("#toggleEarningsDrawerButton")?.addEventListener("click", async () => {
@@ -1113,11 +1197,17 @@ function rerenderPageScopedPanels() {
   const windowDays = Number(document.querySelector("#calendarWindow")?.value ?? 30);
   const filter = document.querySelector("#calendarFilter")?.value ?? "all";
   if (document.querySelector("#calendarList")) {
-    document.querySelector("#calendarList").innerHTML = renderCalendar(state.calendarEvents, {
+    renderCalendarPanel(state.calendarEvents, {
       filter,
       windowDays,
       grouped: normalizePage(state.preferences.activePage) === "calendar",
     });
+  }
+  if (document.querySelector("#newsList")) {
+    renderNewsPanel(state.newsItems);
+  }
+  if (document.querySelector("#marketEventsList")) {
+    renderMarketEventsPanel(state.marketEvents);
   }
 }
 
@@ -1467,9 +1557,12 @@ async function loadCompanyMap(symbol, force = false) {
   }
 
   try {
-    const payload = await api(`/api/company-map?symbol=${encodeURIComponent(clean)}${force ? "&force=1" : ""}`);
+    const payload = await fetchCompanyMap(clean, force);
     state.companyMap = payload;
     document.querySelector("#companyMapSymbol").value = clean;
+    if (document.querySelector("#companyMapCompareSymbol")) {
+      document.querySelector("#companyMapCompareSymbol").value = state.preferences.companyMapCompareSymbol ?? "";
+    }
     document.querySelector("#companyMapSummary").innerHTML = renderCompanyMapSummary(payload);
     document.querySelector("#companyMapWarnings").innerHTML = [
       `<div class="panel-status-chip">${escapeHtml(payload.coverage?.curated ? "Curated + public map" : "Public + fallback map")}</div>`,
@@ -1499,11 +1592,41 @@ async function loadCompanyMap(symbol, force = false) {
     document.querySelector("#companyMapInsiders").innerHTML = renderCompanyMapInsiders(payload.insiderHolders ?? [], payload.insiderTransactions ?? []);
     mountIntelGraph(document.querySelector("#companyMapGraph"), payload.graph, payload.symbol);
     mountGeoExposureChart(document.querySelector("#companyMapGeo"), payload.geography);
+    await loadCompanyMapComparison(payload, force);
     markFeedHeartbeat("Live");
   } catch (error) {
     document.querySelector("#companyMapWarnings").innerHTML =
       `<div class="panel-status-chip warn">${escapeHtml(error.message)}</div>`;
+    renderCompanyMapCompare(null, null);
     showStatus(error.message, true);
+  }
+}
+
+async function fetchCompanyMap(symbol, force = false) {
+  return api(`/api/company-map?symbol=${encodeURIComponent(symbol)}${force ? "&force=1" : ""}`);
+}
+
+async function loadCompanyMapComparison(primaryPayload, force = false) {
+  const compareSymbol = String(state.preferences.companyMapCompareSymbol ?? "").trim().toUpperCase();
+  if (!compareSymbol || compareSymbol === primaryPayload?.symbol) {
+    state.companyMapCompare = null;
+    renderCompanyMapCompare(
+      primaryPayload,
+      null,
+      compareSymbol && compareSymbol === primaryPayload?.symbol
+        ? "Choose a different compare symbol to open a true side-by-side company map."
+        : "",
+    );
+    return;
+  }
+
+  try {
+    const payload = await fetchCompanyMap(compareSymbol, force);
+    state.companyMapCompare = payload;
+    renderCompanyMapCompare(primaryPayload, payload);
+  } catch (error) {
+    state.companyMapCompare = null;
+    renderCompanyMapCompare(primaryPayload, null, error.message);
   }
 }
 
@@ -1664,7 +1787,7 @@ async function loadDeskCalendar(force = false) {
     const payload = await api(`/api/calendar?symbols=${encodeURIComponent(symbols.join(","))}&window=${encodeURIComponent(windowDays)}${force ? "&force=1" : ""}`);
     state.calendarEvents = payload.events ?? [];
     document.querySelector("#calendarSummary").innerHTML = renderCalendarSummary(state.calendarEvents, windowDays);
-    document.querySelector("#calendarList").innerHTML = renderCalendar(state.calendarEvents, {
+    renderCalendarPanel(state.calendarEvents, {
       filter,
       windowDays,
       grouped: normalizePage(state.preferences.activePage) === "calendar",
@@ -1681,7 +1804,7 @@ async function loadDeskCalendar(force = false) {
 async function loadDeskNews(force = false) {
   const symbols = state.preferences.watchlistSymbols.slice(0, 8);
   const query = String(state.preferences.newsFocus ?? "").trim();
-  const focusSymbol = inferNewsFocusSymbol(query) ?? (query ? null : state.preferences.detailSymbol);
+  const focusSymbol = query ? inferNewsFocusSymbol(query) : null;
 
   try {
     const payload = await api(
@@ -1690,10 +1813,7 @@ async function loadDeskNews(force = false) {
     state.newsItems = payload.items ?? [];
     document.querySelector("#newsSummary").innerHTML = renderNewsSummary(state.newsItems, query || focusSymbol);
     document.querySelector("#newsStatus").innerHTML = renderNewsStatus(payload.asOf, query, focusSymbol);
-    document.querySelector("#newsList").innerHTML = renderNewsFeed(
-      state.newsItems,
-      normalizePage(state.preferences.activePage) === "news" ? { full: true } : {},
-    );
+    renderNewsPanel(state.newsItems);
     markFeedHeartbeat("Live");
   } catch (error) {
     showStatus(error.message, true);
@@ -1731,7 +1851,7 @@ async function loadMarketEvents(force = false) {
     );
     state.marketEvents = payload.events ?? [];
     document.querySelector("#marketEventsSummary").innerHTML = renderMarketEventsSummary(payload.summary ?? {});
-    document.querySelector("#marketEventsList").innerHTML = renderMarketEvents(payload.events ?? []);
+    renderMarketEventsPanel(payload.events ?? []);
     markFeedHeartbeat("Live");
   } catch (error) {
     showStatus(error.message, true);
@@ -2675,6 +2795,9 @@ function applyPreferencesToInputs() {
   if (document.querySelector("#companyMapSymbol")) {
     document.querySelector("#companyMapSymbol").value = state.preferences.detailSymbol;
   }
+  if (document.querySelector("#companyMapCompareSymbol")) {
+    document.querySelector("#companyMapCompareSymbol").value = state.preferences.companyMapCompareSymbol ?? "";
+  }
   document.querySelector("#newsFocusInput").value = state.preferences.newsFocus ?? "";
   if (document.querySelector("#sectorBoardSelect")) {
     document.querySelector("#sectorBoardSelect").value = state.preferences.sectorFocus ?? "";
@@ -2738,6 +2861,7 @@ function snapshotCurrentWorkspace() {
     watchlistSymbols: state.preferences.watchlistSymbols,
     researchPinnedSymbols: state.preferences.researchPinnedSymbols,
     detailSymbol: state.preferences.detailSymbol,
+    companyMapCompareSymbol: state.preferences.companyMapCompareSymbol,
     newsFocus: state.preferences.newsFocus,
     sectorFocus: state.preferences.sectorFocus,
     cryptoProducts: state.preferences.cryptoProducts,
@@ -3511,6 +3635,73 @@ function renderPriceChart(points, symbol) {
   });
 }
 
+function renderCalendarPanel(events, options = {}) {
+  const pageSize = Number(document.querySelector("#calendarPageSize")?.value ?? 15);
+  const pageState = paginateItems(filterCalendarEvents(events, options), state.calendarPage, pageSize);
+  state.calendarPage = pageState.page;
+  const calendarList = document.querySelector("#calendarList");
+  const calendarPageMeta = document.querySelector("#calendarPageMeta");
+  const calendarPager = document.querySelector("#calendarPager");
+  if (calendarList) {
+    calendarList.innerHTML = renderCalendar(pageState.items, {
+      ...options,
+      pageState,
+    });
+  }
+  if (calendarPageMeta) {
+    calendarPageMeta.textContent = pageState.total
+      ? `${pageState.start + 1}-${pageState.end} of ${pageState.total} scheduled items`
+      : "No scheduled items";
+  }
+  if (calendarPager) {
+    calendarPager.innerHTML = renderPager(pageState.page, pageState.totalPages, "calendar-page");
+  }
+}
+
+function renderNewsPanel(items) {
+  const pageSize = normalizePage(state.preferences.activePage) === "news" ? 12 : 6;
+  const pageState = paginateItems(items, state.newsPage, pageSize);
+  state.newsPage = pageState.page;
+  const newsList = document.querySelector("#newsList");
+  const newsPageMeta = document.querySelector("#newsPageMeta");
+  const newsPager = document.querySelector("#newsPager");
+  const full = normalizePage(state.preferences.activePage) === "news";
+
+  if (newsList) {
+    newsList.innerHTML = renderNewsFeed(pageState.items, {
+      full,
+      query: state.preferences.newsFocus,
+    });
+  }
+  if (newsPageMeta) {
+    newsPageMeta.textContent = pageState.total
+      ? `${pageState.start + 1}-${pageState.end} of ${pageState.total} ${state.preferences.newsFocus ? "search results" : "market headlines"}`
+      : "No headlines loaded";
+  }
+  if (newsPager) {
+    newsPager.innerHTML = renderPager(pageState.page, pageState.totalPages, "news-page");
+  }
+}
+
+function renderMarketEventsPanel(events) {
+  const pageState = paginateItems(events, state.marketEventsPage, 8);
+  state.marketEventsPage = pageState.page;
+  const list = document.querySelector("#marketEventsList");
+  const meta = document.querySelector("#marketEventsPageMeta");
+  const pager = document.querySelector("#marketEventsPager");
+  if (list) {
+    list.innerHTML = renderMarketEvents(pageState.items, { compact: true });
+  }
+  if (meta) {
+    meta.textContent = pageState.total
+      ? `${pageState.start + 1}-${pageState.end} of ${pageState.total} ranked catalysts`
+      : "No ranked catalysts";
+  }
+  if (pager) {
+    pager.innerHTML = renderPager(pageState.page, pageState.totalPages, "market-events-page");
+  }
+}
+
 function renderCalendarSummary(events, windowDays) {
   const filtered = filterCalendarEvents(events, { filter: "all", windowDays });
   const earnings = filtered.filter((event) => event.category === "earnings").length;
@@ -3527,16 +3718,15 @@ function renderCalendarSummary(events, windowDays) {
 }
 
 function renderCalendar(events, options = {}) {
-  const filtered = filterCalendarEvents(events, options);
-  if (!filtered.length) {
+  if (!events.length) {
     return renderIntelEmpty("No desk calendar events match the current filter.");
   }
 
   if (options.grouped) {
-    return renderCalendarBoards(filtered);
+    return renderCalendarTable(events);
   }
 
-  return filtered
+  return events
     .map(
       (event) => `
         <article class="calendar-item ${toneByImportance(event.importance)}">
@@ -3557,51 +3747,44 @@ function renderCalendar(events, options = {}) {
     .join("");
 }
 
-function renderCalendarBoards(events) {
-  const groups = groupCalendarByDate(events);
-  return groups
-    .map(([dateKey, entries]) => {
-      const earnings = entries.filter((entry) => entry.category === "earnings");
-      const policy = entries.filter((entry) => entry.category === "policy");
-      const macro = entries.filter((entry) => entry.category !== "earnings" && entry.category !== "policy");
-
-      return `
-        <section class="calendar-day-board">
-          <header class="calendar-day-header">
-            <div>
-              <h3>${escapeHtml(formatCalendarBoardDate(dateKey))}</h3>
-              <div class="meta">${escapeHtml(`${entries.length} scheduled items`)}</div>
-            </div>
-            <div class="calendar-day-stats">
-              <span class="terminal-chip">${escapeHtml(`${earnings.length} earnings`)}</span>
-              <span class="terminal-chip">${escapeHtml(`${policy.length} policy`)}</span>
-              <span class="terminal-chip">${escapeHtml(`${macro.length} macro`)}</span>
-            </div>
-          </header>
-          <div class="calendar-day-grid">
-            <article class="subpanel calendar-board-panel">
-              <div class="subpanel-header">
-                <h3>Daily Earnings Board</h3>
-                <div class="muted">${escapeHtml(earnings.length ? "Nasdaq / Zacks public schedule" : "No earnings on this date")}</div>
-              </div>
-              <div class="calendar-earnings-grid">
-                ${earnings.length ? earnings.map(renderCalendarEarningsCard).join("") : renderIntelEmpty("No earnings names are scheduled on this date.")}
-              </div>
-            </article>
-            <article class="subpanel calendar-board-panel">
-              <div class="subpanel-header">
-                <h3>Macro & Policy</h3>
-                <div class="muted">${escapeHtml(policy.length ? "Fed / policy active" : "Macro tape")}</div>
-              </div>
-              <div class="calendar-board-list">
-                ${[...policy, ...macro].length ? [...policy, ...macro].map(renderCalendarBoardRow).join("") : renderIntelEmpty("No macro or policy events are scheduled on this date.")}
-              </div>
-            </article>
-          </div>
-        </section>
-      `;
-    })
-    .join("");
+function renderCalendarTable(events) {
+  return `
+    <div class="table-wrap terminal-table-wrap calendar-table-wrap">
+      <table class="terminal-table calendar-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Type</th>
+            <th>Symbol</th>
+            <th>Event</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${events
+            .map(
+              (event) => `
+                <tr class="intel-row ${toneByImportance(event.importance)}">
+                  <td>${escapeHtml(formatDateShort(event.date))}</td>
+                  <td>${escapeHtml(formatTime(event.date))}</td>
+                  <td><span class="signal-chip">${escapeHtml((event.category ?? "event").toUpperCase())}</span></td>
+                  <td>${escapeHtml(event.symbol ?? "n/a")}</td>
+                  <td>
+                    <div class="calendar-table-event">
+                      <strong>${event.link ? `<a class="event-link" href="${safeUrl(event.link)}" target="_blank" rel="noreferrer">${escapeHtml(event.title ?? "Event")}</a>` : escapeHtml(event.title ?? "Event")}</strong>
+                      <div class="meta">${escapeHtml(event.note ?? "")}</div>
+                    </div>
+                  </td>
+                  <td>${escapeHtml(event.source ?? "Public source")}</td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function renderCalendarEarningsCard(event) {
@@ -3667,15 +3850,15 @@ function renderNewsFeed(items, options = {}) {
   }
 
   return items
-    .slice(0, options.full ? 24 : 9)
     .map(
       (item, index) => `
-        <article class="news-item ${toneByImportance(item.impact)}${index === 0 ? " featured" : ""}">
+        <article class="news-item ${toneByImportance(item.impact)}${options.full ? " compact" : index === 0 ? " featured" : ""}">
           <div class="news-item-head">
             <span class="signal-chip">${escapeHtml((item.category ?? "news").toUpperCase())}</span>
             <span class="news-time">${escapeHtml(formatTimeAgo(item.publishedAt))}</span>
           </div>
           <a class="news-headline" href="${safeUrl(item.link)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a>
+          ${options.full ? `<div class="news-item-summary">${escapeHtml(renderNewsLine(item, options.query))}</div>` : ""}
           <div class="news-item-foot">
             <span class="muted">${escapeHtml(item.source ?? "News")}</span>
             <span class="news-open-link">Open source</span>
@@ -3697,7 +3880,7 @@ function renderNewsSummary(items, focus) {
   );
 
   return [
-    renderTerminalStat("Feed", focus ? compactLabel(focus, 18) : "Desk", focus ? "focus query" : "watchlist + macro"),
+    renderTerminalStat("Feed", focus ? compactLabel(focus, 18) : "Market", focus ? "focus query" : "broad market"),
     renderTerminalStat("Headlines", String(counts.total ?? 0), "loaded"),
     renderTerminalStat("Policy", String(counts.policy ?? 0), "central bank + rates"),
     renderTerminalStat("Earnings", String(counts.earnings ?? 0), "results + guidance"),
@@ -3707,9 +3890,9 @@ function renderNewsSummary(items, focus) {
 
 function renderNewsStatus(asOf, query, focusSymbol) {
   return [
-    `<div class="panel-status-chip">${escapeHtml(query ? `Search ${query}` : `${focusSymbol} bias`)}</div>`,
+    `<div class="panel-status-chip">${escapeHtml(query ? `Search ${query}` : "General market board")}</div>`,
     `<div class="panel-status-chip">${escapeHtml(asOf ? `Updated ${formatTimeAgo(asOf)}` : "Awaiting feed")}</div>`,
-    `<div class="panel-status-chip">${escapeHtml(query ? "Google News live query" : "Macro + watchlist blend")}</div>`,
+    `<div class="panel-status-chip">${escapeHtml(query ? "Focused source-ranked query" : "Macro + policy + watchlist blend")}</div>`,
   ].join("");
 }
 
@@ -3727,26 +3910,83 @@ function renderMarketEvents(events) {
     return renderIntelEmpty("No market-moving events are available right now.");
   }
 
+  return renderMarketEventsList(events);
+}
+
+function renderMarketEventsList(events) {
   return events
     .map(
       (event) => `
-        <article class="calendar-item ${toneByImportance(event.importance)}">
-          <div class="calendar-time">
-            <strong>${formatDateShort(event.timestamp)}</strong>
-            <span>${formatTime(event.timestamp)}</span>
+        <article class="market-event-row ${toneByImportance(event.importance)}">
+          <div class="market-event-time">
+            <strong>${escapeHtml(formatTime(event.timestamp))}</strong>
+            <span>${escapeHtml(formatDateShort(event.timestamp))}</span>
           </div>
-          <div class="calendar-body">
+          <div class="market-event-main">
             <div class="calendar-title-row">
               <strong>${escapeHtml(event.title)}</strong>
               <span class="signal-chip">${escapeHtml((event.kind ?? "event").toUpperCase())}</span>
             </div>
-            <div class="meta">${escapeHtml(event.source ?? "Source")} | ${escapeHtml(event.note ?? "")}</div>
-            ${event.link ? `<a class="event-link" href="${safeUrl(event.link)}" target="_blank" rel="noreferrer">Open source</a>` : ""}
+            <div class="meta">${escapeHtml(event.source ?? "Source")} | ${escapeHtml(compactLabel(event.note ?? "", 96))}</div>
+          </div>
+          <div class="market-event-action">
+            ${event.link ? `<a class="event-link" href="${safeUrl(event.link)}" target="_blank" rel="noreferrer">Open</a>` : `<span class="muted">Live</span>`}
           </div>
         </article>
       `,
     )
     .join("");
+}
+
+function renderNewsLine(item, query) {
+  const focus = String(query ?? "").trim();
+  if (focus) {
+    return `${focus} focused search result ranked by source quality and recency.`;
+  }
+  return `${item.category ?? "market"} headline from the broader stock-market feed.`;
+}
+
+function paginateItems(items, page, pageSize) {
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / Math.max(pageSize, 1)));
+  const normalizedPage = clamp(Number(page) || 1, 1, totalPages);
+  const start = total ? (normalizedPage - 1) * pageSize : 0;
+  const end = total ? Math.min(start + pageSize, total) : 0;
+  return {
+    items: items.slice(start, end),
+    total,
+    page: normalizedPage,
+    pageSize,
+    totalPages,
+    start,
+    end,
+  };
+}
+
+function renderPager(currentPage, totalPages, dataKey) {
+  if (totalPages <= 1) {
+    return "";
+  }
+
+  const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1].filter((value) => value >= 1 && value <= totalPages));
+  const sorted = [...pages].sort((left, right) => left - right);
+  const buttons = [];
+
+  if (currentPage > 1) {
+    buttons.push(`<button type="button" class="pager-button" data-${dataKey}="${currentPage - 1}">Prev</button>`);
+  }
+
+  for (const page of sorted) {
+    buttons.push(
+      `<button type="button" class="pager-button${page === currentPage ? " active" : ""}" data-${dataKey}="${page}">${page}</button>`,
+    );
+  }
+
+  if (currentPage < totalPages) {
+    buttons.push(`<button type="button" class="pager-button" data-${dataKey}="${currentPage + 1}">Next</button>`);
+  }
+
+  return buttons.join("");
 }
 
 function renderHeatmapSummary(payload) {
@@ -4051,6 +4291,7 @@ function renderFlowRows(rows) {
 function renderCompanyMapSummary(payload) {
   return [
     renderTerminalStat("Symbol", payload.symbol ?? "n/a", payload.market?.industry ?? "company map"),
+    renderTerminalStat("Last", formatMoney(payload.quote?.price), payload.quote?.exchange ?? "public quote"),
     renderTerminalStat("Suppliers", String(payload.suppliers?.length ?? 0), "upstream links"),
     renderTerminalStat("Customers", String(payload.customers?.length ?? 0), "downstream links"),
     renderTerminalStat("Indices", String(payload.indices?.length ?? 0), "major benchmarks"),
@@ -4105,6 +4346,108 @@ function renderCompanyMapRelations(items, emptyMessage) {
       `,
     )
     .join("");
+}
+
+function renderCompanyMapCompare(primary, secondary, warning = "") {
+  const summary = document.querySelector("#companyMapCompareSummary");
+  const shell = document.querySelector("#companyMapCompareShell");
+  if (!summary || !shell) {
+    return;
+  }
+
+  if (!primary || !secondary) {
+    summary.innerHTML = warning
+      ? `<div class="panel-status-chip warn">${escapeHtml(warning)}</div>`
+      : `<div class="panel-status-chip muted">Load a second symbol to compare suppliers, customers, indices, holders, and competitors side by side.</div>`;
+    shell.innerHTML = "";
+    return;
+  }
+
+  const primarySupplierSet = new Set((primary.suppliers ?? []).map((item) => relationCompareKey(item)));
+  const primaryCustomerSet = new Set((primary.customers ?? []).map((item) => relationCompareKey(item)));
+  const primaryHolderSet = new Set((primary.holders ?? []).map((item) => compareKey(item.holder)));
+  const primaryIndexSet = new Set((primary.indices ?? []).map((item) => compareKey(item.label)));
+
+  const sharedSuppliers = (secondary.suppliers ?? []).filter((item) => primarySupplierSet.has(relationCompareKey(item)));
+  const sharedCustomers = (secondary.customers ?? []).filter((item) => primaryCustomerSet.has(relationCompareKey(item)));
+  const sharedHolders = (secondary.holders ?? []).filter((item) => primaryHolderSet.has(compareKey(item.holder)));
+  const sharedIndices = (secondary.indices ?? []).filter((item) => primaryIndexSet.has(compareKey(item.label)));
+
+  summary.innerHTML = [
+    renderTerminalStat("Compare", `${primary.symbol} / ${secondary.symbol}`, "dual company map"),
+    renderTerminalStat("Shared Indices", String(sharedIndices.length), sharedIndices.slice(0, 2).map((item) => item.label).join(" · ") || "none"),
+    renderTerminalStat("Supplier Overlap", String(sharedSuppliers.length), sharedSuppliers[0]?.target ?? "no overlap"),
+    renderTerminalStat("Customer Overlap", String(sharedCustomers.length), sharedCustomers[0]?.target ?? "no overlap"),
+    renderTerminalStat("Holder Overlap", String(sharedHolders.length), sharedHolders[0]?.holder ?? "no overlap"),
+    renderTerminalStat(
+      "Sector",
+      primary.market?.sector === secondary.market?.sector ? primary.market?.sector ?? "mixed" : "cross-sector",
+      secondary.market?.sector ?? "n/a",
+    ),
+  ].join("");
+
+  shell.innerHTML = `
+    ${renderCompanyMapCompareColumn(primary, "Primary")}
+    ${renderCompanyMapCompareColumn(secondary, "Compare")}
+  `;
+}
+
+function renderCompanyMapCompareColumn(payload, label) {
+  return `
+    <article class="subpanel company-map-compare-panel">
+      <div class="subpanel-header company-map-compare-header">
+        <div>
+          <div class="section-label">${escapeHtml(label)}</div>
+          <h3>${escapeHtml(payload.symbol)} · ${escapeHtml(payload.companyName ?? payload.symbol)}</h3>
+        </div>
+        <div class="terminal-price-stack">
+          <strong>${formatMoney(payload.quote?.price)}</strong>
+          <div class="meta ${tone(payload.quote?.changePercent)}">${formatPercent(payload.quote?.changePercent)}</div>
+        </div>
+      </div>
+      <div class="company-map-compare-mini-grid">
+        ${renderTerminalStat("Sector", payload.market?.sector ?? "n/a", payload.market?.industry ?? "public map")}
+        ${renderTerminalStat("Indices", String(payload.indices?.length ?? 0), payload.indices?.[0]?.label ?? "none")}
+        ${renderTerminalStat("Suppliers", String(payload.suppliers?.length ?? 0), payload.suppliers?.[0]?.target ?? "none")}
+        ${renderTerminalStat("Customers", String(payload.customers?.length ?? 0), payload.customers?.[0]?.target ?? "none")}
+      </div>
+      <div class="company-map-compare-block">
+        <div class="subpanel-header compact-header">
+          <h4>Suppliers</h4>
+          <div class="muted">upstream</div>
+        </div>
+        <div class="list-stack">${renderCompanyMapRelations((payload.suppliers ?? []).slice(0, 5), "No supplier links.")}</div>
+      </div>
+      <div class="company-map-compare-block">
+        <div class="subpanel-header compact-header">
+          <h4>Customers</h4>
+          <div class="muted">demand side</div>
+        </div>
+        <div class="list-stack">${renderCompanyMapRelations((payload.customers ?? []).slice(0, 5), "No customer links.")}</div>
+      </div>
+      <div class="company-map-compare-block">
+        <div class="subpanel-header compact-header">
+          <h4>Indices</h4>
+          <div class="muted">major benchmarks</div>
+        </div>
+        <div class="list-stack">${renderCompanyMapIndices((payload.indices ?? []).slice(0, 4))}</div>
+      </div>
+      <div class="company-map-compare-block">
+        <div class="subpanel-header compact-header">
+          <h4>Top Holders</h4>
+          <div class="muted">public owners</div>
+        </div>
+        <div class="list-stack">${renderCompanyMapHolderList((payload.holders ?? []).slice(0, 5))}</div>
+      </div>
+      <div class="company-map-compare-block">
+        <div class="subpanel-header compact-header">
+          <h4>Competition</h4>
+          <div class="muted">nearby public comps</div>
+        </div>
+        <div class="list-stack">${renderCompanyMapCompetitorList((payload.competitors ?? []).slice(0, 5))}</div>
+      </div>
+    </article>
+  `;
 }
 
 function renderCompanyMapCompetitors(items) {
@@ -4176,6 +4519,38 @@ function renderCompanyMapBoard(items) {
     .join("");
 }
 
+function renderCompanyMapHolderList(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No public holder rows are available.");
+  }
+
+  return items
+    .map((item) => renderIntelListItem(item.holder ?? "Holder", formatPercentScaled(item.pctHeld), formatCompact(item.shares)))
+    .join("");
+}
+
+function renderCompanyMapCompetitorList(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No competitor rows are available.");
+  }
+
+  return items
+    .map(
+      (item) => `
+        <div class="list-item intel-list-item company-map-link${item.symbol ? " has-symbol" : ""}"${item.symbol ? ` data-company-map-symbol="${escapeHtml(item.symbol)}"` : ""}>
+          <div class="intel-list-main">
+            <span class="intel-tag">${escapeHtml(item.symbol ?? "peer")}</span>
+            <div>
+              <strong>${escapeHtml(item.companyName ?? item.symbol ?? "n/a")}</strong>
+              <div class="meta">${formatMoney(item.price)} | ${formatPercent(item.changePercent)}</div>
+            </div>
+          </div>
+        </div>
+      `,
+    )
+    .join("");
+}
+
 function renderCompanyMapInsiders(holders, transactions) {
   const rows = [
     ...(holders ?? []).map((item) =>
@@ -4195,6 +4570,19 @@ function renderCompanyMapInsiders(holders, transactions) {
   ];
 
   return rows.join("") || renderIntelEmpty("No insider holdings or transaction rows are available.");
+}
+
+function relationCompareKey(item) {
+  return `${compareKey(item?.target)}:${compareKey(item?.relation)}`;
+}
+
+function compareKey(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function filterCalendarEvents(events, { filter = "all", windowDays = 30 } = {}) {
@@ -4470,6 +4858,10 @@ function mergePreferences(preferences) {
       ? preferences.cryptoProducts
       : [...DEFAULT_PREFERENCES.cryptoProducts],
     portfolio: Array.isArray(preferences?.portfolio) ? preferences.portfolio : [],
+    companyMapCompareSymbol:
+      typeof preferences?.companyMapCompareSymbol === "string"
+        ? preferences.companyMapCompareSymbol
+        : DEFAULT_PREFERENCES.companyMapCompareSymbol,
     newsFocus: typeof preferences?.newsFocus === "string" ? preferences.newsFocus : "",
     sectorFocus: typeof preferences?.sectorFocus === "string" ? preferences.sectorFocus : DEFAULT_PREFERENCES.sectorFocus,
     activePage: normalizePage(preferences?.activePage),

@@ -1322,9 +1322,72 @@ function dedupeRelations(items = []) {
 }
 
 function inferTickerFromText(value) {
-  const text = String(value ?? "").trim().toUpperCase();
-  return /^[A-Z0-9.\-]{1,5}$/.test(text) ? text.replace(/\./g, "-") : null;
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+
+  const direct = raw.toUpperCase();
+  if (/^[A-Z0-9.\-]{1,5}$/.test(direct)) {
+    return direct.replace(/\./g, "-");
+  }
+
+  const parenMatch = direct.match(/\(([A-Z0-9.\-]{1,5})\)/);
+  if (parenMatch?.[1]) {
+    return parenMatch[1].replace(/\./g, "-");
+  }
+
+  const normalized = direct
+    .replace(/&/g, " AND ")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\b(CORPORATION|CORP|INCORPORATED|INC|COMPANY|CO|HOLDINGS|HOLDING|GROUP|LTD|LIMITED|PLC|SA|NV)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return KNOWN_PUBLIC_TICKER_ALIASES.get(normalized) ?? null;
 }
+
+const KNOWN_PUBLIC_TICKER_ALIASES = new Map([
+  ["APPLE", "AAPL"],
+  ["MICROSOFT", "MSFT"],
+  ["GOOGLE", "GOOGL"],
+  ["ALPHABET", "GOOGL"],
+  ["YOUTUBE", "GOOGL"],
+  ["AMAZON", "AMZN"],
+  ["AMAZON WEB SERVICES", "AMZN"],
+  ["NVIDIA", "NVDA"],
+  ["ADVANCED MICRO DEVICES", "AMD"],
+  ["AMD", "AMD"],
+  ["INTEL", "INTC"],
+  ["QUALCOMM", "QCOM"],
+  ["BROADCOM", "AVGO"],
+  ["TAIWAN SEMICONDUCTOR MANUFACTURING", "TSM"],
+  ["TSMC", "TSM"],
+  ["ASML", "ASML"],
+  ["TESLA", "TSLA"],
+  ["META", "META"],
+  ["META PLATFORMS", "META"],
+  ["NETFLIX", "NFLX"],
+  ["UBER", "UBER"],
+  ["ORACLE", "ORCL"],
+  ["SALESFORCE", "CRM"],
+  ["ADOBE", "ADBE"],
+  ["JPMORGAN CHASE", "JPM"],
+  ["JPMORGAN", "JPM"],
+  ["GOLDMAN SACHS", "GS"],
+  ["BLACKROCK", "BLK"],
+  ["BERKSHIRE HATHAWAY", "BRK-B"],
+  ["VISA", "V"],
+  ["MASTERCARD", "MA"],
+  ["EXXON MOBIL", "XOM"],
+  ["CHEVRON", "CVX"],
+  ["UNITEDHEALTH", "UNH"],
+  ["CARRIER GLOBAL", "CARR"],
+  ["SPDR GOLD SHARES", "GLD"],
+  ["SPY", "SPY"],
+  ["QQQ", "QQQ"],
+  ["TLT", "TLT"],
+]);
 
 function roundTo(value, decimals) {
   const factor = 10 ** decimals;
