@@ -1558,7 +1558,24 @@ function dropDirection(target, event) {
 
 async function loadSession(reloadUserData = false) {
   try {
-    const session = await api("/api/auth/session");
+    let session;
+    try {
+      session = await api("/api/auth/session");
+    } catch (error) {
+      if (!String(error.message ?? "").includes("404")) {
+        throw error;
+      }
+      try {
+        session = await api("/api/session");
+      } catch (fallbackError) {
+        if (!String(fallbackError.message ?? "").includes("404")) {
+          throw fallbackError;
+        }
+        teardownAuthenticatedState();
+        renderHud();
+        return;
+      }
+    }
     if (!session.authenticated) {
       teardownAuthenticatedState();
       renderHud();
@@ -1594,7 +1611,9 @@ async function loadSession(reloadUserData = false) {
   } catch (error) {
     teardownAuthenticatedState();
     renderHud();
-    showStatus(error.message, true);
+    if (!String(error.message ?? "").includes("404")) {
+      showStatus(error.message, true);
+    }
   }
 }
 
@@ -2814,13 +2833,19 @@ function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFo
       .map((sector) => `<option value="${escapeHtml(sector)}">${escapeHtml(sector)}</option>`)
       .join("");
     select.disabled = false;
-    select.value = DEFAULT_SECTORS.includes(selectedSector) ? selectedSector : DEFAULT_SECTORS[0];
+    const liveValue = sanitizeSectorFocus(select.value, DEFAULT_SECTORS);
+    select.value = DEFAULT_SECTORS.includes(liveValue)
+      ? liveValue
+      : DEFAULT_SECTORS.includes(selectedSector)
+        ? selectedSector
+        : DEFAULT_SECTORS[0];
     state.preferences.sectorFocus = select.value;
     return;
   }
   select.disabled = false;
   const preferred =
-    ordered.find((sector) => normalizeSectorKey(sector) === normalizeSectorKey(selectedSector))
+    ordered.find((sector) => normalizeSectorKey(sector) === normalizeSectorKey(select.value))
+    ?? ordered.find((sector) => normalizeSectorKey(sector) === normalizeSectorKey(selectedSector))
     ?? ordered[0]
     ?? selectedSector
     ?? "Technology";
@@ -2865,9 +2890,9 @@ function resolveSectorBoardSector(payload) {
     (sector, index) => sectors.findIndex((candidate) => normalizeSectorKey(candidate) === normalizeSectorKey(sector)) === index,
   );
   const candidates = [
+    sanitizeSectorFocus(document.querySelector("#sectorBoardSelect")?.value, uniqueSectors),
     sanitizeSectorFocus(payload?.sector, uniqueSectors),
     sanitizeSectorFocus(state.preferences.sectorFocus, uniqueSectors),
-    sanitizeSectorFocus(document.querySelector("#sectorBoardSelect")?.value, uniqueSectors),
     uniqueSectors[0],
     DEFAULT_SECTORS[0],
   ].filter(Boolean);

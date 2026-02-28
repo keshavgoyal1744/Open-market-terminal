@@ -177,7 +177,7 @@ async function handleApi(request, response, url, context) {
     );
   }
 
-  if (request.method === "GET" && url.pathname === "/api/auth/session") {
+  if (request.method === "GET" && (url.pathname === "/api/auth/session" || url.pathname === "/api/session")) {
     if (!context.user) {
       return sendJson(response, 200, { authenticated: false, user: null });
     }
