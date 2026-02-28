@@ -1828,14 +1828,14 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] #section-events {
-  grid-column: span 6;
+  grid-column: 3 / -1;
   align-self: start;
 }
 
 #dashboardGrid[data-page="research"] #section-research-rail {
   grid-column: span 2;
   order: 0;
-  grid-row: 1 / span 2;
+  grid-row: 1 / span 3;
   align-self: start;
 }
 
@@ -1856,7 +1856,9 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] #section-workbench,
-#dashboardGrid[data-page="research"] #section-intelligence {
+#dashboardGrid[data-page="research"] #section-intelligence,
+#dashboardGrid[data-page="research"] #section-screening,
+#dashboardGrid[data-page="research"] #section-events {
   min-height: 0;
 }
 
@@ -1897,7 +1899,9 @@ button:hover {
 #dashboardGrid[data-page="research"] #section-intelligence .list-stack,
 #dashboardGrid[data-page="research"] #section-intelligence .terminal-table-wrap,
 #dashboardGrid[data-page="research"] #section-screening .terminal-table-wrap,
-#dashboardGrid[data-page="research"] #section-events .list-stack {
+#dashboardGrid[data-page="research"] #section-screening .list-stack,
+#dashboardGrid[data-page="research"] #section-events .list-stack,
+#dashboardGrid[data-page="research"] #section-events .terminal-table-wrap {
   max-height: 260px;
   overflow: auto;
 }
@@ -1908,6 +1912,16 @@ button:hover {
 
 #dashboardGrid[data-page="research"] #section-workbench #priceChart {
   min-height: 360px;
+}
+
+#dashboardGrid[data-page="research"] #section-screening .screen-form {
+  grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, 0.85fr)) auto;
+}
+
+#dashboardGrid[data-page="research"] #section-events .table-wrap,
+#dashboardGrid[data-page="research"] #section-screening .table-wrap {
+  max-height: 340px;
+  overflow: auto;
 }
 
 #dashboardGrid[data-page="research"] #section-workbench .watchlist-summary-grid,
@@ -2531,6 +2545,7 @@ button:hover {
 }
 
 .sector-news-panel {
+  padding: 8px 10px 10px;
   gap: 4px;
   min-height: 100%;
 }

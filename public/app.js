@@ -288,10 +288,10 @@ const PAGE_PANEL_ROWS = {
   },
   research: {
     "section-research-rail": "1 / span 2",
-    "section-workbench": "1",
+    "section-workbench": "1 / span 2",
     "section-intelligence": "1",
     "section-screening": "2",
-    "section-events": "2",
+    "section-events": "3",
   },
   ops: {
     "section-portfolio": "1",
