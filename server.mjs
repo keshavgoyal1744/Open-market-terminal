@@ -503,6 +503,11 @@ async function handleApi(request, response, url, context) {
     }
   }
 
+  if (request.method === "GET" && url.pathname === "/api/company-map") {
+    const symbol = requireParam(url, "symbol");
+    return sendJson(response, 200, await market.getCompanyMap(symbol));
+  }
+
   if (request.method === "GET" && url.pathname === "/api/filings") {
     const company = await market.getCompany(requireParam(url, "symbol"));
     return sendJson(response, 200, { symbol: company.symbol, filings: company.sec.filings });
@@ -782,7 +787,7 @@ function cleanSymbol(value) {
 }
 
 function normalizePage(value) {
-  return ["overview", "sectors", "calendar", "news", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
+  return ["overview", "sectors", "calendar", "map", "news", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
     ? String(value).trim().toLowerCase()
     : "overview";
 }

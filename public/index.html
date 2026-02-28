@@ -17,6 +17,7 @@
           <button type="button" class="topbar-nav-btn" data-page="overview">Markets</button>
           <button type="button" class="topbar-nav-btn" data-page="sectors">Sectors</button>
           <button type="button" class="topbar-nav-btn" data-page="calendar">Calendar</button>
+          <button type="button" class="topbar-nav-btn" data-page="map">Map</button>
           <button type="button" class="topbar-nav-btn" data-page="news">News</button>
           <button type="button" class="topbar-nav-btn" data-page="research">Research</button>
           <button type="button" class="topbar-nav-btn" data-page="ops">Ops</button>
@@ -88,7 +89,7 @@
           <div class="signal-log">
             <div class="signal-row"><span>ROUTING</span><strong>Ctrl/⌘ + K opens the terminal palette</strong></div>
             <div class="signal-row"><span>SYMBOLS</span><strong>[ and ] cycle through watchlist names</strong></div>
-            <div class="signal-row"><span>PAGES</span><strong>Markets, Sectors, Calendar, News, Research, and Ops split the desk into cleaner views</strong></div>
+            <div class="signal-row"><span>PAGES</span><strong>Markets, Sectors, Calendar, Map, News, Research, and Ops split the desk into cleaner views</strong></div>
           </div>
         </div>
         <aside class="auth-card control-card">
@@ -537,6 +538,108 @@
               </thead>
               <tbody id="intelCompetitorBody"></tbody>
             </table>
+          </div>
+        </section>
+
+        <section id="section-company-map" class="panel panel-wide panel-company-map">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Company Map</p>
+              <h2>Suppliers, customers, indices, holders, board, and competition</h2>
+            </div>
+            <div class="workbench-header-actions">
+              <form id="companyMapForm" class="inline-form compact-inline-form">
+                <input id="companyMapSymbol" type="text" placeholder="AAPL" />
+                <button type="submit">Load Map</button>
+              </form>
+              <button id="refreshCompanyMapButton" type="button" class="secondary">Refresh</button>
+            </div>
+          </div>
+          <div id="companyMapSummary" class="watchlist-summary-grid"></div>
+          <div id="companyMapWarnings" class="panel-status-strip"></div>
+          <div class="company-map-shell">
+            <article class="subpanel company-map-hero-panel">
+              <div id="companyMapHeadline" class="intel-headline"></div>
+              <div id="companyMapCoverage" class="list-stack"></div>
+              <div id="companyMapGraph" class="chart-card intel-graph-card"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3>Index Membership</h3>
+                <div class="muted">major public benchmarks</div>
+              </div>
+              <div id="companyMapIndices" class="list-stack"></div>
+              <div class="subpanel-header">
+                <h3>Geography</h3>
+                <div class="muted">public mix and footprint</div>
+              </div>
+              <div id="companyMapGeo" class="chart-card small"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3>Supplier Network</h3>
+                <div class="muted">who sells into the company</div>
+              </div>
+              <div id="companyMapSuppliers" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3>Customer / Output Network</h3>
+                <div class="muted">who receives output or drives demand</div>
+              </div>
+              <div id="companyMapCustomers" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3>Competitors</h3>
+                <div class="muted">closest public comps</div>
+              </div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Company</th>
+                      <th>Last</th>
+                      <th>% Change</th>
+                    </tr>
+                  </thead>
+                  <tbody id="companyMapCompetitorBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3>Top Holders</h3>
+                <div class="muted">largest public owners</div>
+              </div>
+              <div class="table-wrap compact terminal-table-wrap">
+                <table class="terminal-table intel-table">
+                  <thead>
+                    <tr>
+                      <th>Holder</th>
+                      <th>% Held</th>
+                      <th>Shares</th>
+                    </tr>
+                  </thead>
+                  <tbody id="companyMapHoldersBody"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3>Board & Officers</h3>
+                <div class="muted">public officer / board listing</div>
+              </div>
+              <div id="companyMapBoard" class="list-stack"></div>
+            </article>
+            <article class="subpanel">
+              <div class="subpanel-header">
+                <h3>Insider Ownership</h3>
+                <div class="muted">reported insider positions</div>
+              </div>
+              <div id="companyMapInsiders" class="list-stack"></div>
+            </article>
           </div>
         </section>
 

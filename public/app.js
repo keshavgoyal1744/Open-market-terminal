@@ -29,6 +29,7 @@ const DEFAULT_PANEL_SIZES = {
   "section-research-rail": 3,
   "section-workbench": 7,
   "section-intelligence": 12,
+  "section-company-map": 12,
   "section-macro": 3,
   "section-calendar": 5,
   "section-news": 7,
@@ -53,6 +54,7 @@ const DEFAULT_PANEL_LAYOUT = [
   "section-research-rail",
   "section-workbench",
   "section-intelligence",
+  "section-company-map",
   "section-macro",
   "section-calendar",
   "section-news",
@@ -105,6 +107,17 @@ const PAGE_DEFINITIONS = {
     tags: ["Daily Boards", "Earnings", "Fed", "Macro"],
     sections: [
       "section-calendar",
+    ],
+  },
+  map: {
+    label: "Map",
+    sectionLabel: "Company Map Desk",
+    title: "Detailed company relationship mapping across suppliers, customers, indices, holders, and board data.",
+    description:
+      "Search any symbol and inspect a cleaner detailed map with supplier and output networks, index memberships, competition, holders, and officer coverage.",
+    tags: ["Supply Chain", "Customers", "Indices", "Ownership"],
+    sections: [
+      "section-company-map",
     ],
   },
   news: {
@@ -167,6 +180,9 @@ const PAGE_PANEL_SPANS = {
   },
   calendar: {
     "section-calendar": 12,
+  },
+  map: {
+    "section-company-map": 12,
   },
   news: {
     "section-news": 12,
@@ -264,6 +280,7 @@ const state = {
   marketEvents: [],
   sectorBoard: null,
   flow: null,
+  companyMap: null,
   paletteCommands: [],
   commandPaletteOpen: false,
   paletteIndex: 0,
@@ -282,6 +299,7 @@ const SECTION_COMMANDS = [
   { id: "section-workbench", label: "Jump to Security Workbench", meta: "detail, filings, and options" },
   { id: "section-market-events", label: "Jump to Market Events", meta: "ranked event timeline" },
   { id: "section-intelligence", label: "Jump to Relationship Console", meta: "ownership and supply chains" },
+  { id: "section-company-map", label: "Jump to Company Map", meta: "suppliers, customers, indices, holders, board" },
   { id: "section-calendar", label: "Jump to Desk Calendar", meta: "earnings, Fed, and macro dates" },
   { id: "section-news", label: "Jump to Market News", meta: "live public headlines" },
   { id: "section-portfolio", label: "Jump to Portfolio", meta: "positions and P/L" },
@@ -326,6 +344,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadFlow(),
     loadResearchRail(),
     loadDetail(state.preferences.detailSymbol),
+    loadCompanyMap(state.preferences.detailSymbol),
     loadMacro(),
     loadYieldCurve(),
     loadDeskCalendar(),
@@ -431,6 +450,15 @@ function bindForms() {
     event.preventDefault();
     state.currentHistoryRange = document.querySelector("#historyRange").value;
     await selectDetailSymbol(document.querySelector("#detailSymbol").value.trim().toUpperCase());
+  });
+
+  document.querySelector("#companyMapForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await selectDetailSymbol(document.querySelector("#companyMapSymbol")?.value.trim().toUpperCase(), { page: "map", jump: false });
+  });
+
+  document.querySelector("#refreshCompanyMapButton")?.addEventListener("click", async () => {
+    await loadCompanyMap(state.preferences.detailSymbol, true);
   });
 
   document.querySelector("#sectorBoardForm")?.addEventListener("submit", async (event) => {
@@ -763,6 +791,22 @@ function bindGlobalActions() {
     await selectDetailSymbol(trigger.dataset.graphSymbol, { jump: true, page: "research" });
   });
 
+  document.querySelector("#companyMapGraph")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-graph-symbol]") : null;
+    if (!trigger?.dataset.graphSymbol) {
+      return;
+    }
+    await selectDetailSymbol(trigger.dataset.graphSymbol, { jump: false, page: "map" });
+  });
+
+  document.querySelector("#section-company-map")?.addEventListener("click", async (event) => {
+    const trigger = event.target instanceof Element ? event.target.closest("[data-company-map-symbol]") : null;
+    if (!trigger?.dataset.companyMapSymbol) {
+      return;
+    }
+    await selectDetailSymbol(trigger.dataset.companyMapSymbol, { jump: false, page: "map" });
+  });
+
   document.querySelector("#commandPaletteInput")?.addEventListener("input", (event) => {
     state.paletteIndex = 0;
     renderCommandPaletteResults(event.target.value);
@@ -1038,6 +1082,9 @@ function setActivePage(pageId, options = {}) {
   }
   applyPanelLayout();
   rerenderPageScopedPanels();
+  if (state.preferences.activePage === "map") {
+    void loadCompanyMap(state.preferences.detailSymbol);
+  }
   schedulePreferenceSync();
   if (options.scroll) {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1408,6 +1455,53 @@ async function loadFlow(force = false) {
     markFeedHeartbeat("Live");
   } catch (error) {
     document.querySelector("#flowWarnings").innerHTML =
+      `<div class="panel-status-chip warn">${escapeHtml(error.message)}</div>`;
+    showStatus(error.message, true);
+  }
+}
+
+async function loadCompanyMap(symbol, force = false) {
+  const clean = String(symbol ?? state.preferences.detailSymbol ?? "").trim().toUpperCase();
+  if (!clean) {
+    return;
+  }
+
+  try {
+    const payload = await api(`/api/company-map?symbol=${encodeURIComponent(clean)}${force ? "&force=1" : ""}`);
+    state.companyMap = payload;
+    document.querySelector("#companyMapSymbol").value = clean;
+    document.querySelector("#companyMapSummary").innerHTML = renderCompanyMapSummary(payload);
+    document.querySelector("#companyMapWarnings").innerHTML = [
+      `<div class="panel-status-chip">${escapeHtml(payload.coverage?.curated ? "Curated + public map" : "Public + fallback map")}</div>`,
+      `<div class="panel-status-chip">${escapeHtml(`${payload.indices?.length ?? 0} major indices`)}</div>`,
+      `<div class="panel-status-chip">${escapeHtml(payload.market?.analystRating ?? "street n/a")}</div>`,
+    ].join("");
+    document.querySelector("#companyMapHeadline").innerHTML = `
+      <p class="section-label">${escapeHtml(payload.market?.sector ?? "Public company map")}</p>
+      <h3>${escapeHtml(payload.companyName ?? payload.symbol)}</h3>
+      <p>${escapeHtml(payload.summary ?? "No company map summary is available from the current public sources.")}</p>
+    `;
+    document.querySelector("#companyMapCoverage").innerHTML = (payload.coverage?.notes ?? [])
+      .map((note, index) => renderIntelNote(note, index))
+      .join("") || renderIntelEmpty("No company-map coverage notes are available.");
+    document.querySelector("#companyMapIndices").innerHTML = renderCompanyMapIndices(payload.indices ?? []);
+    document.querySelector("#companyMapSuppliers").innerHTML = renderCompanyMapRelations(
+      payload.suppliers ?? [],
+      "No supplier or upstream public links are available.",
+    );
+    document.querySelector("#companyMapCustomers").innerHTML = renderCompanyMapRelations(
+      payload.customers ?? [],
+      "No downstream or customer-side public links are available.",
+    );
+    document.querySelector("#companyMapCompetitorBody").innerHTML = renderCompanyMapCompetitors(payload.competitors ?? []);
+    document.querySelector("#companyMapHoldersBody").innerHTML = renderCompanyMapHolders(payload.holders ?? []);
+    document.querySelector("#companyMapBoard").innerHTML = renderCompanyMapBoard(payload.board ?? []);
+    document.querySelector("#companyMapInsiders").innerHTML = renderCompanyMapInsiders(payload.insiderHolders ?? [], payload.insiderTransactions ?? []);
+    mountIntelGraph(document.querySelector("#companyMapGraph"), payload.graph, payload.symbol);
+    mountGeoExposureChart(document.querySelector("#companyMapGeo"), payload.geography);
+    markFeedHeartbeat("Live");
+  } catch (error) {
+    document.querySelector("#companyMapWarnings").innerHTML =
       `<div class="panel-status-chip warn">${escapeHtml(error.message)}</div>`;
     showStatus(error.message, true);
   }
@@ -2578,6 +2672,9 @@ function renderPortfolio() {
 function applyPreferencesToInputs() {
   document.querySelector("#watchlistInput").value = state.preferences.watchlistSymbols.join(",");
   document.querySelector("#detailSymbol").value = state.preferences.detailSymbol;
+  if (document.querySelector("#companyMapSymbol")) {
+    document.querySelector("#companyMapSymbol").value = state.preferences.detailSymbol;
+  }
   document.querySelector("#newsFocusInput").value = state.preferences.newsFocus ?? "";
   if (document.querySelector("#sectorBoardSelect")) {
     document.querySelector("#sectorBoardSelect").value = state.preferences.sectorFocus ?? "";
@@ -2627,6 +2724,7 @@ function applyWorkspaceSnapshot(snapshot) {
     loadResearchRail(true),
     loadWatchlistEvents(),
     loadDetail(state.preferences.detailSymbol),
+    loadCompanyMap(state.preferences.detailSymbol),
     loadDeskCalendar(),
     loadDeskNews(),
     loadOrderBook(currentOrderBookProduct()),
@@ -2699,6 +2797,11 @@ function scheduleRefresh() {
   setInterval(() => void loadWatchlistEvents(), 120000);
   setInterval(() => void loadDetail(state.preferences.detailSymbol), 60000);
   setInterval(() => void loadIntelligence(state.preferences.detailSymbol), 180000);
+  setInterval(() => {
+    if (normalizePage(state.preferences.activePage) === "map") {
+      void loadCompanyMap(state.preferences.detailSymbol);
+    }
+  }, 180000);
   setInterval(() => void loadDeskCalendar(false), 300000);
   setInterval(() => void loadDeskNews(false), 120000);
   setInterval(() => void renderPortfolio(), 30000);
@@ -2723,7 +2826,12 @@ async function selectDetailSymbol(symbol, options = {}) {
   if (state.heatmap && state.heatmap.tiles?.some((tile) => tile.symbol === clean)) {
     void focusHeatmapSymbol(clean);
   }
-  await Promise.all([loadDetail(clean), loadDeskNews(false), loadMarketEvents(false)]);
+  await Promise.all([
+    loadDetail(clean),
+    loadDeskNews(false),
+    loadMarketEvents(false),
+    options.page === "map" || normalizePage(state.preferences.activePage) === "map" ? loadCompanyMap(clean, true) : Promise.resolve(),
+  ]);
 }
 
 async function selectSectorFocus(sector, options = {}) {
@@ -3938,6 +4046,155 @@ function renderFlowRows(rows) {
       `,
     )
     .join("");
+}
+
+function renderCompanyMapSummary(payload) {
+  return [
+    renderTerminalStat("Symbol", payload.symbol ?? "n/a", payload.market?.industry ?? "company map"),
+    renderTerminalStat("Suppliers", String(payload.suppliers?.length ?? 0), "upstream links"),
+    renderTerminalStat("Customers", String(payload.customers?.length ?? 0), "downstream links"),
+    renderTerminalStat("Indices", String(payload.indices?.length ?? 0), "major benchmarks"),
+    renderTerminalStat("Holders", String(payload.holders?.length ?? 0), "public owners"),
+    renderTerminalStat("Board", String(payload.board?.length ?? 0), "officers / directors"),
+  ].join("");
+}
+
+function renderCompanyMapIndices(indices) {
+  if (!indices.length) {
+    return renderIntelEmpty("No major public index memberships were found in the current sources.");
+  }
+
+  return indices
+    .map(
+      (item) => `
+        <div class="list-item terminal-list-item">
+          <div class="terminal-list-main">
+            <div>
+              <strong>${escapeHtml(item.label)}</strong>
+              <div class="meta">${escapeHtml(item.note ?? "")}</div>
+            </div>
+          </div>
+          <div class="terminal-price-stack">
+            <strong>${escapeHtml(item.vehicle ?? "Index")}</strong>
+            <div class="meta">${item.sourceUrl ? `<a class="event-link" href="${safeUrl(item.sourceUrl)}" target="_blank" rel="noreferrer">${escapeHtml(item.source ?? "Source")}</a>` : escapeHtml(item.source ?? "Source")}</div>
+          </div>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderCompanyMapRelations(items, emptyMessage) {
+  if (!items.length) {
+    return renderIntelEmpty(emptyMessage);
+  }
+
+  return items
+    .map(
+      (item) => `
+        <div class="list-item intel-list-item company-map-link${item.symbol ? " has-symbol" : ""}"${item.symbol ? ` data-company-map-symbol="${escapeHtml(item.symbol)}"` : ""}>
+          <div class="intel-list-main">
+            <span class="intel-tag">${escapeHtml(compactLabel(item.relation ?? "link", 16))}</span>
+            <div>
+              <strong>${escapeHtml(item.target ?? "n/a")}</strong>
+              <div class="meta">${escapeHtml(item.label ?? "")}</div>
+            </div>
+          </div>
+          <div class="intel-domain">${escapeHtml((item.symbol ?? item.domain ?? "map").toUpperCase())}</div>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderCompanyMapCompetitors(items) {
+  if (!items.length) {
+    return `<tr><td colspan="4" class="muted">No competitor data is available.</td></tr>`;
+  }
+
+  return items
+    .map(
+      (item, index) => `
+        <tr class="intel-row ${tone(item.changePercent)}"${item.symbol ? ` data-company-map-symbol="${escapeHtml(item.symbol)}"` : ""}>
+          <td>
+            <div class="holder-cell">
+              <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
+              <div>
+                <strong>${escapeHtml(item.symbol ?? "n/a")}</strong>
+                <div class="muted">${escapeHtml(item.companyName ?? "n/a")}</div>
+              </div>
+            </div>
+          </td>
+          <td>${escapeHtml(item.companyName ?? "n/a")}</td>
+          <td>${formatMoney(item.price)}</td>
+          <td class="${tone(item.changePercent)}">${formatPercent(item.changePercent)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderCompanyMapHolders(items) {
+  if (!items.length) {
+    return `<tr><td colspan="3" class="muted">No public holder rows are available.</td></tr>`;
+  }
+
+  return items
+    .map(
+      (holder, index) => `
+        <tr class="intel-row">
+          <td>
+            <div class="holder-cell">
+              <span class="table-rank">${String(index + 1).padStart(2, "0")}</span>
+              <div>
+                <strong>${escapeHtml(holder.holder ?? "n/a")}</strong>
+                <div class="muted">ownership filing</div>
+              </div>
+            </div>
+          </td>
+          <td>${formatPercentScaled(holder.pctHeld)}</td>
+          <td>${formatCompact(holder.shares)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderCompanyMapBoard(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No public officer or board rows are available.");
+  }
+
+  return items
+    .map(
+      (item) => renderIntelListItem(
+        item.title ?? "Officer",
+        item.name ?? "n/a",
+        item.totalPay != null ? `Comp ${formatMoney(item.totalPay)}` : item.age != null ? `Age ${item.age}` : "Public company officer listing",
+      ),
+    )
+    .join("");
+}
+
+function renderCompanyMapInsiders(holders, transactions) {
+  const rows = [
+    ...(holders ?? []).map((item) =>
+      renderIntelListItem(
+        item.relation ?? "Insider holder",
+        item.name ?? "n/a",
+        item.positionDirect != null ? `Direct ${formatCompact(item.positionDirect)} shares` : "Public insider holding",
+      ),
+    ),
+    ...(transactions ?? []).slice(0, 6).map((item) =>
+      renderIntelListItem(
+        item.position ?? "Insider trade",
+        item.insider ?? "n/a",
+        item.transactionText ?? item.ownership ?? "Public insider transaction",
+      ),
+    ),
+  ];
+
+  return rows.join("") || renderIntelEmpty("No insider holdings or transaction rows are available.");
 }
 
 function filterCalendarEvents(events, { filter = "all", windowDays = 30 } = {}) {

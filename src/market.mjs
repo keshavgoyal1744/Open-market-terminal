@@ -3,6 +3,7 @@ import { getCuratedIntelligence, listSupportedIntelligenceSymbols } from "./inte
 import { getMacroSnapshot } from "./providers/bls.mjs";
 import { getMacroCalendar, getNasdaqEarningsCalendar } from "./providers/calendar.mjs";
 import { getOrderBook, getTicker } from "./providers/coinbase.mjs";
+import { getMajorIndexMemberships } from "./providers/indices.mjs";
 import { getMarketNews } from "./providers/news.mjs";
 import { getCompanySnapshot } from "./providers/sec.mjs";
 import { getSp500Universe } from "./providers/sp500.mjs";
@@ -439,6 +440,64 @@ export class MarketDataService {
         items: await getMarketNews({ symbols: universe, focusSymbol, query: cleanQuery || null }),
       }),
       { ttlMs: config.newsTtlMs, staleMs: config.newsTtlMs * 2 },
+    );
+  }
+
+  async getCompanyMap(symbol) {
+    const upper = String(symbol ?? "").trim().toUpperCase();
+    return this.cache.getOrSet(
+      `company-map:${upper}`,
+      async () => {
+        const [[quote], company, intel, indexMemberships] = await Promise.all([
+          this.getQuotes([upper]).catch(() => [null]),
+          this.getCompany(upper).catch((error) => ({
+            symbol: upper,
+            sec: emptySecSnapshot(upper, error),
+            market: emptyMarketOverview(upper, upper, error),
+            warnings: [error.message],
+          })),
+          this.getRelationshipIntel(upper).catch(() => emptyCompanyMapIntel(upper)),
+          getMajorIndexMemberships(upper).catch(() => []),
+        ]);
+
+        const holders = dedupeHolders([
+          ...(company.market.topInstitutionalHolders ?? []),
+          ...(company.market.topFundHolders ?? []),
+        ]).slice(0, 16);
+
+        return {
+          symbol: upper,
+          companyName: company.market.shortName ?? company.sec.title ?? upper,
+          quote: quote ?? null,
+          market: {
+            sector: company.market.sector ?? null,
+            industry: company.market.industry ?? null,
+            website: company.market.website ?? null,
+            marketCap: company.market.marketCap ?? quote?.marketCap ?? null,
+            analystRating: company.market.analystRating ?? null,
+          },
+          summary: intel.summary ?? company.market.businessSummary ?? null,
+          coverage: {
+            curated: Boolean(intel.coverage?.curated),
+            notes: [...new Set([...(intel.coverage?.notes ?? []), ...(company.warnings ?? [])])].slice(0, 8),
+          },
+          indices: indexMemberships,
+          suppliers: normalizeMapRelations(intel.supplyChain?.suppliers ?? []),
+          customers: normalizeMapCustomers(intel),
+          competitors: normalizeCompetitors(intel.competitors ?? []),
+          holders,
+          board: (company.market.companyOfficers ?? []).slice(0, 16),
+          insiderHolders: (company.market.insiderHolders ?? []).slice(0, 12),
+          insiderTransactions: (company.market.insiderTransactions ?? []).slice(0, 12),
+          corporate: {
+            tree: intel.corporate?.tree ?? [],
+            relations: normalizeMapRelations(intel.corporate?.relations ?? []),
+          },
+          graph: intel.graph ?? { nodes: [], edges: [] },
+          geography: intel.geography ?? { revenueMix: [], manufacturing: [], supplyRegions: [] },
+        };
+      },
+      { ttlMs: config.companyTtlMs, staleMs: config.companyTtlMs * 2 },
     );
   }
 
@@ -1188,6 +1247,83 @@ function buildDerivedRelationshipIntel(symbol, company) {
       edges: graphEdges,
     },
   };
+}
+
+function emptyCompanyMapIntel(symbol) {
+  return {
+    symbol,
+    summary: null,
+    coverage: { curated: false, notes: [] },
+    supplyChain: { suppliers: [], customers: [], ecosystem: [] },
+    customerConcentration: [],
+    competitors: [],
+    corporate: { tree: [], relations: [] },
+    graph: { nodes: [{ id: symbol, label: symbol, kind: "issuer", symbol }], edges: [] },
+    geography: { revenueMix: [], manufacturing: [], supplyRegions: [] },
+  };
+}
+
+function normalizeMapRelations(items = []) {
+  return items.map((item) => ({
+    target: item.target ?? item.name ?? "n/a",
+    relation: item.relation ?? item.level ?? "related",
+    label: item.label ?? item.commentary ?? item.description ?? "",
+    domain: item.domain ?? "ecosystem",
+    symbol: item.symbol ?? inferTickerFromText(item.target ?? item.name ?? ""),
+  }));
+}
+
+function normalizeMapCustomers(intel) {
+  const concentrationRows = (intel.customerConcentration ?? []).map((item) => ({
+    target: item.name ?? "Customer / end market",
+    relation: item.level ?? "customer mix",
+    label: item.commentary ?? item.description ?? "",
+    domain: "customer",
+    symbol: inferTickerFromText(item.name ?? ""),
+  }));
+
+  return dedupeRelations([
+    ...concentrationRows,
+    ...normalizeMapRelations(intel.supplyChain?.customers ?? []),
+  ]);
+}
+
+function normalizeCompetitors(items = []) {
+  return items.map((item) => ({
+    symbol: item.symbol ?? inferTickerFromText(item.companyName ?? ""),
+    companyName: item.companyName ?? item.symbol ?? "n/a",
+    price: item.price ?? null,
+    changePercent: item.changePercent ?? null,
+  }));
+}
+
+function dedupeHolders(items = []) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = String(item?.holder ?? "").trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function dedupeRelations(items = []) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = `${String(item?.target ?? "").trim().toLowerCase()}:${String(item?.relation ?? "").trim().toLowerCase()}`;
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function inferTickerFromText(value) {
+  const text = String(value ?? "").trim().toUpperCase();
+  return /^[A-Z0-9.\-]{1,5}$/.test(text) ? text.replace(/\./g, "-") : null;
 }
 
 function roundTo(value, decimals) {

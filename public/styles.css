@@ -1758,6 +1758,10 @@ button:hover {
   grid-column: 1 / -1;
 }
 
+#dashboardGrid[data-page="map"] #section-company-map {
+  grid-column: 1 / -1;
+}
+
 #dashboardGrid[data-page="news"] #section-news {
   grid-column: 1 / -1;
 }
@@ -2199,6 +2203,21 @@ button:hover {
   display: grid;
   gap: 10px;
   padding: 10px;
+}
+
+.company-map-shell {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 10px;
+  padding: 10px;
+}
+
+.company-map-hero-panel {
+  align-content: start;
+}
+
+.company-map-link.has-symbol {
+  cursor: pointer;
 }
 
 .sector-board-tiles {
@@ -3523,7 +3542,8 @@ th {
   .heatmap-context-grid,
   .earnings-drawer-grid,
   .sector-board-shell,
-  .calendar-day-grid {
+  .calendar-day-grid,
+  .company-map-shell {
     grid-template-columns: 1fr;
   }
 
