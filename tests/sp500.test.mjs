@@ -138,6 +138,54 @@ test("S&P 500 universe backfills missing workbook sectors from wikipedia and nor
   assert.equal(payload.constituents.find((item) => item.symbol === "JPM")?.sector, "Financial Services");
 });
 
+test("S&P 500 universe treats placeholder sector values as missing and backfills them", async (context) => {
+  const originalFetch = global.fetch;
+  context.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  const workbookRows = [["Ticker", "Name", "Sector", "Weight"], ["XOM", "Exxon Mobil", "-", "1.1"], ["CVX", "Chevron", "-", "0.6"]];
+  for (let index = 0; index < 399; index += 1) {
+    workbookRows.push([`X${String(index).padStart(3, "0")}`, `Company ${index}`, "-", "0.01"]);
+  }
+
+  global.fetch = async (url) => {
+    const href = url.toString();
+    if (href.endsWith(".xlsx")) {
+      return workbookResponse(buildWorkbookXml({
+        rows: workbookRows,
+      }));
+    }
+    if (href.includes("List_of_S%26P_500_companies")) {
+      return textResponse(200, `
+        <table id="constituents">
+          <tr>
+            <th>Symbol</th>
+            <th>Security</th>
+            <th>GICS Sector</th>
+          </tr>
+          <tr>
+            <td>XOM</td>
+            <td>Exxon Mobil</td>
+            <td>Energy</td>
+          </tr>
+          <tr>
+            <td>CVX</td>
+            <td>Chevron</td>
+            <td>Energy</td>
+          </tr>
+        </table>
+      `);
+    }
+    throw new Error(`Unexpected URL: ${href}`);
+  };
+
+  const payload = await getSp500Universe();
+
+  assert.equal(payload.constituents.find((item) => item.symbol === "XOM")?.sector, "Energy");
+  assert.equal(payload.constituents.find((item) => item.symbol === "CVX")?.sector, "Energy");
+});
+
 function textResponse(status, payload) {
   return {
     ok: status >= 200 && status < 300,

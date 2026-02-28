@@ -320,7 +320,7 @@ function applySectorBackfill(primary, fallback) {
 
 function canonicalSectorLabel(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
-  if (!normalized) {
+  if (!normalized || ["-", "—", "n/a", "na", "none", "null", "undefined"].includes(normalized)) {
     return null;
   }
 
