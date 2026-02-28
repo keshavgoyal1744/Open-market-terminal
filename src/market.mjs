@@ -956,8 +956,8 @@ export class MarketDataService {
         const availableSectors = heatmap.sectors ?? [];
         const matchedSector =
           resolveSectorName(requested, availableSectors)
-          ?? requested
           ?? availableSectors[0]?.sector
+          ?? requested
           ?? "Technology";
         const items = (heatmap.tiles ?? [])
           .filter((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(matchedSector))

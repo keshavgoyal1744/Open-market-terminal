@@ -1889,6 +1889,11 @@ button:hover {
   grid-column: span 5;
 }
 
+#dashboardGrid[data-page="overview"] #section-flow .watchlist-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
 #dashboardGrid[data-page="overview"] #section-market-events .calendar-list,
 #dashboardGrid[data-page="overview"] #section-watchlist .terminal-table-wrap,
 #dashboardGrid[data-page="overview"] #section-flow .terminal-table-wrap {
@@ -2711,6 +2716,11 @@ button:hover {
   gap: 10px;
   padding: 10px;
   align-items: start;
+}
+
+.panel-quote-monitor #quoteMonitorSummary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .quote-monitor-hero {

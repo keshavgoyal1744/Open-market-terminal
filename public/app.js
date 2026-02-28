@@ -4677,7 +4677,6 @@ function renderSectorBoardTiles(items) {
 
   const totalWeight = sum(items.map((item) => item.weight)) ?? 1;
   return items
-    .slice(0, 20)
     .map((item) => {
       const relativeWeight = Number.isFinite(item.weight) ? item.weight / totalWeight : 0.03;
       const span = relativeWeight >= 0.16 ? 3 : relativeWeight >= 0.08 ? 2 : 1;
