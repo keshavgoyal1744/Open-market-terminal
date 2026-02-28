@@ -2805,7 +2805,7 @@ function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFo
     .map((item) => (typeof item === "string" ? { sector: item, weight: 0 } : item))
     .filter((item) => item?.sector);
   const ordered = [...weighted]
-    .sort((left, right) => (numeric(right.weight) ?? 0) - (numeric(left.weight) ?? 0))
+    .sort((left, right) => (Number(right.weight) || 0) - (Number(left.weight) || 0))
     .map((item) => item.sector)
     .concat(DEFAULT_SECTORS)
     .filter((sector, index, list) => list.findIndex((candidate) => normalizeSectorKey(candidate) === normalizeSectorKey(sector)) === index);
@@ -2819,7 +2819,11 @@ function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFo
     return;
   }
   select.disabled = false;
-  const preferred = selectedSector && ordered.includes(selectedSector) ? selectedSector : ordered[0] ?? selectedSector ?? "Technology";
+  const preferred =
+    ordered.find((sector) => normalizeSectorKey(sector) === normalizeSectorKey(selectedSector))
+    ?? ordered[0]
+    ?? selectedSector
+    ?? "Technology";
   select.innerHTML = ordered
     .map((sector) => `<option value="${escapeHtml(sector)}">${escapeHtml(sector)}</option>`)
     .join("");
@@ -3447,6 +3451,9 @@ async function selectSectorFocus(sector, options = {}) {
 
   state.preferences.sectorFocus = clean;
   state.sectorBoardPage = 1;
+  if (document.querySelector("#sectorBoardSelect")) {
+    document.querySelector("#sectorBoardSelect").value = clean;
+  }
   schedulePreferenceSync();
   if (options.page) {
     setActivePage(options.page, { scroll: false });
