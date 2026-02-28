@@ -1881,6 +1881,11 @@ button:hover {
   grid-column: 1 / -1;
 }
 
+#dashboardGrid[data-page="overview"] #section-heatmap #heatmapSummary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
 #dashboardGrid[data-page="overview"] #section-watchlist {
   grid-column: span 7;
 }
@@ -1905,12 +1910,22 @@ button:hover {
   grid-column: 1 / -1;
 }
 
+#dashboardGrid[data-page="calendar"] #section-calendar #calendarSummary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
 #dashboardGrid[data-page="map"] #section-company-map {
   grid-column: 1 / -1;
 }
 
 #dashboardGrid[data-page="news"] #section-news {
   grid-column: 1 / -1;
+}
+
+#dashboardGrid[data-page="news"] #section-news #newsSummary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
 }
 
 #dashboardGrid[data-page="sectors"] #section-sector-board {
