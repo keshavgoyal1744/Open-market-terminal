@@ -2842,6 +2842,19 @@ function normalizeSectorKey(value) {
     .trim();
 }
 
+function sanitizeSectorFocus(value, sectors = DEFAULT_SECTORS) {
+  const clean = String(value ?? "").trim();
+  if (!clean || clean === "-") {
+    return (Array.isArray(sectors) && sectors[0]) || DEFAULT_SECTORS[0];
+  }
+
+  const sectorNames = (Array.isArray(sectors) ? sectors : [])
+    .map((item) => (typeof item === "string" ? item : item?.sector))
+    .filter(Boolean);
+  const match = sectorNames.find((sector) => normalizeSectorKey(sector) === normalizeSectorKey(clean));
+  return match ?? clean;
+}
+
 function resolveSectorBoardSector(payload) {
   const sectors = [
     ...(payload?.sectors ?? []).map((item) => (typeof item === "string" ? item : item?.sector)).filter(Boolean),
@@ -2852,9 +2865,9 @@ function resolveSectorBoardSector(payload) {
     (sector, index) => sectors.findIndex((candidate) => normalizeSectorKey(candidate) === normalizeSectorKey(sector)) === index,
   );
   const candidates = [
-    payload?.sector,
-    state.preferences.sectorFocus,
-    document.querySelector("#sectorBoardSelect")?.value,
+    sanitizeSectorFocus(payload?.sector, uniqueSectors),
+    sanitizeSectorFocus(state.preferences.sectorFocus, uniqueSectors),
+    sanitizeSectorFocus(document.querySelector("#sectorBoardSelect")?.value, uniqueSectors),
     uniqueSectors[0],
     DEFAULT_SECTORS[0],
   ].filter(Boolean);
@@ -3276,7 +3289,11 @@ function applyPreferencesToInputs() {
   }
   document.querySelector("#newsFocusInput").value = state.preferences.newsFocus ?? "";
   if (document.querySelector("#sectorBoardSelect")) {
-    document.querySelector("#sectorBoardSelect").value = state.preferences.sectorFocus ?? "";
+    const sectorSelect = document.querySelector("#sectorBoardSelect");
+    const sectorOptions = [...sectorSelect.options].map((option) => option.value);
+    const normalizedSector = sanitizeSectorFocus(state.preferences.sectorFocus, sectorOptions);
+    state.preferences.sectorFocus = normalizedSector;
+    sectorSelect.value = normalizedSector;
   }
   document.querySelector("#historyRange").value = state.currentHistoryRange;
   document.querySelector("#screenSymbols").value = state.preferences.screenConfig.symbols;
@@ -3444,7 +3461,7 @@ async function selectDetailSymbol(symbol, options = {}) {
 }
 
 async function selectSectorFocus(sector, options = {}) {
-  const clean = String(sector ?? "").trim();
+  const clean = sanitizeSectorFocus(sector, [...(state.sectorBoard?.sectors ?? []), ...(state.heatmap?.sectors ?? []), ...DEFAULT_SECTORS]);
   if (!clean) {
     return;
   }
@@ -6193,6 +6210,7 @@ function secFact(label, factPayload) {
 }
 
 function mergePreferences(preferences) {
+  const normalizedSectorFocus = sanitizeSectorFocus(preferences?.sectorFocus, DEFAULT_SECTORS);
   return {
     ...DEFAULT_PREFERENCES,
     ...preferences,
@@ -6214,7 +6232,7 @@ function mergePreferences(preferences) {
       ? preferences.terminalHotkeys.map((entry) => String(entry ?? "").trim()).filter(Boolean).slice(0, 8)
       : [...DEFAULT_PREFERENCES.terminalHotkeys],
     newsFocus: typeof preferences?.newsFocus === "string" ? preferences.newsFocus : "",
-    sectorFocus: typeof preferences?.sectorFocus === "string" ? preferences.sectorFocus : DEFAULT_PREFERENCES.sectorFocus,
+    sectorFocus: normalizedSectorFocus,
     activePage: normalizePage(preferences?.activePage),
     panelLayout: normalizePanelLayout(preferences?.panelLayout),
     panelSizes: normalizePanelSizes(preferences?.panelSizes),
