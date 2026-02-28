@@ -21,6 +21,7 @@
           <button type="button" class="topbar-nav-btn" data-page="map">Map</button>
           <button type="button" class="topbar-nav-btn" data-page="quote">Quote</button>
           <button type="button" class="topbar-nav-btn" data-page="news">News</button>
+          <button type="button" class="topbar-nav-btn" data-page="ai">AI</button>
           <button type="button" class="topbar-nav-btn" data-page="research">Research</button>
           <button type="button" class="topbar-nav-btn" data-page="ops">Ops</button>
         </nav>
@@ -108,7 +109,7 @@
           <div class="signal-log">
             <div class="signal-row"><span>ROUTING</span><strong>Ctrl/⌘ + K opens the terminal palette</strong></div>
             <div class="signal-row"><span>SYMBOLS</span><strong>[ and ] cycle through watchlist names</strong></div>
-            <div class="signal-row"><span>PAGES</span><strong>Markets, Boards, Sectors, Calendar, Map, Quote, News, Research, and Ops split the desk into cleaner views</strong></div>
+            <div class="signal-row"><span>PAGES</span><strong>Markets, Boards, Sectors, Calendar, Map, Quote, News, AI, Research, and Ops split the desk into cleaner views</strong></div>
           </div>
         </div>
         <aside class="auth-card control-card">
@@ -1020,6 +1021,57 @@
           <div id="newsList" class="news-list"></div>
         </section>
 
+        <section id="section-ai-lab" class="panel panel-wide panel-ai-lab">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">AI Lab</p>
+              <h2>Hosted idea engine with Gemini primary and Groq fallback</h2>
+            </div>
+            <div class="workbench-header-actions">
+              <form id="aiLabForm" class="inline-form compact-inline-form">
+                <select id="aiUniverseSelect">
+                  <option value="sp500">S&amp;P 500</option>
+                </select>
+                <select id="aiHorizonSelect">
+                  <option value="1-4w">1-4 weeks</option>
+                </select>
+                <button type="submit">Run</button>
+              </form>
+              <button id="refreshAiLabButton" type="button" class="secondary">Refresh</button>
+            </div>
+          </div>
+          <div id="aiLabSummary" class="watchlist-summary-grid"></div>
+          <div id="aiLabWarnings" class="panel-status-strip"></div>
+          <div class="ai-lab-shell">
+            <article class="subpanel ai-lab-context">
+              <div class="subpanel-header">
+                <h3>Market Frame</h3>
+                <div id="aiLabProviderMeta" class="muted">Gemini primary · Groq fallback</div>
+              </div>
+              <div id="aiLabMarketView" class="list-stack"></div>
+              <div class="subpanel-header">
+                <h3>Monitor</h3>
+                <div class="muted">watch items and risks</div>
+              </div>
+              <div id="aiLabMonitor" class="list-stack"></div>
+            </article>
+            <article class="subpanel ai-lab-column">
+              <div class="subpanel-header">
+                <h3>Top 20 Bullish</h3>
+                <div class="muted">1-4 week long ideas</div>
+              </div>
+              <div id="aiLabBullishList" class="ai-idea-list"></div>
+            </article>
+            <article class="subpanel ai-lab-column">
+              <div class="subpanel-header">
+                <h3>Top 20 Bearish</h3>
+                <div class="muted">1-4 week downside ideas</div>
+              </div>
+              <div id="aiLabBearishList" class="ai-idea-list"></div>
+            </article>
+          </div>
+        </section>
+
         <section id="section-portfolio" class="panel">
           <div class="panel-header">
             <div>
@@ -1220,8 +1272,9 @@
               This build currently integrates public-source market and reference data from Yahoo Finance public
               endpoints, SEC EDGAR and data.sec.gov, the U.S. Treasury daily yield curve page, the BLS public API and
               BLS release calendar, Federal Reserve FOMC calendars, Nasdaq earnings and index reference pages,
-              Coinbase Exchange public market data, State Street SPY holdings, Google News RSS, and Wikipedia
-              constituent fallbacks for S&amp;P 500 / Nasdaq-100 / Dow 30 membership.
+              Coinbase Exchange public market data, State Street SPY holdings, Google News RSS, Wikipedia
+              constituent fallbacks for S&amp;P 500 / Nasdaq-100 / Dow 30 membership, and optional hosted AI analysis
+              through the Gemini API and Groq when those keys are configured by the operator.
             </p>
           </div>
           <div>

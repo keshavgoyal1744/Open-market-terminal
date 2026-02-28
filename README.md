@@ -8,7 +8,7 @@ The app is not a Bloomberg replacement in data rights, speed, or global propriet
 
 The current build includes:
 
-- A multi-page market desk with dedicated views for `Markets`, `Boards`, `Sectors`, `Calendar`, `Map`, `Quote`, `News`, `Research`, and `Ops`
+- A multi-page market desk with dedicated views for `Markets`, `Boards`, `Sectors`, `Calendar`, `Map`, `Quote`, `News`, `AI`, `Research`, and `Ops`
 - A terminal command bar with symbol-first commands and page routing
 - S&P 500 heatmap / sector-board workflows
 - A security workbench with price history, filings, company facts, options snapshots, and earnings/issuer intel
@@ -16,6 +16,7 @@ The current build includes:
 - A company-map page with supplier/customer views, board context, holders, geography, interlocks, and index membership
 - A quote-monitor page with chart, filings, options, holders, peers, news, and event timeline windows
 - News, calendar, and market-event pages built from public feeds
+- An `AI` page that ranks `20 bullish` and `20 bearish` S&P 500 names for a `1-4 week` horizon and can use Gemini with Groq fallback for hosted reasoning
 - Watchlists, portfolio state, alerts, workspaces, notes, and activity history
 - Live crypto ticker / order-book surfaces from Coinbase public endpoints
 - A dark terminal-style UI with draggable/resizable desk panels and saved layout state
@@ -79,6 +80,15 @@ The current build includes:
 - Query / ticker-specific search
 - Source-linked newswire layout
 
+### `AI`
+
+- Hosted AI-assisted long / short idea board
+- S&P 500-only universe
+- `20 bullish` and `20 bearish` names
+- `1-4 week` horizon
+- Gemini primary with Groq fallback when keys are configured
+- Deterministic rules-based fallback when hosted AI is unavailable
+
 ### `Research`
 
 - Research rail
@@ -134,6 +144,10 @@ This build uses public or free-to-access data paths already integrated into the 
   - primary S&P 500 universe input
 - Google News RSS
   - public market/news search feeds used by the news and sector headline surfaces
+- Gemini API
+  - optional hosted reasoning for the AI page
+- Groq
+  - optional hosted fallback reasoning for the AI page
 - Wikipedia constituent fallbacks
   - S&P 500 companies
   - Nasdaq-100
@@ -161,6 +175,10 @@ This build uses public or free-to-access data paths already integrated into the 
   - Coinbase Exchange REST and websocket market data
 - `Newswire / sector headlines`
   - Google News RSS search feeds
+- `AI bullish / bearish idea page`
+  - S&P 500 live universe from the heatmap / quote stack
+  - macro / yield-curve context from BLS and Treasury inputs
+  - optional hosted reasoning via Gemini and Groq
 
 ### Important Note On Attribution
 
@@ -260,6 +278,14 @@ The most important environment values are:
   - JSON storage location
 - `SMTP_*` or `SENDMAIL_PATH`
   - optional, only needed for email notifications
+- `GEMINI_API_KEY` or `GOOGLE_API_KEY`
+  - optional, enables Gemini on the AI page
+- `GROQ_API_KEY`
+  - optional, enables Groq fallback on the AI page
+- `AI_PRIMARY_PROVIDER` / `AI_FALLBACK_PROVIDER`
+  - optional, default to `gemini` then `groq`
+- `AI_GEMINI_MODEL` / `AI_GROQ_MODEL`
+  - optional hosted-model overrides
 
 See:
 

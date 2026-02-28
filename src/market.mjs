@@ -1,6 +1,7 @@
 import { config } from "./config.mjs";
 import { getCuratedIntelligence, listSupportedIntelligenceSymbols } from "./intelligence-graph.mjs";
 import { getMacroSnapshot } from "./providers/bls.mjs";
+import { generateHostedIdeas, hostedAiProviderStatus } from "./providers/ai.mjs";
 import { getMacroCalendar, getNasdaqEarningsCalendar } from "./providers/calendar.mjs";
 import { getOrderBook, getTicker } from "./providers/coinbase.mjs";
 import { getMajorIndexMemberships } from "./providers/indices.mjs";
@@ -808,6 +809,131 @@ export class MarketDataService {
         };
       },
       { ttlMs: config.quoteTtlMs * 3, staleMs: config.quoteTtlMs * 8 },
+    );
+  }
+
+  async getAiIdeas(options = {}) {
+    const universe = normalizeAiUniverse(options.universe);
+    const horizon = normalizeAiHorizon(options.horizon);
+    const bullishCount = clampAiIdeaCount(options.bullishCount, 20);
+    const bearishCount = clampAiIdeaCount(options.bearishCount, 20);
+    const providerStatus = hostedAiProviderStatus();
+
+    return this.cache.getOrSet(
+      `ai-ideas:${universe}:${horizon}:${bullishCount}:${bearishCount}`,
+      async () => {
+        const [heatmap, pulse, macro, yieldCurve] = await Promise.all([
+          this.getSp500Heatmap(),
+          this.getMarketPulse().catch(() => ({ cards: [], leaders: [], laggards: [] })),
+          this.getMacro().catch(() => ({ cards: [], highlights: [] })),
+          this.getYieldCurve().catch(() => ({ asOf: null, points: [] })),
+        ]);
+
+        const candidateUniverse = buildAiCandidateUniverse(heatmap);
+        const bullishSeeds = selectAiCandidates(candidateUniverse, "bullishScore", bullishCount);
+        const bearishSeeds = selectAiCandidates(candidateUniverse, "bearishScore", bearishCount);
+        const selectedSymbols = [...new Set([...bullishSeeds, ...bearishSeeds].map((item) => item.symbol))];
+        const tileMap = new Map((heatmap.tiles ?? []).map((item) => [item.symbol, item]));
+        const sectorPeerMap = buildSectorPeerMap(heatmap.tiles ?? []);
+
+        const candidateDetails = await Promise.all(
+          selectedSymbols.map(async (symbol) => {
+            const tile = tileMap.get(symbol);
+            const sectorPeers = (sectorPeerMap.get(normalizeSectorKey(tile?.sector)) ?? [])
+              .filter((peer) => peer !== symbol)
+              .slice(0, 6);
+
+            const [company, earnings, history] = await Promise.all([
+              this.getCompany(symbol).catch((error) => ({
+                symbol,
+                sec: emptySecSnapshot(symbol, error),
+                market: emptyMarketOverview(symbol, symbol, error),
+                warnings: [error.message],
+              })),
+              this.getEarningsIntel(symbol, sectorPeers).catch(() => emptyEarningsIntel(symbol)),
+              this.getHistory(symbol, "1mo", "1d").catch(() => []),
+            ]);
+
+            return buildAiIdeaEvidence({
+              symbol,
+              tile,
+              company,
+              earnings,
+              history,
+              sectorSummary: (heatmap.sectors ?? []).find((entry) => normalizeSectorKey(entry.sector) === normalizeSectorKey(tile?.sector)),
+            });
+          }),
+        );
+
+        const detailMap = new Map(candidateDetails.map((item) => [item.symbol, item]));
+        const bullishCandidates = bullishSeeds.map((item) => detailMap.get(item.symbol)).filter(Boolean);
+        const bearishCandidates = bearishSeeds.map((item) => detailMap.get(item.symbol)).filter(Boolean);
+        const context = buildAiMarketContext({ heatmap, pulse, macro, yieldCurve, horizon });
+
+        let hostedResult = null;
+        const warnings = [];
+        if (providerStatus.gemini || providerStatus.groq) {
+          try {
+            hostedResult = await generateHostedIdeas({
+              prompt: buildAiPrompt({
+                horizon,
+                context,
+                bullishCandidates,
+                bearishCandidates,
+                bullishCount,
+                bearishCount,
+              }),
+              primaryProvider: providerStatus.primary,
+              fallbackProvider: providerStatus.fallback,
+            });
+          } catch (error) {
+            warnings.push(`Hosted AI unavailable: ${error.message}`);
+          }
+        } else {
+          warnings.push("Hosted AI keys not configured. Showing deterministic ranked output.");
+        }
+
+        const normalized = hostedResult?.parsed
+          ? normalizeAiIdeasOutput(
+              hostedResult.parsed,
+              { bullishCandidates, bearishCandidates, context },
+              { bullishCount, bearishCount },
+            )
+          : buildDeterministicAiIdeas(
+              { bullishCandidates, bearishCandidates, context },
+              { bullishCount, bearishCount },
+              warnings[0] ?? "Hosted AI unavailable.",
+            );
+
+        return {
+          asOf: new Date().toISOString(),
+          universe: universe === "sp500" ? "S&P 500" : universe.toUpperCase(),
+          horizon: horizon === "1-4w" ? "1-4 weeks" : horizon,
+          provider: {
+            primary: providerStatus.primary ?? null,
+            fallback: providerStatus.fallback ?? null,
+            used: hostedResult?.provider ?? "rules",
+            model: hostedResult?.model ?? null,
+            hostedAvailable: providerStatus.gemini || providerStatus.groq,
+          },
+          coverage: {
+            constituents: heatmap.coverage?.constituents ?? 0,
+            quoted: heatmap.coverage?.quoted ?? 0,
+            sectors: heatmap.coverage?.sectors ?? 0,
+          },
+          summary: {
+            bullish: normalized.bullish.length,
+            bearish: normalized.bearish.length,
+            regime: normalized.marketView.summary,
+            monitor: normalized.marketView.monitor?.length ?? 0,
+          },
+          marketView: normalized.marketView,
+          bullish: normalized.bullish,
+          bearish: normalized.bearish,
+          warnings: [...(heatmap.warnings ?? []), ...warnings, ...(normalized.warnings ?? [])].filter(Boolean).slice(0, 8),
+        };
+      },
+      { ttlMs: config.aiTtlMs, staleMs: config.aiTtlMs * 2, force: Boolean(options.force) },
     );
   }
 
@@ -2762,4 +2888,446 @@ function formatShortDate(value) {
     return "n/a";
   }
   return new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function normalizeAiUniverse(value) {
+  return String(value ?? "").trim().toLowerCase() === "sp500" ? "sp500" : "sp500";
+}
+
+function normalizeAiHorizon(value) {
+  return String(value ?? "").trim().toLowerCase() === "1-4w" ? "1-4w" : "1-4w";
+}
+
+function clampAiIdeaCount(value, fallback = 20) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(Math.max(Math.round(parsed), 5), 20);
+}
+
+function buildAiCandidateUniverse(heatmap) {
+  const tiles = (heatmap?.tiles ?? []).filter(
+    (item) => item?.symbol && Number.isFinite(item?.price) && Number.isFinite(item?.changePercent),
+  );
+  const sectorMap = new Map((heatmap?.sectors ?? []).map((item) => [normalizeSectorKey(item.sector), item]));
+  const moveValues = tiles.map((item) => numeric(item.changePercent)).filter(Number.isFinite);
+  const weightValues = tiles.map((item) => numeric(item.weight)).filter(Number.isFinite);
+  const volumeValues = tiles.map((item) => numeric(item.volume)).filter(Number.isFinite);
+  const sectorMoveValues = (heatmap?.sectors ?? []).map((item) => numeric(item.averageMove)).filter(Number.isFinite);
+
+  return tiles.map((item) => {
+    const sectorSummary = sectorMap.get(normalizeSectorKey(item.sector)) ?? null;
+    const sectorAverageMove = numeric(sectorSummary?.averageMove) ?? 0;
+    const moveRank = percentileRank(moveValues, numeric(item.changePercent));
+    const sectorRank = percentileRank(sectorMoveValues, sectorAverageMove);
+    const weightRank = percentileRank(weightValues, numeric(item.weight));
+    const volumeRank = percentileRank(volumeValues, numeric(item.volume));
+
+    return {
+      ...item,
+      sectorAverageMove,
+      bullishScore: moveRank * 0.6 + sectorRank * 0.25 + weightRank * 0.1 + volumeRank * 0.05,
+      bearishScore: (1 - moveRank) * 0.6 + (1 - sectorRank) * 0.25 + weightRank * 0.1 + volumeRank * 0.05,
+    };
+  });
+}
+
+function percentileRank(values, target) {
+  const valid = values.filter(Number.isFinite).sort((left, right) => left - right);
+  if (!valid.length || !Number.isFinite(target)) {
+    return 0.5;
+  }
+  let index = 0;
+  while (index < valid.length && valid[index] <= target) {
+    index += 1;
+  }
+  if (valid.length === 1) {
+    return 1;
+  }
+  return (index - 1) / (valid.length - 1);
+}
+
+function selectAiCandidates(candidates, scoreKey, limit) {
+  const sorted = [...candidates].sort((left, right) => (numeric(right?.[scoreKey]) ?? 0) - (numeric(left?.[scoreKey]) ?? 0));
+  const sectorCounts = new Map();
+  const selected = [];
+
+  for (const item of sorted) {
+    const sectorKey = normalizeSectorKey(item.sector) || "unclassified";
+    const currentCount = sectorCounts.get(sectorKey) ?? 0;
+    if (currentCount >= 5) {
+      continue;
+    }
+    selected.push(item);
+    sectorCounts.set(sectorKey, currentCount + 1);
+    if (selected.length >= limit) {
+      return selected;
+    }
+  }
+
+  for (const item of sorted) {
+    if (selected.some((entry) => entry.symbol === item.symbol)) {
+      continue;
+    }
+    selected.push(item);
+    if (selected.length >= limit) {
+      break;
+    }
+  }
+
+  return selected.slice(0, limit);
+}
+
+function buildSectorPeerMap(tiles = []) {
+  const map = new Map();
+  for (const tile of tiles) {
+    const key = normalizeSectorKey(tile?.sector);
+    if (!key) {
+      continue;
+    }
+    const bucket = map.get(key) ?? [];
+    bucket.push(tile.symbol);
+    map.set(key, bucket);
+  }
+  return map;
+}
+
+function buildAiIdeaEvidence({ symbol, tile, company, earnings, history, sectorSummary }) {
+  const closes = (history ?? []).map((point) => numeric(point.close)).filter(Number.isFinite);
+  const firstClose = closes[0] ?? null;
+  const lastClose = closes.at(-1) ?? null;
+  const oneMonthChange =
+    Number.isFinite(firstClose) && Number.isFinite(lastClose) && firstClose > 0
+      ? ((lastClose - firstClose) / firstClose) * 100
+      : null;
+  const latestFiling = company?.sec?.filings?.[0] ?? null;
+
+  return {
+    symbol,
+    name: tile?.name ?? company?.market?.shortName ?? company?.sec?.title ?? symbol,
+    sector: company?.market?.sector ?? tile?.sector ?? "Unclassified",
+    industry: company?.market?.industry ?? null,
+    price: tile?.price ?? null,
+    dayChangePercent: tile?.changePercent ?? null,
+    oneMonthChange,
+    sectorAverageMove: numeric(sectorSummary?.averageMove),
+    sectorWeight: numeric(sectorSummary?.weight),
+    marketCap: company?.market?.marketCap ?? tile?.marketCap ?? null,
+    volume: tile?.volume ?? null,
+    weight: tile?.weight ?? null,
+    analystRating: company?.market?.analystRating ?? earnings?.estimates?.recommendation ?? null,
+    trailingPe: company?.market?.trailingPe ?? null,
+    forwardPe: company?.market?.forwardPe ?? null,
+    shortRatio: company?.market?.shortRatio ?? null,
+    earningsWindow: {
+      start: earnings?.earningsWindow?.start ?? null,
+      end: earnings?.earningsWindow?.end ?? null,
+    },
+    latestFiling: latestFiling
+      ? {
+          form: latestFiling.form ?? null,
+          filingDate: latestFiling.filingDate ?? null,
+        }
+      : null,
+    summary: truncateText(company?.market?.businessSummary ?? "", 180),
+    warnings: [...(company?.warnings ?? [])].slice(0, 2),
+  };
+}
+
+function buildAiMarketContext({ heatmap, pulse, macro, yieldCurve, horizon }) {
+  const sectorLeaders = [...(heatmap?.sectors ?? [])]
+    .filter((item) => Number.isFinite(item.averageMove))
+    .sort((left, right) => right.averageMove - left.averageMove)
+    .slice(0, 3)
+    .map((item) => `${item.sector} ${formatSignedPercent(item.averageMove)}`);
+  const sectorLaggards = [...(heatmap?.sectors ?? [])]
+    .filter((item) => Number.isFinite(item.averageMove))
+    .sort((left, right) => left.averageMove - right.averageMove)
+    .slice(0, 3)
+    .map((item) => `${item.sector} ${formatSignedPercent(item.averageMove)}`);
+  const pulseLeaders = (pulse?.leaders ?? []).slice(0, 3).map((item) => `${item.symbol} ${formatSignedPercent(item.changePercent)}`);
+  const pulseLaggards = (pulse?.laggards ?? []).slice(0, 3).map((item) => `${item.symbol} ${formatSignedPercent(item.changePercent)}`);
+  const macroCards = (macro?.cards ?? [])
+    .slice(0, 4)
+    .map((card) => `${card.label}: ${card.value ?? "n/a"}`);
+  const curveSummary = summarizeCurveShape(yieldCurve?.points ?? []);
+
+  return {
+    universe: "S&P 500",
+    horizon: horizon === "1-4w" ? "1-4 weeks" : horizon,
+    asOf: heatmap?.asOf ?? new Date().toISOString(),
+    sectorLeaders,
+    sectorLaggards,
+    pulseLeaders,
+    pulseLaggards,
+    macroCards,
+    curveSummary,
+  };
+}
+
+function buildAiPrompt({ horizon, context, bullishCandidates, bearishCandidates, bullishCount, bearishCount }) {
+  const payload = {
+    task:
+      "You are preparing a public-market idea board for a free terminal product. Use only the supplied data. Do not add facts or symbols.",
+    universe: "S&P 500",
+    horizon: horizon === "1-4w" ? "1-4 weeks" : horizon,
+    required_output: {
+      bullish: bullishCount,
+      bearish: bearishCount,
+      fields: ["symbol", "thesis", "reasons[3]", "risk", "confidence"],
+      confidence_values: ["high", "medium", "low"],
+    },
+    rules: [
+      "Use only symbols already present in the bullish_candidates and bearish_candidates arrays.",
+      "Keep reasons short and evidence-based.",
+      "Return strict JSON only with keys marketView, bullish, bearish.",
+      "marketView must include summary, bullishBias, bearishBias, risks, and monitor.",
+    ],
+    market_context: context,
+    bullish_candidates: bullishCandidates.map(compactAiCandidateForPrompt),
+    bearish_candidates: bearishCandidates.map(compactAiCandidateForPrompt),
+  };
+
+  return [
+    "Return strict JSON only.",
+    JSON.stringify(payload, null, 2),
+  ].join("\n\n");
+}
+
+function compactAiCandidateForPrompt(candidate) {
+  return {
+    symbol: candidate.symbol,
+    name: candidate.name,
+    sector: candidate.sector,
+    industry: candidate.industry,
+    price: candidate.price,
+    dayChangePercent: candidate.dayChangePercent,
+    oneMonthChange: candidate.oneMonthChange,
+    sectorAverageMove: candidate.sectorAverageMove,
+    weight: candidate.weight,
+    marketCap: candidate.marketCap,
+    volume: candidate.volume,
+    analystRating: candidate.analystRating,
+    trailingPe: candidate.trailingPe,
+    forwardPe: candidate.forwardPe,
+    shortRatio: candidate.shortRatio,
+    earningsWindow: candidate.earningsWindow,
+    latestFiling: candidate.latestFiling,
+    summary: candidate.summary,
+  };
+}
+
+function normalizeAiIdeasOutput(raw, data, counts) {
+  const bullishMap = new Map(data.bullishCandidates.map((item) => [item.symbol, item]));
+  const bearishMap = new Map(data.bearishCandidates.map((item) => [item.symbol, item]));
+  const marketViewSource = raw?.marketView ?? raw?.market_view ?? {};
+  const marketView = {
+    summary:
+      cleanAiText(marketViewSource.summary)
+      ?? `${data.context.sectorLeaders[0] ?? "Market"} leads while ${data.context.sectorLaggards[0] ?? "other sectors"} lag.`,
+    bullishBias:
+      cleanAiText(marketViewSource.bullishBias ?? marketViewSource.bullish_bias)
+      ?? "Favor liquid names with positive tape and supportive sector context.",
+    bearishBias:
+      cleanAiText(marketViewSource.bearishBias ?? marketViewSource.bearish_bias)
+      ?? "Be cautious with names underperforming weak sectors or carrying deteriorating tape signals.",
+    risks: cleanAiStringList(marketViewSource.risks, 4),
+    monitor: cleanAiStringList(marketViewSource.monitor ?? raw?.monitor, 5),
+  };
+
+  return {
+    marketView,
+    bullish: coerceAiIdeaList(raw?.bullish, data.bullishCandidates, bullishMap, counts.bullishCount, "bullish"),
+    bearish: coerceAiIdeaList(raw?.bearish, data.bearishCandidates, bearishMap, counts.bearishCount, "bearish"),
+    warnings: [],
+  };
+}
+
+function coerceAiIdeaList(rawItems, orderedCandidates, candidateMap, limit, side) {
+  const source = Array.isArray(rawItems) ? rawItems : [];
+  const items = [];
+  const seen = new Set();
+
+  for (const entry of source) {
+    const symbol = String(entry?.symbol ?? "").trim().toUpperCase();
+    const candidate = candidateMap.get(symbol);
+    if (!candidate || seen.has(symbol)) {
+      continue;
+    }
+    seen.add(symbol);
+    items.push({
+      ...candidate,
+      thesis: cleanAiText(entry?.thesis) ?? defaultAiThesis(candidate, side),
+      reasons: cleanAiStringList(entry?.reasons, 3).length ? cleanAiStringList(entry?.reasons, 3) : buildFallbackReasons(candidate, side),
+      risk: cleanAiText(entry?.risk) ?? buildFallbackRisk(candidate, side),
+      confidence: normalizeAiConfidence(entry?.confidence, candidate, side),
+    });
+    if (items.length >= limit) {
+      return items;
+    }
+  }
+
+  for (const candidate of orderedCandidates) {
+    if (seen.has(candidate.symbol)) {
+      continue;
+    }
+    items.push(buildFallbackAiIdea(candidate, side));
+    if (items.length >= limit) {
+      break;
+    }
+  }
+
+  return items;
+}
+
+function buildDeterministicAiIdeas(data, counts, warning) {
+  return {
+    marketView: {
+      summary: `${data.context.sectorLeaders[0] ?? "Leadership"} is setting the tape while ${data.context.sectorLaggards[0] ?? "laggards"} remain under pressure.`,
+      bullishBias: "Prefer liquid names with positive short-term trend, stronger sector backdrop, and supportive earnings posture.",
+      bearishBias: "Lean against names with weak tape, soft sector context, or deteriorating positioning ahead of the next 1-4 weeks.",
+      risks: [
+        warning,
+        "Public earnings and analyst fields can be incomplete for some symbols.",
+      ].filter(Boolean),
+      monitor: [
+        ...data.context.sectorLeaders.slice(0, 2),
+        ...data.context.sectorLaggards.slice(0, 2),
+        data.context.curveSummary,
+      ].filter(Boolean).slice(0, 5),
+    },
+    bullish: data.bullishCandidates.slice(0, counts.bullishCount).map((candidate) => buildFallbackAiIdea(candidate, "bullish")),
+    bearish: data.bearishCandidates.slice(0, counts.bearishCount).map((candidate) => buildFallbackAiIdea(candidate, "bearish")),
+    warnings: [warning].filter(Boolean),
+  };
+}
+
+function buildFallbackAiIdea(candidate, side) {
+  return {
+    ...candidate,
+    thesis: defaultAiThesis(candidate, side),
+    reasons: buildFallbackReasons(candidate, side),
+    risk: buildFallbackRisk(candidate, side),
+    confidence: normalizeAiConfidence(null, candidate, side),
+  };
+}
+
+function defaultAiThesis(candidate, side) {
+  if (side === "bullish") {
+    return `${candidate.symbol} is showing stronger tape than much of the index, with supportive sector and liquidity context for the next 1-4 weeks.`;
+  }
+  return `${candidate.symbol} is underperforming the broader tape, with weaker sector context and downside sensitivity over the next 1-4 weeks.`;
+}
+
+function buildFallbackReasons(candidate, side) {
+  const reasons = [];
+  if (Number.isFinite(candidate.dayChangePercent)) {
+    reasons.push(`Day move ${formatSignedPercent(candidate.dayChangePercent)} versus a ${formatSignedPercent(candidate.sectorAverageMove)} sector backdrop.`);
+  }
+  if (Number.isFinite(candidate.oneMonthChange)) {
+    reasons.push(`1M trend ${formatSignedPercent(candidate.oneMonthChange)} keeps the ${side === "bullish" ? "momentum" : "pressure"} signal live.`);
+  }
+  if (candidate.analystRating) {
+    reasons.push(`Street stance reads ${candidate.analystRating}.`);
+  } else if (candidate.earningsWindow?.start) {
+    reasons.push(`Earnings window starts ${formatShortDate(candidate.earningsWindow.start)}.`);
+  } else if (Number.isFinite(candidate.marketCap)) {
+    reasons.push(`Large-cap footprint at ${formatCompactNumber(candidate.marketCap)} market value keeps liquidity strong.`);
+  }
+
+  while (reasons.length < 3) {
+    if (candidate.latestFiling?.form) {
+      reasons.push(`Recent ${candidate.latestFiling.form} filing adds fresh public disclosure context.`);
+    } else if (Number.isFinite(candidate.weight)) {
+      reasons.push(`Index weight ${formatSignedPercent(candidate.weight)} keeps the name relevant in sector rotation.`);
+    } else {
+      reasons.push("Public tape and sector rotation remain the main live signal drivers.");
+    }
+  }
+
+  return reasons.slice(0, 3);
+}
+
+function buildFallbackRisk(candidate, side) {
+  if (candidate.earningsWindow?.start) {
+    return `Upcoming earnings around ${formatShortDate(candidate.earningsWindow.start)} can quickly change the ${side} setup.`;
+  }
+  if (Number.isFinite(candidate.shortRatio) && candidate.shortRatio >= 3) {
+    return "Short-interest pressure can amplify reversals if the tape squeezes unexpectedly.";
+  }
+  return "Public-feed momentum can reverse quickly if sector leadership changes or macro risk reprices.";
+}
+
+function normalizeAiConfidence(value, candidate, side) {
+  const clean = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (["high", "medium", "low"].includes(clean)) {
+    return clean;
+  }
+  const signal = side === "bullish"
+    ? Math.abs(numeric(candidate.dayChangePercent) ?? 0) + Math.abs(numeric(candidate.oneMonthChange) ?? 0)
+    : Math.abs(numeric(candidate.dayChangePercent) ?? 0) + Math.abs(numeric(candidate.oneMonthChange) ?? 0);
+  if (signal >= 12) {
+    return "high";
+  }
+  if (signal >= 5) {
+    return "medium";
+  }
+  return "low";
+}
+
+function cleanAiStringList(value, limit) {
+  return (Array.isArray(value) ? value : [])
+    .map((entry) => cleanAiText(entry))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function cleanAiText(value) {
+  const text = String(value ?? "").trim();
+  return text ? text.replace(/\s+/g, " ") : null;
+}
+
+function truncateText(value, limit = 180) {
+  const clean = cleanAiText(value);
+  if (!clean) {
+    return null;
+  }
+  return clean.length > limit ? `${clean.slice(0, limit - 1).trimEnd()}…` : clean;
+}
+
+function summarizeCurveShape(points = []) {
+  const twoYear = points.find((point) => /2\s*yr/i.test(point.tenor ?? ""));
+  const tenYear = points.find((point) => /10\s*yr/i.test(point.tenor ?? ""));
+  if (Number.isFinite(twoYear?.value) && Number.isFinite(tenYear?.value)) {
+    const spread = tenYear.value - twoYear.value;
+    return `2Y/10Y spread ${formatSignedPercent(spread)}.`;
+  }
+  return "Treasury curve context unavailable.";
+}
+
+function formatSignedPercent(value) {
+  if (!Number.isFinite(value)) {
+    return "n/a";
+  }
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
+}
+
+function formatCompactNumber(value) {
+  if (!Number.isFinite(value)) {
+    return "n/a";
+  }
+  if (Math.abs(value) >= 1_000_000_000_000) {
+    return `${(value / 1_000_000_000_000).toFixed(2)}T`;
+  }
+  if (Math.abs(value) >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toFixed(2)}B`;
+  }
+  if (Math.abs(value) >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(2)}M`;
+  }
+  return `${value.toFixed(0)}`;
 }

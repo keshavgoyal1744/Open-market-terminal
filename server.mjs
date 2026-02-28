@@ -456,6 +456,15 @@ async function handleApi(request, response, url, context) {
     return sendJson(response, 200, await market.getMarketBoards(symbols));
   }
 
+  if (request.method === "GET" && url.pathname === "/api/ai-lab") {
+    const universe = String(url.searchParams.get("universe") ?? "sp500").trim();
+    const horizon = String(url.searchParams.get("horizon") ?? "1-4w").trim();
+    const bullishCount = parseNullableNumber(url.searchParams.get("bullishCount")) ?? 20;
+    const bearishCount = parseNullableNumber(url.searchParams.get("bearishCount")) ?? 20;
+    const force = url.searchParams.get("force") === "1";
+    return sendJson(response, 200, await market.getAiIdeas({ universe, horizon, bullishCount, bearishCount, force }));
+  }
+
   if (request.method === "GET" && url.pathname === "/api/quote-monitor") {
     const symbol = requireParam(url, "symbol");
     const range = url.searchParams.get("range") ?? "1d";
@@ -720,6 +729,8 @@ function sanitizePreferencePatch(body) {
       : undefined,
     newsFocus: typeof body.newsFocus === "string" ? String(body.newsFocus).trim().slice(0, 80) : undefined,
     sectorFocus: typeof body.sectorFocus === "string" ? String(body.sectorFocus).trim().slice(0, 80) : undefined,
+    aiUniverse: typeof body.aiUniverse === "string" ? String(body.aiUniverse).trim().slice(0, 24) : undefined,
+    aiHorizon: typeof body.aiHorizon === "string" ? String(body.aiHorizon).trim().slice(0, 24) : undefined,
     cryptoProducts: Array.isArray(body.cryptoProducts)
       ? body.cryptoProducts.map(cleanSymbol).filter(Boolean).slice(0, 12)
       : undefined,
@@ -784,6 +795,8 @@ function sanitizeWorkspaceSnapshot(snapshot) {
       : [],
     newsFocus: typeof snapshot.newsFocus === "string" ? String(snapshot.newsFocus).trim().slice(0, 80) : "",
     sectorFocus: typeof snapshot.sectorFocus === "string" ? String(snapshot.sectorFocus).trim().slice(0, 80) : "Technology",
+    aiUniverse: typeof snapshot.aiUniverse === "string" ? String(snapshot.aiUniverse).trim().slice(0, 24) : "sp500",
+    aiHorizon: typeof snapshot.aiHorizon === "string" ? String(snapshot.aiHorizon).trim().slice(0, 24) : "1-4w",
     cryptoProducts: Array.isArray(snapshot.cryptoProducts)
       ? snapshot.cryptoProducts.map(cleanSymbol).filter(Boolean).slice(0, 12)
       : config.defaultCryptoProducts,
@@ -810,7 +823,7 @@ function cleanSymbol(value) {
 }
 
 function normalizePage(value) {
-  return ["overview", "boards", "sectors", "calendar", "map", "quote", "news", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
+  return ["overview", "boards", "sectors", "calendar", "map", "quote", "news", "ai", "research", "ops"].includes(String(value ?? "").trim().toLowerCase())
     ? String(value).trim().toLowerCase()
     : "overview";
 }

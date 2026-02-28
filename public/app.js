@@ -6,6 +6,8 @@ const DEFAULT_PREFERENCES = {
   terminalHotkeys: [],
   newsFocus: "",
   sectorFocus: "Technology",
+  aiUniverse: "sp500",
+  aiHorizon: "1-4w",
   cryptoProducts: ["BTC-USD", "ETH-USD", "SOL-USD"],
   activePage: "overview",
   screenConfig: {
@@ -37,6 +39,7 @@ const DEFAULT_PANEL_SIZES = {
   "section-macro": 3,
   "section-calendar": 5,
   "section-news": 7,
+  "section-ai-lab": 12,
   "section-portfolio": 3,
   "section-alerts": 3,
   "section-intel-ops": 3,
@@ -64,6 +67,7 @@ const DEFAULT_PANEL_LAYOUT = [
   "section-macro",
   "section-calendar",
   "section-news",
+  "section-ai-lab",
   "section-portfolio",
   "section-alerts",
   "section-intel-ops",
@@ -176,6 +180,17 @@ const PAGE_DEFINITIONS = {
       "section-news",
     ],
   },
+  ai: {
+    label: "AI",
+    sectionLabel: "AI Lab",
+    title: "Hosted long and short idea board built from the live S&P 500 universe.",
+    description:
+      "Gemini runs the primary hosted query, Groq is the hosted fallback, and the board stays live off the current S&P 500, macro, and earnings context already in this app.",
+    tags: ["Bullish 20", "Bearish 20", "Gemini", "Groq"],
+    sections: [
+      "section-ai-lab",
+    ],
+  },
   research: {
     label: "Research",
     sectionLabel: "Research Desk",
@@ -238,6 +253,9 @@ const PAGE_PANEL_SPANS = {
   news: {
     "section-news": 12,
   },
+  ai: {
+    "section-ai-lab": 12,
+  },
   research: {
     "section-research-rail": 3,
     "section-workbench": 9,
@@ -279,6 +297,9 @@ const PAGE_PANEL_ORDERS = {
   quote: {
     "section-quote-monitor": 0,
   },
+  ai: {
+    "section-ai-lab": 0,
+  },
   ops: {
     "section-portfolio": 0,
     "section-intel-ops": 1,
@@ -313,6 +334,9 @@ const PAGE_PANEL_COLUMNS = {
   quote: {
     "section-quote-monitor": "1 / -1",
   },
+  ai: {
+    "section-ai-lab": "1 / -1",
+  },
   ops: {
     "section-portfolio": "1 / span 4",
     "section-intel-ops": "5 / span 5",
@@ -346,6 +370,9 @@ const PAGE_PANEL_ROWS = {
   },
   quote: {
     "section-quote-monitor": "1",
+  },
+  ai: {
+    "section-ai-lab": "1",
   },
   ops: {
     "section-portfolio": "1",
@@ -405,6 +432,7 @@ const state = {
   marketEvents: [],
   sectorBoard: null,
   flow: null,
+  aiLab: null,
   marketBoards: null,
   companyMap: null,
   companyMapCompare: null,
@@ -438,6 +466,7 @@ const SECTION_COMMANDS = [
   { id: "section-company-map", label: "Jump to Company Map", meta: "suppliers, customers, indices, holders, board" },
   { id: "section-calendar", label: "Jump to Desk Calendar", meta: "earnings, Fed, and macro dates" },
   { id: "section-news", label: "Jump to Market News", meta: "live public headlines" },
+  { id: "section-ai-lab", label: "Jump to AI Lab", meta: "hosted bullish and bearish S&P 500 ideas" },
   { id: "section-portfolio", label: "Jump to Portfolio", meta: "positions and P/L" },
   { id: "section-alerts", label: "Jump to Alerts", meta: "server-side triggers" },
   { id: "section-intel-ops", label: "Jump to Intel Ops", meta: "webhooks and digests" },
@@ -508,6 +537,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     runScreen(),
     runCompare(),
     loadWatchlistEvents(),
+    normalizePage(state.preferences.activePage) === "ai" ? loadAiLab(false) : Promise.resolve(),
   ];
 
   const results = await Promise.allSettled(bootstrapTasks);
@@ -1110,6 +1140,18 @@ function bindGlobalActions() {
     await loadDeskNews(true);
   });
 
+  document.querySelector("#aiLabForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    state.preferences.aiUniverse = document.querySelector("#aiUniverseSelect")?.value ?? "sp500";
+    state.preferences.aiHorizon = document.querySelector("#aiHorizonSelect")?.value ?? "1-4w";
+    schedulePreferenceSync();
+    await loadAiLab(true);
+  });
+
+  document.querySelector("#refreshAiLabButton")?.addEventListener("click", async () => {
+    await loadAiLab(true);
+  });
+
   document.querySelector("#clearNewsFocusButton")?.addEventListener("click", async () => {
     state.preferences.newsFocus = "";
     state.newsPage = 1;
@@ -1465,6 +1507,9 @@ function setActivePage(pageId, options = {}) {
   if (state.preferences.activePage === "boards") {
     void loadMarketBoards(false);
   }
+  if (state.preferences.activePage === "ai") {
+    void loadAiLab(false);
+  }
   if (state.preferences.activePage === "sectors") {
     syncSectorSelector(state.sectorBoard?.sectors ?? state.heatmap?.sectors ?? DEFAULT_SECTORS, state.preferences.sectorFocus);
     if (state.sectorBoard) {
@@ -1516,6 +1561,9 @@ function rerenderPageScopedPanels() {
   }
   if (document.querySelector("#sectorBoardBody")) {
     renderSectorBoardPanel(state.sectorBoard);
+  }
+  if (document.querySelector("#aiLabBullishList") && state.aiLab) {
+    renderAiLabPanel(state.aiLab);
   }
   if (document.querySelector("#terminalHotkeys")) {
     renderTerminalHotkeys();
@@ -3487,6 +3535,12 @@ function applyPreferencesToInputs() {
     state.preferences.sectorFocus = normalizedSector;
     sectorSelect.value = normalizedSector;
   }
+  if (document.querySelector("#aiUniverseSelect")) {
+    document.querySelector("#aiUniverseSelect").value = state.preferences.aiUniverse === "sp500" ? state.preferences.aiUniverse : "sp500";
+  }
+  if (document.querySelector("#aiHorizonSelect")) {
+    document.querySelector("#aiHorizonSelect").value = state.preferences.aiHorizon === "1-4w" ? state.preferences.aiHorizon : "1-4w";
+  }
   document.querySelector("#historyRange").value = state.currentHistoryRange;
   document.querySelector("#screenSymbols").value = state.preferences.screenConfig.symbols;
   document.querySelector("#screenMaxPe").value = state.preferences.screenConfig.maxPe;
@@ -3551,6 +3605,8 @@ function snapshotCurrentWorkspace() {
     terminalHotkeys: state.preferences.terminalHotkeys,
     newsFocus: state.preferences.newsFocus,
     sectorFocus: state.preferences.sectorFocus,
+    aiUniverse: state.preferences.aiUniverse,
+    aiHorizon: state.preferences.aiHorizon,
     cryptoProducts: state.preferences.cryptoProducts,
     activePage: state.preferences.activePage,
     screenConfig: state.preferences.screenConfig,
@@ -3621,6 +3677,11 @@ function scheduleRefresh() {
   }, 90000);
   setInterval(() => void loadDeskCalendar(false), 300000);
   setInterval(() => void loadDeskNews(false), 120000);
+  setInterval(() => {
+    if (normalizePage(state.preferences.activePage) === "ai") {
+      void loadAiLab(false);
+    }
+  }, 900000);
   setInterval(() => void renderPortfolio(), 30000);
 }
 
@@ -3671,6 +3732,23 @@ async function selectSectorFocus(sector, options = {}) {
     jumpToSection("section-sector-board");
   }
   await loadSectorBoard(true);
+}
+
+async function loadAiLab(force = false) {
+  try {
+    const universe = state.preferences.aiUniverse ?? "sp500";
+    const horizon = state.preferences.aiHorizon ?? "1-4w";
+    const payload = await api(
+      `/api/ai-lab?universe=${encodeURIComponent(universe)}&horizon=${encodeURIComponent(horizon)}&bullishCount=20&bearishCount=20${force ? "&force=1" : ""}`,
+    );
+    state.aiLab = payload;
+    renderAiLabPanel(payload);
+    markFeedHeartbeat("Live");
+  } catch (error) {
+    document.querySelector("#aiLabWarnings").innerHTML =
+      `<div class="panel-status-chip warn">${escapeHtml(error.message)}</div>`;
+    showStatus(error.message, true);
+  }
 }
 
 async function cycleDetailSymbol(direction) {
@@ -6191,6 +6269,97 @@ function renderQuoteMonitorSummary(payload) {
   ].join("");
 }
 
+function renderAiLabPanel(payload) {
+  if (document.querySelector("#aiUniverseSelect")) {
+    document.querySelector("#aiUniverseSelect").value = state.preferences.aiUniverse ?? "sp500";
+  }
+  if (document.querySelector("#aiHorizonSelect")) {
+    document.querySelector("#aiHorizonSelect").value = state.preferences.aiHorizon ?? "1-4w";
+  }
+  document.querySelector("#aiLabSummary").innerHTML = renderAiLabSummary(payload);
+  document.querySelector("#aiLabWarnings").innerHTML = renderStatusStrip(
+    payload.warnings ?? [],
+    `${escapeHtml(payload.provider?.used === "rules" ? "Rules engine active" : `${String(payload.provider?.used ?? "Hosted").toUpperCase()} output live`)} for ${escapeHtml(payload.universe ?? "S&P 500")}.`,
+  );
+  document.querySelector("#aiLabProviderMeta").textContent = [
+    payload.provider?.used === "rules" ? "Rules engine" : `${String(payload.provider?.used ?? "Hosted").toUpperCase()} · ${payload.provider?.model ?? "default model"}`,
+    payload.provider?.fallback ? `fallback ${String(payload.provider.fallback).toUpperCase()}` : "",
+    payload.asOf ? formatTimestampShort(payload.asOf) : "",
+  ].filter(Boolean).join(" · ");
+  document.querySelector("#aiLabMarketView").innerHTML = renderAiMarketView(payload.marketView ?? {});
+  document.querySelector("#aiLabMonitor").innerHTML = renderAiMonitorList(payload.marketView?.monitor ?? []);
+  document.querySelector("#aiLabBullishList").innerHTML = renderAiIdeaList(payload.bullish ?? [], "bullish");
+  document.querySelector("#aiLabBearishList").innerHTML = renderAiIdeaList(payload.bearish ?? [], "bearish");
+}
+
+function renderAiLabSummary(payload) {
+  return [
+    renderTerminalStat("Provider", String(payload.provider?.used ?? "rules").toUpperCase(), payload.provider?.model ?? "hosted / fallback"),
+    renderTerminalStat("Universe", payload.universe ?? "S&P 500", `${payload.coverage?.constituents ?? 0} names`),
+    renderTerminalStat("Horizon", payload.horizon ?? "1-4 weeks", "forecast window"),
+    renderTerminalStat("Bullish", String(payload.summary?.bullish ?? 0), "ranked long ideas"),
+    renderTerminalStat("Bearish", String(payload.summary?.bearish ?? 0), "ranked downside ideas"),
+  ].join("");
+}
+
+function renderAiMarketView(view) {
+  const rows = [
+    renderIntelListItem("REGIME", "Market Summary", view.summary ?? "No market summary available."),
+    renderIntelListItem("LONG", "Bullish Bias", view.bullishBias ?? "No bullish bias note."),
+    renderIntelListItem("SHORT", "Bearish Bias", view.bearishBias ?? "No bearish bias note."),
+    ...(view.risks ?? []).map((risk, index) => renderIntelListItem(`RISK ${index + 1}`, "Risk", risk)),
+  ];
+  return rows.join("");
+}
+
+function renderAiMonitorList(items) {
+  if (!items.length) {
+    return renderIntelEmpty("No watch items are available.");
+  }
+  return items
+    .map((item, index) => renderIntelListItem(`WATCH ${index + 1}`, "Monitor", item))
+    .join("");
+}
+
+function renderAiIdeaList(items, side) {
+  if (!items.length) {
+    return renderIntelEmpty(`No ${side} ideas are available right now.`);
+  }
+  return items.map((item, index) => renderAiIdeaCard(item, index, side)).join("");
+}
+
+function renderAiIdeaCard(item, index, side) {
+  const confidence = String(item.confidence ?? "medium").toLowerCase();
+  return `
+    <article class="ai-idea-card ${escapeHtml(side)}">
+      <div class="ai-idea-header">
+        <div>
+          <div class="ai-idea-rank">${String(index + 1).padStart(2, "0")}</div>
+          <h4>${escapeHtml(item.symbol ?? "n/a")}</h4>
+          <div class="muted">${escapeHtml(compactLabel(item.name ?? item.symbol ?? "Company", 34))}</div>
+        </div>
+        <div class="ai-idea-chip ${escapeHtml(confidence)}">${escapeHtml(confidence)}</div>
+      </div>
+      <div class="ai-idea-stats">
+        ${renderTerminalStat("Last", formatMoney(item.price), item.sector ?? "sector")}
+        ${renderTerminalStat("Day", signedPercent(item.dayChangePercent), "session")}
+        ${renderTerminalStat("1M", signedPercent(item.oneMonthChange), "trend")}
+        ${renderTerminalStat("Cap", formatCompact(item.marketCap), "market cap")}
+      </div>
+      <p class="ai-idea-thesis">${escapeHtml(item.thesis ?? "No thesis provided.")}</p>
+      <ul class="ai-idea-reasons">
+        ${(item.reasons ?? []).slice(0, 3).map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
+      </ul>
+      <div class="ai-idea-footer">
+        <span>${escapeHtml(item.analystRating ?? "street n/a")}</span>
+        <span>${escapeHtml(formatWindow(item.earningsWindow))}</span>
+        <span>${escapeHtml(item.latestFiling?.form ?? "no filing")}</span>
+      </div>
+      <div class="ai-idea-risk"><strong>Risk</strong> ${escapeHtml(item.risk ?? "No risk note.")}</div>
+    </article>
+  `;
+}
+
 function renderQuoteMonitorMetrics(quote, market, points) {
   const closes = (points ?? []).map((point) => point.close).filter(Number.isFinite);
   const trend = closes.length >= 2 ? closes.at(-1) - closes[0] : null;
@@ -6494,6 +6663,8 @@ function mergePreferences(preferences) {
       : [...DEFAULT_PREFERENCES.terminalHotkeys],
     newsFocus: typeof preferences?.newsFocus === "string" ? preferences.newsFocus : "",
     sectorFocus: normalizedSectorFocus,
+    aiUniverse: preferences?.aiUniverse === "sp500" ? preferences.aiUniverse : DEFAULT_PREFERENCES.aiUniverse,
+    aiHorizon: preferences?.aiHorizon === "1-4w" ? preferences.aiHorizon : DEFAULT_PREFERENCES.aiHorizon,
     activePage: normalizePage(preferences?.activePage),
     panelLayout: normalizePanelLayout(preferences?.panelLayout),
     panelSizes: normalizePanelSizes(preferences?.panelSizes),
@@ -7187,6 +7358,14 @@ function formatSignedMoney(value) {
 
 function formatPercent(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)}%` : "n/a";
+}
+
+function signedPercent(value) {
+  if (!Number.isFinite(value)) {
+    return "n/a";
+  }
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
 }
 
 function formatPercentScaled(value) {
