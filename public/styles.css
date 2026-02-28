@@ -1331,6 +1331,31 @@ svg {
   line-height: 1.6;
 }
 
+.site-footer {
+  margin: 0 10px 12px;
+  border: 1px solid var(--line);
+  background: #090909;
+  padding: 10px 12px;
+}
+
+.site-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.site-footer p {
+  margin: 0;
+  color: #bfc9d7;
+  line-height: 1.45;
+  font-size: 11px;
+}
+
+.site-footer .section-label {
+  display: block;
+  margin-bottom: 6px;
+}
+
 .status-toast {
   position: fixed;
   right: 1rem;
