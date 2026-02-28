@@ -952,22 +952,47 @@ export class MarketDataService {
     return this.cache.getOrSet(
       `sector-board:${cacheKey}`,
       async () => {
+        const universe = await getSp500Universe();
         const heatmap = await this.getSp500Heatmap();
         const availableSectors = heatmap.sectors ?? [];
         const availableSectorNames = [
           ...new Set(
-            [...availableSectors.map((item) => item?.sector), ...(heatmap.tiles ?? []).map((item) => item?.sector)]
+            [
+              ...universe.constituents.map((item) => item?.sector),
+              ...availableSectors.map((item) => item?.sector),
+              ...(heatmap.tiles ?? []).map((item) => item?.sector),
+            ]
               .filter(Boolean),
           ),
         ];
         const matchedSector =
           availableSectorNames.find((name) => normalizeSectorKey(name) === normalizeSectorKey(requested))
           ?? resolveSectorName(requested, availableSectors)
+          ?? universe.constituents.find((item) => normalizeSectorKey(item?.sector) === normalizeSectorKey(requested))?.sector
           ?? availableSectors[0]?.sector
           ?? requested
           ?? "Technology";
-        const items = (heatmap.tiles ?? [])
-          .filter((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(matchedSector))
+        const heatmapBySymbol = new Map((heatmap.tiles ?? []).map((item) => [item.symbol, item]));
+        const members = universe.constituents
+          .filter((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(matchedSector));
+        const quoteMap = await this.getQuoteMap(members.map((item) => item.symbol), 40);
+        const items = members
+          .map((item) => {
+            const tile = heatmapBySymbol.get(item.symbol) ?? null;
+            const quote = quoteMap.get(item.symbol) ?? null;
+            return {
+              symbol: item.symbol,
+              name: item.name ?? tile?.name ?? quote?.shortName ?? item.symbol,
+              sector: item.sector ?? tile?.sector ?? quote?.sector ?? matchedSector,
+              price: tile?.price ?? quote?.price ?? null,
+              change: tile?.change ?? quote?.change ?? null,
+              changePercent: tile?.changePercent ?? quote?.changePercent ?? null,
+              marketCap: tile?.marketCap ?? quote?.marketCap ?? null,
+              volume: tile?.volume ?? quote?.volume ?? null,
+              weight: tile?.weight ?? numeric(item.sourceWeight),
+              sourceWeight: item.sourceWeight ?? tile?.sourceWeight ?? null,
+            };
+          })
           .sort((left, right) => (numeric(right.weight) ?? 0) - (numeric(left.weight) ?? 0))
           .map((item, index) => ({ ...item, rank: index + 1 }));
 

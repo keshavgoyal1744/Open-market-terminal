@@ -2954,7 +2954,7 @@ function filterSectorBoardItems(items, selectedSector) {
   }
   const sectorAware = list.filter((item) => normalizeSectorKey(item?.sector));
   if (!sectorAware.length) {
-    return list;
+    return [];
   }
   return sectorAware.filter((item) => normalizeSectorKey(item?.sector) === selectedKey);
 }
@@ -2962,7 +2962,14 @@ function filterSectorBoardItems(items, selectedSector) {
 function deriveSectorBoardItems(payload, selectedSector) {
   const liveItems = Array.isArray(state.heatmap?.tiles) ? state.heatmap.tiles : [];
   const payloadItems = Array.isArray(payload?.items) ? payload.items : [];
-  const primary = liveItems.length ? filterSectorBoardItems(liveItems, selectedSector) : filterSectorBoardItems(payloadItems, selectedSector);
+  const filteredLive = filterSectorBoardItems(liveItems, selectedSector);
+  const filteredPayload = filterSectorBoardItems(payloadItems, selectedSector);
+  const payloadMatchesSelected = normalizeSectorKey(payload?.sector) === normalizeSectorKey(selectedSector);
+  const primary = filteredPayload.length
+    ? filteredPayload
+    : payloadMatchesSelected && payloadItems.length
+      ? payloadItems
+      : filteredLive;
   const payloadBySymbol = new Map(payloadItems.map((item) => [item.symbol, item]));
 
   return primary.map((item) => {
