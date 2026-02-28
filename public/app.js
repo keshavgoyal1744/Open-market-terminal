@@ -287,11 +287,11 @@ const PAGE_PANEL_ROWS = {
     "section-flow": "3",
   },
   research: {
-    "section-research-rail": "1 / span 3",
-    "section-workbench": "1 / span 2",
-    "section-intelligence": "1 / span 2",
-    "section-screening": "3",
-    "section-events": "3",
+    "section-research-rail": "1 / span 2",
+    "section-workbench": "1",
+    "section-intelligence": "1",
+    "section-screening": "2",
+    "section-events": "2",
   },
   ops: {
     "section-portfolio": "1",
@@ -4324,14 +4324,16 @@ function renderCompactNewsFeed(items) {
     .map(
       (item) => `
         <article class="sector-news-card ${toneByImportance(item.impact)}">
-          <div class="sector-news-head">
+          <div class="sector-news-kicker">
             <span class="signal-chip">${escapeHtml((item.category ?? "news").toUpperCase())}</span>
             <span class="news-time">${escapeHtml(formatTimeAgo(item.publishedAt))}</span>
           </div>
-          <a class="sector-news-link" href="${safeUrl(item.link)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a>
-          <div class="sector-news-foot">
-            <span class="muted">${escapeHtml(item.source ?? "News")}</span>
-            <span>${escapeHtml(item.symbols?.[0] ?? item.category ?? "live")}</span>
+          <div class="sector-news-main">
+            <a class="sector-news-link" href="${safeUrl(item.link)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a>
+            <div class="sector-news-foot">
+              <span class="muted">${escapeHtml(item.source ?? "News")}</span>
+              <span>${escapeHtml(item.symbols?.[0] ?? item.category ?? "live")}</span>
+            </div>
           </div>
         </article>
       `,

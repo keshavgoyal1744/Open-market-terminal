@@ -1835,7 +1835,7 @@ button:hover {
 #dashboardGrid[data-page="research"] #section-research-rail {
   grid-column: span 2;
   order: 0;
-  grid-row: 1 / span 3;
+  grid-row: 1 / span 2;
   align-self: start;
 }
 
@@ -1851,6 +1851,15 @@ button:hover {
   align-items: start;
 }
 
+#dashboardGrid[data-page="research"] .panel {
+  align-content: start;
+}
+
+#dashboardGrid[data-page="research"] #section-workbench,
+#dashboardGrid[data-page="research"] #section-intelligence {
+  min-height: 0;
+}
+
 #dashboardGrid[data-page="research"] .panel,
 #dashboardGrid[data-page="research"] .subpanel,
 #dashboardGrid[data-page="research"] .table-wrap,
@@ -1859,21 +1868,29 @@ button:hover {
 }
 
 #dashboardGrid[data-page="research"] #section-workbench .detail-grid {
-  grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  gap: 8px;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .intel-top-grid,
 #dashboardGrid[data-page="research"] #section-intelligence .intel-graph-grid {
   grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .intel-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence .subpanel,
 #dashboardGrid[data-page="research"] #section-screening .subpanel,
 #dashboardGrid[data-page="research"] #section-events .subpanel {
+  min-height: 0;
+}
+
+#dashboardGrid[data-page="research"] #section-screening,
+#dashboardGrid[data-page="research"] #section-events {
   min-height: 0;
 }
 
@@ -1893,6 +1910,13 @@ button:hover {
   min-height: 360px;
 }
 
+#dashboardGrid[data-page="research"] #section-workbench .watchlist-summary-grid,
+#dashboardGrid[data-page="research"] #section-intelligence .metric-strip,
+#dashboardGrid[data-page="research"] #section-intelligence .intel-signal-grid,
+#dashboardGrid[data-page="research"] #section-screening .screen-form {
+  gap: 6px;
+}
+
 #dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(3),
 #dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(4) {
   max-height: 420px;
@@ -1907,6 +1931,17 @@ button:hover {
 
 #dashboardGrid[data-page="research"] .research-sparkline {
   width: 64px;
+}
+
+#dashboardGrid[data-page="research"] .research-rail-list {
+  padding: 6px;
+}
+
+#dashboardGrid[data-page="research"] .panel-header,
+#dashboardGrid[data-page="research"] .panel-status-strip,
+#dashboardGrid[data-page="research"] .compact-toolbar {
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 #dashboardGrid[data-page="ops"] {
@@ -2496,40 +2531,67 @@ button:hover {
 }
 
 .sector-news-panel {
+  gap: 4px;
   min-height: 100%;
+}
+
+.sector-news-panel .subpanel-header {
+  gap: 4px;
+  align-items: end;
+}
+
+.sector-news-panel .subpanel-header h3 {
+  line-height: 1;
+}
+
+.sector-news-panel #sectorNewsMeta {
+  line-height: 1;
 }
 
 .sector-news-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 6px;
+  gap: 4px;
 }
 
 .sector-news-card {
   display: grid;
-  gap: 6px;
-  align-content: start;
-  grid-template-rows: auto auto auto;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
   min-height: 0;
-  padding: 10px;
+  padding: 8px 10px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: #0b0b0b;
 }
 
-.sector-news-head,
+.sector-news-kicker,
 .sector-news-foot {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
-.sector-news-head .news-time,
+.sector-news-kicker {
+  align-content: start;
+}
+
+.sector-news-kicker .news-time,
 .sector-news-foot .muted,
 .sector-news-foot span:last-child {
-  justify-self: end;
   font-size: 10px;
   color: #8f8f8f;
+}
+
+.sector-news-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sector-news-foot {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
 }
 
 #sectorNewsMeta,
@@ -2552,8 +2614,8 @@ button:hover {
   -webkit-line-clamp: 2;
   color: #f2f2f2;
   text-decoration: none;
-  line-height: 1.35;
-  min-height: 2.7em;
+  line-height: 1.3;
+  min-height: 2.6em;
 }
 
 .sector-news-link:hover {
