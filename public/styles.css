@@ -2402,25 +2402,34 @@ button:hover {
 .sector-news-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 
 .sector-news-card {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   align-content: start;
-  min-height: 132px;
-  padding: 12px;
+  grid-template-rows: auto auto auto;
+  min-height: 0;
+  padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: #0b0b0b;
 }
 
 .sector-news-head,
 .sector-news-foot {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
+}
+
+.sector-news-head .news-time,
+.sector-news-foot .muted,
+.sector-news-foot span:last-child {
+  justify-self: end;
+  font-size: 10px;
+  color: #8f8f8f;
 }
 
 #sectorNewsMeta,
@@ -2440,11 +2449,11 @@ button:hover {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   color: #f2f2f2;
   text-decoration: none;
-  line-height: 1.45;
-  min-height: 4.35em;
+  line-height: 1.35;
+  min-height: 2.7em;
 }
 
 .sector-news-link:hover {
@@ -3770,7 +3779,7 @@ th {
   font-size: 10px;
 }
 
-@media (max-width: 1320px) {
+@media (max-width: 1080px) {
   .hero {
     grid-template-columns: 1fr;
   }

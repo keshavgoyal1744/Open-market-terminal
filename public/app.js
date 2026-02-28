@@ -83,6 +83,7 @@ const DEFAULT_SECTORS = [
   "Real Estate",
   "Basic Materials",
 ];
+const COMPACT_LAYOUT_BREAKPOINT = 1080;
 
 const PAGE_DEFINITIONS = {
   overview: {
@@ -574,6 +575,7 @@ function bindForms() {
   document.querySelector("#sectorBoardSelect")?.addEventListener("change", async (event) => {
     await selectSectorFocus(event.target?.value, { page: "sectors", jump: false });
   });
+  syncSectorSelector(DEFAULT_SECTORS, state.preferences.sectorFocus);
 
   document.querySelector("#refreshFlowButton")?.addEventListener("click", async () => {
     await loadFlow(true);
@@ -1119,7 +1121,7 @@ function initializePanelLayout() {
     resizeHandle.setAttribute("aria-label", `Resize ${panel.id}`);
     resizeHandle.innerHTML = "<span>//</span>";
     resizeHandle.addEventListener("pointerdown", (event) => {
-      if (window.innerWidth <= 1320) {
+      if (window.innerWidth <= COMPACT_LAYOUT_BREAKPOINT) {
         return;
       }
       startPanelResize(panel, event);
@@ -1189,7 +1191,7 @@ function applyPanelLayout() {
   document.querySelectorAll("#dashboardGrid > section.panel").forEach((panel) => {
     const order = Number.isFinite(pageOrders[panel.id]) ? pageOrders[panel.id] : layout.indexOf(panel.id);
     panel.style.order = String(order === -1 ? DEFAULT_PANEL_LAYOUT.length : order);
-    if (window.innerWidth <= 1320) {
+    if (window.innerWidth <= COMPACT_LAYOUT_BREAKPOINT) {
       panel.style.gridColumn = "";
       panel.style.gridRow = "";
       return;

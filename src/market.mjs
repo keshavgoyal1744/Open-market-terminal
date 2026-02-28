@@ -804,7 +804,11 @@ export class MarketDataService {
       async () => {
         const heatmap = await this.getSp500Heatmap();
         const availableSectors = heatmap.sectors ?? [];
-        const matchedSector = resolveSectorName(requested, availableSectors) ?? availableSectors[0]?.sector ?? "Technology";
+        const matchedSector =
+          resolveSectorName(requested, availableSectors)
+          ?? requested
+          ?? availableSectors[0]?.sector
+          ?? "Technology";
         const items = (heatmap.tiles ?? [])
           .filter((item) => normalizeSectorKey(item.sector) === normalizeSectorKey(matchedSector))
           .sort((left, right) => (numeric(right.weight) ?? 0) - (numeric(left.weight) ?? 0))
