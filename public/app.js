@@ -234,8 +234,8 @@ const PAGE_PANEL_ORDERS = {
     "section-research-rail": 0,
     "section-workbench": 1,
     "section-intelligence": 2,
-    "section-events": 3,
-    "section-screening": 4,
+    "section-screening": 3,
+    "section-events": 4,
   },
   ops: {
     "section-portfolio": 0,
@@ -262,8 +262,8 @@ const PAGE_PANEL_COLUMNS = {
     "section-research-rail": "1 / span 2",
     "section-workbench": "3 / span 6",
     "section-intelligence": "9 / span 4",
-    "section-events": "3 / span 6",
     "section-screening": "9 / span 4",
+    "section-events": "3 / span 6",
   },
   ops: {
     "section-portfolio": "1 / span 4",
@@ -287,11 +287,11 @@ const PAGE_PANEL_ROWS = {
     "section-flow": "3",
   },
   research: {
-    "section-research-rail": "1 / span 2",
-    "section-workbench": "1",
-    "section-intelligence": "1",
-    "section-events": "2",
-    "section-screening": "2",
+    "section-research-rail": "1 / span 3",
+    "section-workbench": "1 / span 2",
+    "section-intelligence": "1 / span 2",
+    "section-screening": "3",
+    "section-events": "3",
   },
   ops: {
     "section-portfolio": "1",
@@ -2529,15 +2529,15 @@ function syncSectorSelector(sectors, selectedSector = state.preferences.sectorFo
 
 function heatmapSectorSpan(weight) {
   if (!Number.isFinite(weight)) {
-    return 3;
-  }
-  if (weight >= 24) {
-    return 5;
-  }
-  if (weight >= 14) {
     return 4;
   }
-  return 3;
+  if (weight >= 24) {
+    return 6;
+  }
+  if (weight >= 14) {
+    return 5;
+  }
+  return 4;
 }
 
 function startHudClock() {
@@ -4144,7 +4144,7 @@ function renderHeatmapTiles(payload) {
         weight: sum(items.map((item) => item.weight)),
       };
       const sectorSpan = heatmapSectorSpan(sector.weight);
-      const visibleCount = sector.weight >= 20 ? 18 : sector.weight >= 10 ? 14 : 10;
+      const visibleCount = sector.weight >= 20 ? 20 : sector.weight >= 10 ? 16 : 12;
       const visibleItems = items.slice(0, visibleCount);
       const hiddenCount = Math.max(items.length - visibleItems.length, 0);
 
@@ -4153,7 +4153,7 @@ function renderHeatmapTiles(payload) {
           <button type="button" class="heatmap-sector-header" data-heatmap-sector="${escapeHtml(sector.sector ?? "Sector")}">
             <div>
               <h3>${escapeHtml(sector.sector ?? "Sector")}</h3>
-              <span>${escapeHtml(String(items.length))} names</span>
+              <span>${formatPercent(sector.weight)} index share</span>
             </div>
             <strong class="${tone(sector.averageMove)}">${formatPercent(sector.averageMove)}</strong>
           </button>

@@ -1814,24 +1814,28 @@ button:hover {
 
 #dashboardGrid[data-page="research"] #section-workbench {
   grid-column: span 6;
+  align-self: start;
 }
 
 #dashboardGrid[data-page="research"] #section-intelligence {
   grid-column: span 4;
+  align-self: start;
 }
 
 #dashboardGrid[data-page="research"] #section-screening {
   grid-column: span 4;
+  align-self: start;
 }
 
 #dashboardGrid[data-page="research"] #section-events {
   grid-column: span 6;
+  align-self: start;
 }
 
 #dashboardGrid[data-page="research"] #section-research-rail {
   grid-column: span 2;
   order: 0;
-  grid-row: 1 / span 2;
+  grid-row: 1 / span 3;
   align-self: start;
 }
 
@@ -1867,8 +1871,38 @@ button:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-#dashboardGrid[data-page="research"] #section-events {
-  align-self: start;
+#dashboardGrid[data-page="research"] #section-intelligence .subpanel,
+#dashboardGrid[data-page="research"] #section-screening .subpanel,
+#dashboardGrid[data-page="research"] #section-events .subpanel {
+  min-height: 0;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence .list-stack,
+#dashboardGrid[data-page="research"] #section-intelligence .terminal-table-wrap,
+#dashboardGrid[data-page="research"] #section-screening .terminal-table-wrap,
+#dashboardGrid[data-page="research"] #section-events .list-stack {
+  max-height: 260px;
+  overflow: auto;
+}
+
+#dashboardGrid[data-page="research"] #section-intelligence #intelGraph {
+  min-height: 240px;
+}
+
+#dashboardGrid[data-page="research"] #section-workbench #priceChart {
+  min-height: 360px;
+}
+
+#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(3),
+#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(4) {
+  max-height: 420px;
+  overflow: hidden;
+}
+
+#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(3) .list-stack,
+#dashboardGrid[data-page="research"] #section-workbench .detail-grid > .subpanel:nth-child(4) .terminal-table-wrap {
+  max-height: 320px;
+  overflow: auto;
 }
 
 #dashboardGrid[data-page="research"] .research-sparkline {
@@ -1978,6 +2012,7 @@ button:hover {
 
 .heatmap-shell {
   display: grid;
+  grid-template-columns: 1fr;
   gap: 10px;
   padding: 10px;
 }
@@ -2141,16 +2176,16 @@ button:hover {
 
 .sp500-heatmap {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 3px;
+  grid-template-columns: repeat(18, minmax(0, 1fr));
+  gap: 2px;
   align-content: start;
 }
 
 .heatmap-sector {
   display: grid;
-  gap: 4px;
-  min-height: 116px;
-  padding: 6px;
+  gap: 3px;
+  min-height: 96px;
+  padding: 5px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -2160,9 +2195,9 @@ button:hover {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 0 0 2px;
+  padding: 0 0 1px;
   border: none;
   background: transparent;
   text-align: left;
@@ -2176,7 +2211,7 @@ button:hover {
 
 .heatmap-sector-header h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   text-transform: none;
   letter-spacing: 0;
   color: #f0f0f0;
@@ -2184,32 +2219,32 @@ button:hover {
 
 .heatmap-sector-header span {
   display: block;
-  margin-top: 2px;
-  font-size: 10px;
+  margin-top: 1px;
+  font-size: 9px;
   color: #8f8f8f;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .heatmap-sector-header strong {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .heatmap-sector-grid {
   display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  grid-auto-rows: 18px;
-  gap: 3px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: 16px;
+  gap: 2px;
 }
 
 .heatmap-tile {
   position: relative;
   display: grid;
   align-content: space-between;
-  gap: 3px;
+  gap: 2px;
   min-height: 100%;
   width: 100%;
-  padding: 4px;
+  padding: 3px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.018);
   text-align: left;
@@ -2263,7 +2298,7 @@ button:hover {
 .heatmap-sector-label,
 .heatmap-industry,
 .heatmap-weight {
-  font-size: 9px;
+  font-size: 8px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: rgba(255, 255, 255, 0.78);
@@ -2271,22 +2306,22 @@ button:hover {
 
 .heatmap-tile-body {
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .heatmap-tile strong {
-  font-size: 12px;
+  font-size: 11px;
   line-height: 0.95;
 }
 
 .heatmap-name {
-  font-size: 9px;
+  font-size: 8px;
   line-height: 1.2;
   color: rgba(255, 255, 255, 0.78);
 }
 
 .heatmap-move {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   line-height: 1;
 }
@@ -2306,15 +2341,15 @@ button:hover {
 }
 
 .heatmap-tile[data-size="1"] {
-  padding: 6px;
+  padding: 4px;
 }
 
 .heatmap-tile[data-size="1"] strong {
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .heatmap-tile[data-size="1"] .heatmap-move {
-  font-size: 10px;
+  font-size: 9px;
 }
 
 .heatmap-tile[data-size="1"] .heatmap-name {
@@ -2322,11 +2357,11 @@ button:hover {
 }
 
 .heatmap-tile[data-size="2"] strong {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .heatmap-tile[data-size="2"] .heatmap-move {
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .heatmap-more-tile {
