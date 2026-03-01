@@ -888,11 +888,28 @@ export class MarketDataService {
     const providerStatus = hostedAiProviderStatus();
     const snapshotDate = options.snapshotDate ?? getVisibleAiSnapshotDate();
     const snapshotKey = buildAiSnapshotKey({ universe, horizon, bullishCount, bearishCount, snapshotDate });
+    const allowHosted = options.allowHosted ?? Boolean(options.force);
 
     if (!options.force && this.storage) {
       const stored = await this.storage.getAiSnapshot(snapshotKey);
       if (stored) {
         return stored;
+      }
+
+      const latest = await this.storage.getLatestAiSnapshot({ universe, horizon, bullishCount, bearishCount });
+      if (latest) {
+        return {
+          ...latest,
+          snapshot: {
+            ...(latest.snapshot ?? {}),
+            requestedDate: snapshotDate,
+            mode: latest.snapshot?.date === snapshotDate ? (latest.snapshot?.mode ?? "shared-daily") : "latest-available",
+          },
+          warnings: [
+            `Daily snapshot for ${snapshotDate} is not ready yet. Showing the latest available snapshot from ${latest.snapshot?.date ?? latest.asOf ?? "recent run"}.`,
+            ...new Set([...(latest.warnings ?? [])].filter(Boolean)),
+          ].slice(0, 8),
+        };
       }
     }
 
@@ -949,7 +966,7 @@ export class MarketDataService {
 
         let hostedResult = null;
         const warnings = [];
-        if (providerStatus.gemini || providerStatus.groq) {
+        if (allowHosted && (providerStatus.gemini || providerStatus.groq)) {
           try {
             hostedResult = await generateHostedIdeas({
               prompt: buildAiPrompt({
@@ -966,8 +983,10 @@ export class MarketDataService {
           } catch (error) {
             warnings.push(`Hosted AI unavailable: ${error.message}`);
           }
-        } else {
+        } else if (allowHosted) {
           warnings.push("Hosted AI keys not configured. Showing deterministic ranked output.");
+        } else {
+          warnings.push("Hosted AI generation is reserved for the scheduled daily run. Showing deterministic snapshot output.");
         }
 
         const normalized = hostedResult?.parsed
@@ -1060,6 +1079,7 @@ export class MarketDataService {
       bullishCount,
       bearishCount,
       force: true,
+      allowHosted: true,
       snapshotDate: runDate,
     });
 

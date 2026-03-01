@@ -172,6 +172,14 @@ export class JsonStorage {
     return state.aiSnapshots?.[key] ?? null;
   }
 
+  async getLatestAiSnapshot({ universe, horizon, bullishCount, bearishCount }) {
+    const state = await this.readState();
+    const entries = Object.entries(state.aiSnapshots ?? {})
+      .filter(([key]) => key.endsWith(`:${universe}:${horizon}:${bullishCount}:${bearishCount}`))
+      .sort((left, right) => new Date(right[1]?.asOf ?? 0) - new Date(left[1]?.asOf ?? 0));
+    return entries[0]?.[1] ?? null;
+  }
+
   async saveAiSnapshot(key, snapshot) {
     return this.transaction((state) => {
       state.aiSnapshots ??= {};

@@ -69,3 +69,34 @@ test("storage persists users, workspaces, alerts, and notes", async () => {
 
   await rm(file, { force: true });
 });
+
+test("storage returns the latest AI snapshot for a matching configuration", async () => {
+  const dir = await os.tmpdir();
+  const file = path.join(dir, `omt-ai-${Date.now()}-${Math.random()}.json`);
+  const storage = new JsonStorage(file);
+  await storage.init();
+
+  await storage.saveAiSnapshot("2026-02-27:sp500:1-4w:20:20", {
+    asOf: "2026-02-27T15:00:00.000Z",
+    snapshot: { date: "2026-02-27" },
+  });
+  await storage.saveAiSnapshot("2026-02-28:sp500:1-4w:20:20", {
+    asOf: "2026-02-28T15:00:00.000Z",
+    snapshot: { date: "2026-02-28" },
+  });
+  await storage.saveAiSnapshot("2026-02-28:sp500:1-4w:10:10", {
+    asOf: "2026-02-28T16:00:00.000Z",
+    snapshot: { date: "2026-02-28" },
+  });
+
+  const latest = await storage.getLatestAiSnapshot({
+    universe: "sp500",
+    horizon: "1-4w",
+    bullishCount: 20,
+    bearishCount: 20,
+  });
+
+  assert.equal(latest?.snapshot?.date, "2026-02-28");
+
+  await rm(file, { force: true });
+});
