@@ -1,7 +1,8 @@
-import { fetchJson } from "../http.mjs";
+import { fetchJson, fetchText } from "../http.mjs";
 
 const BASE_URL = "https://query1.finance.yahoo.com";
 const ALTERNATE_BASE_URL = "https://query2.finance.yahoo.com";
+const WEBSITE_URL = "https://finance.yahoo.com";
 const OWNERSHIP_ROW_LIMIT = 25;
 const OFFICER_ROW_LIMIT = 20;
 const INSIDER_ROW_LIMIT = 20;
@@ -85,15 +86,32 @@ export async function getHistory(symbol, range = "1mo", interval = "1d") {
 }
 
 export async function getOptions(symbol, expiration) {
+  let lastError = null;
+  let htmlError = null;
+
   try {
     return await fetchOptionsFromBase(symbol, expiration, BASE_URL);
   } catch (error) {
-    if (!shouldUseChartFallback(error)) {
-      throw error;
-    }
+    lastError = error;
   }
 
-  return fetchOptionsFromBase(symbol, expiration, ALTERNATE_BASE_URL);
+  try {
+    return await fetchOptionsFromHtml(symbol, expiration);
+  } catch (error) {
+    htmlError = error;
+  }
+
+  try {
+    return await fetchOptionsFromBase(symbol, expiration, ALTERNATE_BASE_URL);
+  } catch (error) {
+    lastError = error;
+  }
+
+  try {
+    return await fetchOptionsFromHtml(symbol, expiration);
+  } catch (error) {
+    throw htmlError ?? lastError ?? error;
+  }
 }
 
 export async function getCompanyOverview(symbol) {
@@ -101,7 +119,11 @@ export async function getCompanyOverview(symbol) {
     return await fetchCompanyOverviewFromBase(symbol, BASE_URL);
   } catch (error) {
     if (!shouldUseChartFallback(error)) {
-      throw error;
+      try {
+        return await fetchCompanyOverviewFromHtml(symbol);
+      } catch (htmlError) {
+        throw htmlError;
+      }
     }
   }
 
@@ -109,8 +131,18 @@ export async function getCompanyOverview(symbol) {
     return await fetchCompanyOverviewFromBase(symbol, ALTERNATE_BASE_URL);
   } catch (error) {
     if (!shouldUseChartFallback(error)) {
-      throw error;
+      try {
+        return await fetchCompanyOverviewFromHtml(symbol);
+      } catch (htmlError) {
+        throw htmlError;
+      }
     }
+  }
+
+  try {
+    return await fetchCompanyOverviewFromHtml(symbol);
+  } catch {
+    // fall through to chart-based minimal quote view
   }
 
   const [quote] = await getQuotes([symbol]);
@@ -230,20 +262,35 @@ async function fetchOptionsFromBase(symbol, expiration, baseUrl) {
     url.searchParams.set("date", expiration);
   }
 
-  const payload = await fetchYahooJson(url);
+  const payload = await fetchYahooJson(url, { timeoutMs: 20000 });
   const result = payload?.optionChain?.result?.[0];
   if (!result) {
     throw new Error(`No options data found for ${symbol}.`);
   }
 
-  const options = result.options?.[0] ?? { calls: [], puts: [] };
-  return {
-    symbol: result.underlyingSymbol ?? symbol.toUpperCase(),
-    expirations: result.expirationDates ?? [],
-    quote: result.quote ? normalizeQuote(result.quote) : null,
-    calls: options.calls?.slice(0, 30).map(normalizeOption) ?? [],
-    puts: options.puts?.slice(0, 30).map(normalizeOption) ?? [],
-  };
+  return normalizeOptionChainResult(result, symbol);
+}
+
+async function fetchOptionsFromHtml(symbol, expiration) {
+  const url = new URL(`/quote/${encodeURIComponent(symbol)}/options`, WEBSITE_URL);
+  url.searchParams.set("p", symbol);
+  if (expiration) {
+    url.searchParams.set("date", expiration);
+  }
+
+  const html = await fetchText(url, {
+    timeoutMs: 25000,
+    headers: {
+      ...YAHOO_HEADERS,
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    },
+  });
+  const payload = extractOptionsPayloadFromHtml(html);
+  const result = findOptionChainResult(payload, symbol);
+  if (!result) {
+    throw new Error(`No HTML options data found for ${symbol}.`);
+  }
+  return normalizeOptionChainResult(result, symbol);
 }
 
 async function fetchCompanyOverviewFromBase(symbol, baseUrl) {
@@ -312,6 +359,24 @@ async function fetchCompanyOverviewFromBase(symbol, baseUrl) {
   };
 }
 
+async function fetchCompanyOverviewFromHtml(symbol) {
+  const url = new URL(`/quote/${encodeURIComponent(symbol)}`, WEBSITE_URL);
+  url.searchParams.set("p", symbol);
+
+  const html = await fetchText(url, {
+    headers: {
+      ...YAHOO_HEADERS,
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    },
+  });
+  const payload = extractOptionsPayloadFromHtml(html);
+  const quoteSummary = findQuoteSummaryResult(payload, symbol);
+  if (!quoteSummary) {
+    throw new Error(`No HTML company overview found for ${symbol}.`);
+  }
+  return normalizeQuoteSummaryResult(quoteSummary, symbol);
+}
+
 async function fetchEarningsDetailsFromBase(symbol, baseUrl) {
   const url = new URL(`/v10/finance/quoteSummary/${encodeURIComponent(symbol)}`, baseUrl);
   url.searchParams.set(
@@ -361,8 +426,14 @@ async function fetchQuoteFromChart(symbol) {
   return normalizeChartQuote(result, symbol);
 }
 
-async function fetchYahooJson(url) {
-  return fetchJson(url, { headers: YAHOO_HEADERS });
+async function fetchYahooJson(url, options = {}) {
+  return fetchJson(url, {
+    ...options,
+    headers: {
+      ...YAHOO_HEADERS,
+      ...(options.headers ?? {}),
+    },
+  });
 }
 
 function shouldUseChartFallback(error) {
@@ -445,6 +516,164 @@ function normalizeOption(raw) {
     openInterest: raw.openInterest,
     inTheMoney: raw.inTheMoney,
   };
+}
+
+function normalizeOptionChainResult(result, symbol) {
+  const optionSet = result.options?.[0] ?? result.currentOptions?.[0] ?? result ?? { calls: [], puts: [] };
+  return {
+    symbol: result.underlyingSymbol ?? result.quote?.symbol ?? result.meta?.symbol ?? symbol.toUpperCase(),
+    expirations: result.expirationDates ?? result.expirations ?? [],
+    quote: result.quote ? normalizeQuote(result.quote) : null,
+    calls: optionSet.calls?.slice(0, 30).map(normalizeOption) ?? [],
+    puts: optionSet.puts?.slice(0, 30).map(normalizeOption) ?? [],
+  };
+}
+
+function normalizeQuoteSummaryResult(result, symbol) {
+  return {
+    symbol: result.price?.symbol ?? symbol.toUpperCase(),
+    shortName: result.price?.shortName ?? null,
+    type: result.price?.quoteType ?? null,
+    exchange: result.price?.exchangeName ?? null,
+    sector: result.assetProfile?.sector ?? null,
+    industry: result.assetProfile?.industry ?? null,
+    website: result.assetProfile?.website ?? null,
+    businessSummary: result.assetProfile?.longBusinessSummary ?? null,
+    marketCap: unwrapFormatted(result.summaryDetail?.marketCap),
+    trailingPe: unwrapFormatted(result.summaryDetail?.trailingPE),
+    forwardPe: unwrapFormatted(result.summaryDetail?.forwardPE),
+    dividendYield: unwrapFormatted(result.summaryDetail?.dividendYield),
+    beta: unwrapFormatted(result.summaryDetail?.beta),
+    fiftyTwoWeekHigh: unwrapFormatted(result.summaryDetail?.fiftyTwoWeekHigh),
+    fiftyTwoWeekLow: unwrapFormatted(result.summaryDetail?.fiftyTwoWeekLow),
+    totalRevenue: unwrapFormatted(result.financialData?.totalRevenue),
+    grossMargins: unwrapFormatted(result.financialData?.grossMargins),
+    operatingMargins: unwrapFormatted(result.financialData?.operatingMargins),
+    profitMargins: unwrapFormatted(result.financialData?.profitMargins),
+    freeCashflow: unwrapFormatted(result.financialData?.freeCashflow),
+    debtToEquity: unwrapFormatted(result.financialData?.debtToEquity),
+    returnOnEquity: unwrapFormatted(result.financialData?.returnOnEquity),
+    currentRatio: unwrapFormatted(result.financialData?.currentRatio),
+    analystRating: result.financialData?.recommendationKey ?? null,
+    earningsStart: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.[0]),
+    earningsEnd: normalizeCalendarDate(result.calendarEvents?.earnings?.earningsDate?.at(-1)),
+    institutionPercentHeld: unwrapFormatted(result.majorHoldersBreakdown?.institutionsPercentHeld),
+    insiderPercentHeld: unwrapFormatted(result.majorHoldersBreakdown?.insidersPercentHeld),
+    floatShares: unwrapFormatted(result.defaultKeyStatistics?.floatShares),
+    sharesShort: unwrapFormatted(result.defaultKeyStatistics?.sharesShort),
+    sharesShortPriorMonth: unwrapFormatted(result.defaultKeyStatistics?.sharesShortPriorMonth),
+    shortRatio: unwrapFormatted(result.defaultKeyStatistics?.shortRatio),
+    companyOfficers: normalizeOfficers(result.assetProfile?.companyOfficers),
+    topInstitutionalHolders: normalizeOwnershipList(result.institutionOwnership),
+    topFundHolders: normalizeOwnershipList(result.fundOwnership),
+    insiderHolders: normalizeInsiderHolders(result.insiderHolders),
+    insiderTransactions: normalizeInsiderTransactions(result.insiderTransactions),
+  };
+}
+
+function extractOptionsPayloadFromHtml(html) {
+  const nextData = String(html ?? "").match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i)?.[1];
+  if (nextData) {
+    return JSON.parse(decodeHtmlEntities(nextData));
+  }
+
+  const appMain = String(html ?? "").match(/root\.App\.main\s*=\s*({[\s\S]*?})\s*;\s*(?:<\/script>|$)/i)?.[1];
+  if (appMain) {
+    return JSON.parse(decodeHtmlEntities(appMain));
+  }
+
+  throw new Error("Yahoo options page did not expose a parseable payload.");
+}
+
+function findOptionChainResult(payload, symbol) {
+  const upper = String(symbol ?? "").trim().toUpperCase();
+  const queue = [payload];
+  const seen = new Set();
+
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object") {
+      continue;
+    }
+    if (seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+
+    if (looksLikeOptionChainResult(current, upper)) {
+      return current;
+    }
+    if (Array.isArray(current.result) && looksLikeOptionChainResult(current.result[0], upper)) {
+      return current.result[0];
+    }
+
+    for (const value of Object.values(current)) {
+      if (value && typeof value === "object") {
+        queue.push(value);
+      }
+    }
+  }
+
+  return null;
+}
+
+function findQuoteSummaryResult(payload, symbol) {
+  const upper = String(symbol ?? "").trim().toUpperCase();
+  const queue = [payload];
+  const seen = new Set();
+
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== "object") {
+      continue;
+    }
+    if (seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+
+    if (looksLikeQuoteSummaryResult(current, upper)) {
+      return current;
+    }
+    if (Array.isArray(current.result) && looksLikeQuoteSummaryResult(current.result[0], upper)) {
+      return current.result[0];
+    }
+
+    for (const value of Object.values(current)) {
+      if (value && typeof value === "object") {
+        queue.push(value);
+      }
+    }
+  }
+
+  return null;
+}
+
+function looksLikeOptionChainResult(node, upper) {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const symbol = String(node.underlyingSymbol ?? node.quote?.symbol ?? node.meta?.symbol ?? "").trim().toUpperCase();
+  const optionSet = node.options?.[0] ?? node.currentOptions?.[0] ?? node;
+  const hasChains = Array.isArray(optionSet.calls) || Array.isArray(optionSet.puts);
+  return hasChains && (!upper || !symbol || symbol === upper);
+}
+
+function looksLikeQuoteSummaryResult(node, upper) {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const symbol = String(node.price?.symbol ?? "").trim().toUpperCase();
+  return Boolean(node.price && node.summaryDetail) && (!upper || !symbol || symbol === upper);
+}
+
+function decodeHtmlEntities(value) {
+  return String(value ?? "")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 function normalizeOwnershipList(node) {

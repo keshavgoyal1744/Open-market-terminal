@@ -76,17 +76,23 @@ export class MarketDataService {
 
   async getOptions(symbol, expiration) {
     const suffix = expiration ?? "front";
-    return this.cache.getOrSet(
-      `options:${symbol}:${suffix}`,
-      async () => {
-        try {
-          return await getOptions(symbol, expiration);
-        } catch (error) {
-          return emptyOptions(symbol, error);
-        }
-      },
-      { ttlMs: config.quoteTtlMs, staleMs: config.quoteTtlMs * 4 },
-    );
+    const key = `options:${symbol}:${suffix}`;
+    try {
+      return await this.cache.getOrSet(
+        key,
+        async () => getOptions(symbol, expiration),
+        { ttlMs: config.quoteTtlMs, staleMs: config.quoteTtlMs * 4 },
+      );
+    } catch (error) {
+      const cached = this.cache.peek(key);
+      if (cached?.symbol && ((cached.calls?.length ?? 0) || (cached.puts?.length ?? 0))) {
+        return {
+          ...cached,
+          warning: "Free listed-options coverage is temporarily degraded. Showing the latest cached chain.",
+        };
+      }
+      return emptyOptions(symbol, error);
+    }
   }
 
   async getCompany(symbol) {
@@ -548,6 +554,7 @@ export class MarketDataService {
           this.getPublicAliasDirectory().catch(() => []),
         ]);
         const aliasDirectory = toAliasLookup(aliasDirectoryEntries);
+        const secSignals = company.sec?.relationshipSignals ?? null;
 
         const holders = dedupeHolders([
           ...(company.market.topInstitutionalHolders ?? []),
@@ -588,6 +595,24 @@ export class MarketDataService {
                   : "public short-interest signal",
               }
             : null,
+          secSignals?.ownershipFormCount
+            ? {
+                holder: "Beneficial ownership filings",
+                shares: null,
+                pctHeld: null,
+                note: `${secSignals.ownershipFormCount} recent 13D / 13G-style SEC forms`,
+                reportDate: secSignals.ownershipForms?.[0]?.filingDate ?? null,
+              }
+            : null,
+          secSignals?.insiderFormCount
+            ? {
+                holder: "Insider filing activity",
+                shares: null,
+                pctHeld: null,
+                note: `${secSignals.insiderFormCount} recent Form 3 / 4 / 5 filings`,
+                reportDate: secSignals.insiderForms?.[0]?.filingDate ?? null,
+              }
+            : null,
         ].filter(Boolean);
         const resolvedHolders = dedupeHolders([...holders, ...ownershipFallbacks]);
         const resolvedInsiderHolders = (
@@ -602,11 +627,33 @@ export class MarketDataService {
                     transactionDescription: `${roundTo(company.market.insiderPercentHeld * 100, 2)}% held by insiders`,
                   },
                 ]
+              : company.market.companyOfficers?.length
+                ? company.market.companyOfficers.slice(0, 6).map((officer) => ({
+                    name: officer.name ?? null,
+                    relation: officer.title ?? "Officer / director",
+                    positionDirect: null,
+                    transactionDescription: officer.totalPay != null
+                      ? `Named public officer; reported comp ${compactQuantity(officer.totalPay)}`
+                      : "Named public officer / director",
+                  }))
               : []
+        );
+        const resolvedInsiderTransactions = (
+          company.market.insiderTransactions?.length
+            ? company.market.insiderTransactions
+            : (secSignals?.insiderForms ?? []).slice(0, 8).map((filing) => ({
+                insider: "SEC insider filing",
+                position: filing.form ?? "Form 3 / 4 / 5",
+                transactionText: filing.primaryDocument
+                  ? `${filing.primaryDocument} | filed ${filing.filingDate ?? "n/a"}`
+                  : `Filed ${filing.filingDate ?? "recently"}`,
+                startDate: filing.filingDate ?? null,
+                ownership: "public filing signal",
+              }))
         );
         const acquisitionsTimeline = buildAcquisitionTimeline(intel, company.sec?.filings ?? []);
         const indexTimeline = buildIndexTimeline(indexMemberships);
-        const ownershipTrend = buildOwnershipTrend(company.market, resolvedHolders, company.market.insiderTransactions ?? []);
+        const ownershipTrend = buildOwnershipTrend(company.market, resolvedHolders, resolvedInsiderTransactions);
         const boardInterlocks = buildBoardInterlocks(upper, intel.executives ?? [], company.market.companyOfficers ?? [], aliasDirectory);
         const graphWithIndices = mergeGraphs(
           intel.graph ?? { nodes: [], edges: [] },
@@ -646,7 +693,7 @@ export class MarketDataService {
                 }))
           ),
           insiderHolders: resolvedInsiderHolders,
-          insiderTransactions: company.market.insiderTransactions ?? [],
+          insiderTransactions: resolvedInsiderTransactions,
           boardInterlocks,
           acquisitionsTimeline,
           indexTimeline,

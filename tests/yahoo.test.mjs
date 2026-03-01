@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { getCompanyOverview, getEarningsDetails, getQuotes } from "../src/providers/yahoo.mjs";
+import { getCompanyOverview, getEarningsDetails, getOptions, getQuotes } from "../src/providers/yahoo.mjs";
 
 test("quotes fall back to chart data when Yahoo batch quotes are unauthorized", async (context) => {
   const originalFetch = global.fetch;
@@ -257,6 +257,205 @@ test("earnings details parses trend and surprise history", async (context) => {
   assert.equal(earnings.trend[0].earningsEstimate.numberOfAnalysts, 22);
 });
 
+test("options fall back to Yahoo public HTML when JSON chain endpoints are unauthorized", async (context) => {
+  const originalFetch = global.fetch;
+  context.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  global.fetch = async (url) => {
+    const href = url.toString();
+    if (href.includes("query1.finance.yahoo.com/v7/finance/options/AAPL")) {
+      return jsonResponse(401, {
+        finance: {
+          result: null,
+          error: {
+            code: "Unauthorized",
+            description: "Invalid Crumb",
+          },
+        },
+      });
+    }
+
+    if (href.includes("query2.finance.yahoo.com/v7/finance/options/AAPL")) {
+      return jsonResponse(401, {
+        finance: {
+          result: null,
+          error: {
+            code: "Unauthorized",
+            description: "Invalid Crumb",
+          },
+        },
+      });
+    }
+
+    if (href.includes("finance.yahoo.com/quote/AAPL/options")) {
+      return htmlResponse(200, `
+        <html>
+          <body>
+            <script id="__NEXT_DATA__" type="application/json">
+              ${JSON.stringify({
+                props: {
+                  pageProps: {
+                    optionChain: {
+                      result: [
+                        {
+                          underlyingSymbol: "AAPL",
+                          expirationDates: [1772236800],
+                          quote: {
+                            symbol: "AAPL",
+                            shortName: "Apple Inc.",
+                            quoteType: "EQUITY",
+                            regularMarketPrice: 200,
+                            regularMarketVolume: 1000,
+                          },
+                          options: [
+                            {
+                              calls: [
+                                {
+                                  contractSymbol: "AAPL260228C00200000",
+                                  strike: 200,
+                                  lastPrice: 5.5,
+                                  bid: 5.4,
+                                  ask: 5.6,
+                                  impliedVolatility: 0.24,
+                                  volume: 120,
+                                  openInterest: 900,
+                                  inTheMoney: false,
+                                },
+                              ],
+                              puts: [
+                                {
+                                  contractSymbol: "AAPL260228P00200000",
+                                  strike: 200,
+                                  lastPrice: 4.2,
+                                  bid: 4.1,
+                                  ask: 4.3,
+                                  impliedVolatility: 0.22,
+                                  volume: 80,
+                                  openInterest: 700,
+                                  inTheMoney: false,
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  },
+                },
+              })}
+            </script>
+          </body>
+        </html>
+      `);
+    }
+
+    throw new Error(`Unexpected URL: ${href}`);
+  };
+
+  const options = await getOptions("AAPL");
+
+  assert.equal(options.symbol, "AAPL");
+  assert.equal(options.calls.length, 1);
+  assert.equal(options.puts.length, 1);
+  assert.equal(options.calls[0].strike, 200);
+  assert.equal(options.puts[0].openInterest, 700);
+});
+
+test("company overview falls back to Yahoo public HTML for holder rows when summary endpoints are unauthorized", async (context) => {
+  const originalFetch = global.fetch;
+  context.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  global.fetch = async (url) => {
+    const href = url.toString();
+    if (href.includes("/v10/finance/quoteSummary/AAPL")) {
+      return jsonResponse(401, {
+        finance: {
+          result: null,
+          error: {
+            code: "Unauthorized",
+            description: "Invalid Crumb",
+          },
+        },
+      });
+    }
+
+    if (href.includes("finance.yahoo.com/quote/AAPL")) {
+      return htmlResponse(200, `
+        <html>
+          <body>
+            <script id="__NEXT_DATA__" type="application/json">
+              ${JSON.stringify({
+                props: {
+                  pageProps: {
+                    quoteSummary: {
+                      result: [
+                        {
+                          price: {
+                            symbol: "AAPL",
+                            shortName: "Apple Inc.",
+                            quoteType: "EQUITY",
+                            exchangeName: "NMS",
+                          },
+                          summaryDetail: {
+                            marketCap: { raw: 3000000000000 },
+                            trailingPE: { raw: 28.5 },
+                          },
+                          majorHoldersBreakdown: {
+                            institutionsPercentHeld: { raw: 0.61 },
+                            insidersPercentHeld: { raw: 0.02 },
+                          },
+                          institutionOwnership: {
+                            ownershipList: [
+                              {
+                                organization: "BlackRock, Inc.",
+                                position: { raw: 120000000 },
+                                pctHeld: { raw: 0.07 },
+                                reportDate: "2026-01-31",
+                              },
+                            ],
+                          },
+                          fundOwnership: {
+                            ownershipList: [
+                              {
+                                organization: "Vanguard Group, Inc.",
+                                position: { raw: 110000000 },
+                                pctHeld: { raw: 0.065 },
+                                reportDate: "2026-01-31",
+                              },
+                            ],
+                          },
+                          assetProfile: {
+                            sector: "Technology",
+                            industry: "Consumer Electronics",
+                            companyOfficers: [],
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              })}
+            </script>
+          </body>
+        </html>
+      `);
+    }
+
+    throw new Error(`Unexpected URL: ${href}`);
+  };
+
+  const overview = await getCompanyOverview("AAPL");
+
+  assert.equal(overview.symbol, "AAPL");
+  assert.equal(overview.topInstitutionalHolders[0].holder, "BlackRock, Inc.");
+  assert.equal(overview.topFundHolders[0].holder, "Vanguard Group, Inc.");
+  assert.equal(overview.institutionPercentHeld, 0.61);
+});
+
 function makeChartPayload({
   symbol,
   shortName,
@@ -314,6 +513,17 @@ function jsonResponse(status, payload) {
     statusText: status === 200 ? "OK" : "Unauthorized",
     async text() {
       return JSON.stringify(payload);
+    },
+  };
+}
+
+function htmlResponse(status, payload) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 200 ? "OK" : "Unauthorized",
+    async text() {
+      return payload;
     },
   };
 }

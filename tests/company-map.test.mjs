@@ -120,3 +120,49 @@ test("company map fallback builds named supplier, ownership, and corporate rows 
   assert.equal(payload.graph.nodes.some((item) => item.label === "Beneficial ownership filings"), true);
   assert.equal(payload.graph.nodes.some((item) => item.symbol === "NVDA"), true);
 });
+
+test("company map falls back to SEC ownership and insider signals when named rows are unavailable", async () => {
+  class SparseOwnershipService extends StubMarketDataService {
+    async getCompany(symbol) {
+      const company = await super.getCompany(symbol);
+      return {
+        ...company,
+        market: {
+          ...company.market,
+          institutionPercentHeld: null,
+          insiderPercentHeld: null,
+          floatShares: null,
+          sharesShort: null,
+          shortRatio: null,
+          topInstitutionalHolders: [],
+          topFundHolders: [],
+          insiderHolders: [],
+          insiderTransactions: [],
+        },
+        sec: {
+          ...company.sec,
+          relationshipSignals: {
+            insiderFormCount: 2,
+            ownershipFormCount: 1,
+            dealFormCount: 0,
+            insiderForms: [
+              { form: "4", filingDate: "2026-02-20", primaryDocument: "form4.xml" },
+            ],
+            ownershipForms: [
+              { form: "SC 13G", filingDate: "2026-02-10", primaryDocument: "sc13g.htm" },
+            ],
+            dealForms: [],
+          },
+        },
+      };
+    }
+  }
+
+  const service = new SparseOwnershipService(cache);
+  const payload = await service.getCompanyMap("ACME");
+
+  assert.equal(payload.holders.some((item) => item.holder === "Beneficial ownership filings"), true);
+  assert.equal(payload.holders.some((item) => item.holder === "Insider filing activity"), true);
+  assert.equal(payload.insiderHolders.some((item) => item.name === "Jane Doe"), true);
+  assert.equal(payload.insiderTransactions.some((item) => item.position === "4"), true);
+});
