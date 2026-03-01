@@ -7617,22 +7617,23 @@ function renderIntelGraphNetwork(graph, symbol) {
     market: nodes.filter((node) => ["competitor", "ecosystem"].includes(String(node.kind))),
   };
 
-  const width = 1320;
-  const height = Math.max(500, 220 + Math.max(lanes.supply.length, lanes.customer.length, 4) * 56);
+  const sideDepth = Math.max(lanes.supply.length, lanes.customer.length, 4);
+  const width = Math.max(1420, 1160 + Math.max(lanes.corporate.length, lanes.market.length, 6) * 28);
+  const height = Math.max(560, 280 + sideDepth * 68);
   const hub = { x: width / 2, y: height / 2 };
-  const topY = 82;
-  const bottomY = height - 86;
-  const leftX = 74;
-  const rightX = width - 74;
-  const laneXFrom = 124;
-  const laneXTo = width - 124;
-  const laneYFrom = 150;
-  const laneYTo = height - 136;
+  const topY = 94;
+  const bottomY = height - 94;
+  const leftX = 116;
+  const rightX = width - 116;
+  const laneXFrom = 168;
+  const laneXTo = width - 168;
+  const laneYFrom = 162;
+  const laneYTo = height - 162;
   const positioned = [
-    ...layoutGraphLane(lanes.corporate, { xFrom: laneXFrom, xTo: laneXTo, y: topY }),
-    ...layoutGraphLane(lanes.supply, { xFrom: leftX, xTo: leftX, yFrom: laneYFrom, yTo: laneYTo }),
-    ...layoutGraphLane(lanes.customer, { xFrom: rightX, xTo: rightX, yFrom: laneYFrom, yTo: laneYTo }),
-    ...layoutGraphLane(lanes.market, { xFrom: laneXFrom, xTo: laneXTo, y: bottomY }),
+    ...layoutGraphLane(lanes.corporate, { orientation: "horizontal", xFrom: laneXFrom, xTo: laneXTo, y: topY }),
+    ...layoutGraphLane(lanes.supply, { orientation: "vertical-left", xFrom: leftX, yFrom: laneYFrom, yTo: laneYTo }),
+    ...layoutGraphLane(lanes.customer, { orientation: "vertical-right", xFrom: rightX, yFrom: laneYFrom, yTo: laneYTo }),
+    ...layoutGraphLane(lanes.market, { orientation: "horizontal", xFrom: laneXFrom, xTo: laneXTo, y: bottomY }),
   ];
   const nodeMap = new Map(positioned.map((node) => [node.id, node]));
 
@@ -7698,8 +7699,8 @@ function layoutGraphLane(nodes, spec) {
     return [];
   }
 
-  if (Number.isFinite(spec.y)) {
-    const rowCount = list.length > 8 ? 2 : 1;
+  if (spec.orientation === "horizontal" || Number.isFinite(spec.y)) {
+    const rowCount = list.length > 14 ? 3 : list.length > 7 ? 2 : 1;
     const perRow = Math.ceil(list.length / rowCount);
     return list.map((node, index) => {
       const row = Math.floor(index / perRow);
@@ -7709,20 +7710,26 @@ function layoutGraphLane(nodes, spec) {
       const x = spec.xFrom === spec.xTo || spec.xTo == null
         ? spec.xFrom
         : spec.xFrom + progress * (spec.xTo - spec.xFrom);
-      const y = spec.y + (rowCount === 1 ? 0 : row === 0 ? -26 : 26);
+      const yOffsets = rowCount === 1
+        ? [0]
+        : rowCount === 2
+          ? [-40, 40]
+          : [-66, 0, 66];
+      const y = spec.y + (yOffsets[row] ?? 0);
       return { ...node, x, y };
     });
   }
 
-  const columnCount = list.length > 6 ? 2 : 1;
+  const columnCount = list.length > 14 ? 3 : list.length > 6 ? 2 : 1;
   const perColumn = Math.ceil(list.length / columnCount);
   return list.map((node, index) => {
     const column = Math.floor(index / perColumn);
     const offset = column * perColumn;
     const count = Math.min(perColumn, list.length - offset);
     const progress = count === 1 ? 0.5 : (index - offset) / (count - 1);
-    const xShift = columnCount === 1 ? 0 : column === 0 ? -44 : 44;
-    const x = spec.xFrom + xShift;
+    const direction = spec.orientation === "vertical-right" ? -1 : 1;
+    const centerOffset = column - (columnCount - 1) / 2;
+    const x = spec.xFrom + centerOffset * 164 * direction;
     const y = spec.yFrom === spec.yTo || spec.yTo == null
       ? spec.y
       : spec.yFrom + progress * (spec.yTo - spec.yFrom);

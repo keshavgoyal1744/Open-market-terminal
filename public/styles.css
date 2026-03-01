@@ -4004,7 +4004,7 @@ textarea:focus {
   position: relative;
   min-height: 420px;
   width: 100%;
-  padding: 20px 12px 24px;
+  padding: 24px 18px 28px;
   background:
     radial-gradient(circle at center, rgba(53, 240, 210, 0.08), transparent 26%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
@@ -4035,8 +4035,8 @@ textarea:focus {
   top: 50%;
   display: grid;
   gap: 6px;
-  width: 136px;
-  padding: 14px 12px;
+  width: 152px;
+  padding: 16px 14px;
   border: 1px solid rgba(124, 247, 212, 0.22);
   background: rgba(4, 10, 18, 0.92);
   text-align: center;
@@ -4063,8 +4063,9 @@ textarea:focus {
 .graph-network-node {
   display: grid;
   gap: 4px;
-  width: 136px;
-  padding: 9px;
+  width: 132px;
+  min-height: 84px;
+  padding: 10px 10px 9px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(5, 10, 16, 0.94);
   text-align: left;
@@ -4080,8 +4081,13 @@ textarea:focus {
 
 .graph-network-node-title {
   color: #f1f6ff;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
+  line-height: 1.25;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .graph-network-node-meta {
@@ -4090,8 +4096,12 @@ textarea:focus {
 
 .graph-network-node-note {
   color: #9eb0c9;
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: 10px;
+  line-height: 1.3;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .graph-network-node-supply {
@@ -4134,7 +4144,7 @@ textarea:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .graph-legend-item {
@@ -4171,25 +4181,25 @@ textarea:focus {
 }
 
 .graph-lane-top {
-  top: 8px;
+  top: 10px;
   left: 50%;
   transform: translateX(-50%);
 }
 
 .graph-lane-left {
   top: 50%;
-  left: 8px;
+  left: 14px;
   transform: translateY(-50%) rotate(-90deg);
 }
 
 .graph-lane-right {
   top: 50%;
-  right: 8px;
+  right: 14px;
   transform: translateY(-50%) rotate(90deg);
 }
 
 .graph-lane-bottom {
-  bottom: 8px;
+  bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
 }
@@ -4437,7 +4447,20 @@ body.company-map-explorer-open {
 }
 
 .company-map-explorer-chart-large {
-  min-height: 720px;
+  min-height: 820px;
+}
+
+.company-map-explorer-chart-large .graph-network {
+  min-height: 780px;
+  padding-inline: 26px;
+}
+
+.company-map-explorer-chart-large .graph-network-node {
+  width: 126px;
+}
+
+.company-map-explorer-chart-large .graph-network-node-note {
+  -webkit-line-clamp: 3;
 }
 
 .company-map-explorer-section .chart-card.small {
