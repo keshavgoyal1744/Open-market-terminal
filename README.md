@@ -110,6 +110,11 @@ Relationship-first view of one company.
 - full-screen relationship explorer
 
 
+<img width="1427" height="950" alt="image" src="https://github.com/user-attachments/assets/aa2224b0-d227-41a2-a7ca-9ea37fcc8539" />
+<img width="1420" height="670" alt="image" src="https://github.com/user-attachments/assets/94ad6f8d-fcf9-49de-877b-c94e5817ce03" />
+<img width="1433" height="850" alt="image" src="https://github.com/user-attachments/assets/9b0e7d25-3f01-4f48-9732-3b24cb7dbf81" />
+
+
 
 
 ### Sector Explorer
@@ -122,6 +127,12 @@ Weighted drilldown into one S&P 500 sector.
 - sector headlines
 - paginated constituent board
 - overflow mosaic modal for additional names
+
+<img width="1428" height="926" alt="image" src="https://github.com/user-attachments/assets/da1275f2-2379-439b-980a-54a29942ae61" />
+<img width="1420" height="542" alt="image" src="https://github.com/user-attachments/assets/ba35e350-eeb4-4e2f-9938-67e54e318285" />
+
+
+
 
 ### Monitor Boards
 
@@ -136,6 +147,10 @@ Multi-board scan page for broad market monitoring.
 - ETF tape proxies
 - macro board
 
+<img width="1418" height="927" alt="image" src="https://github.com/user-attachments/assets/16177770-2a2b-4519-b874-77bae0ac4ddf" />
+
+
+
 ### Newswire
 
 Broad market wire plus focused search.
@@ -146,6 +161,10 @@ Broad market wire plus focused search.
 - source/category metadata
 - pagination
 
+<img width="1430" height="957" alt="image" src="https://github.com/user-attachments/assets/01f78690-7508-4d19-93fd-acb973867d23" />
+
+
+
 ### Event Calendar
 
 Forward schedule for market-relevant dates.
@@ -154,6 +173,9 @@ Forward schedule for market-relevant dates.
 - macro releases
 - policy events
 - paging and time-window controls
+
+<img width="1426" height="754" alt="image" src="https://github.com/user-attachments/assets/1e7e4dad-2c23-4492-8bd9-9026a688f9a4" />
+
 
 ### AI Ideas
 
@@ -168,6 +190,9 @@ Shared daily bullish/bearish board.
 - Groq fallback
 - daily shared snapshot to reduce token burn
 
+<img width="1424" height="899" alt="image" src="https://github.com/user-attachments/assets/13d9d989-360a-42a1-8af2-12960df66468" />
+
+
 ### Ops Center
 
 Operational tools for running the desk itself.
@@ -179,6 +204,10 @@ Operational tools for running the desk itself.
 - workspaces
 - activity stream
 - crypto panel
+
+<img width="1419" height="697" alt="image" src="https://github.com/user-attachments/assets/9b117ce7-63bb-4c80-bc67-9508700a4e76" />
+<img width="1412" height="446" alt="image" src="https://github.com/user-attachments/assets/0fc6f049-3169-4a91-8625-27c0171d96fa" />
+
 
 ## What’s in the product today
 
