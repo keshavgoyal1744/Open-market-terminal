@@ -4,7 +4,7 @@ import { getMacroSnapshot } from "./providers/bls.mjs";
 import { generateHostedIdeas, hostedAiProviderStatus } from "./providers/ai.mjs";
 import { getMacroCalendar, getNasdaqEarningsCalendar } from "./providers/calendar.mjs";
 import { getOrderBook, getTicker } from "./providers/coinbase.mjs";
-import { getMajorIndexMemberships } from "./providers/indices.mjs";
+import { getMajorIndexMemberships, getPublicCompanyAliasDirectory, normalizeAliasKey } from "./providers/indices.mjs";
 import { getMarketNews } from "./providers/news.mjs";
 import { getCompanySnapshot } from "./providers/sec.mjs";
 import { getSp500Universe } from "./providers/sp500.mjs";
@@ -173,6 +173,14 @@ export class MarketDataService {
         };
       },
       { ttlMs: config.companyTtlMs, staleMs: config.companyTtlMs * 6 },
+    );
+  }
+
+  async getPublicAliasDirectory() {
+    return this.cache.getOrSet(
+      "public-alias-directory",
+      () => getPublicCompanyAliasDirectory(),
+      { ttlMs: config.companyTtlMs * 6, staleMs: config.companyTtlMs * 24 },
     );
   }
 
@@ -364,6 +372,7 @@ export class MarketDataService {
     return this.cache.getOrSet(
       `intel:${upper}`,
       async () => {
+        const aliasDirectory = toAliasLookup(await this.getPublicAliasDirectory().catch(() => []));
         const [company, curated] = await Promise.all([
           this.getCompany(upper).catch((error) => ({
             symbol: upper,
@@ -375,7 +384,7 @@ export class MarketDataService {
         ]);
 
         const publicPeerUniverse = await this.getPublicPeerUniverse(upper, company).catch(() => []);
-        const derived = buildDerivedRelationshipIntel(upper, company);
+        const derived = buildDerivedRelationshipIntel(upper, company, aliasDirectory);
         const competitorUniverse = [...new Set([...(curated.peerSymbols ?? []), ...(curated.competitorSymbols ?? []), ...(derived.peerSymbols ?? []), ...publicPeerUniverse])]
           .filter((entry) => entry && entry !== upper)
           .slice(0, 12);
@@ -526,7 +535,7 @@ export class MarketDataService {
     return this.cache.getOrSet(
       `company-map:${upper}`,
       async () => {
-        const [[quote], company, intel, indexMemberships] = await Promise.all([
+        const [[quote], company, intel, indexMemberships, aliasDirectoryEntries] = await Promise.all([
           this.getQuotes([upper]).catch(() => [null]),
           this.getCompany(upper).catch((error) => ({
             symbol: upper,
@@ -536,7 +545,9 @@ export class MarketDataService {
           })),
           this.getRelationshipIntel(upper).catch(() => emptyCompanyMapIntel(upper)),
           getMajorIndexMemberships(upper).catch(() => []),
+          this.getPublicAliasDirectory().catch(() => []),
         ]);
+        const aliasDirectory = toAliasLookup(aliasDirectoryEntries);
 
         const holders = dedupeHolders([
           ...(company.market.topInstitutionalHolders ?? []),
@@ -596,7 +607,7 @@ export class MarketDataService {
         const acquisitionsTimeline = buildAcquisitionTimeline(intel, company.sec?.filings ?? []);
         const indexTimeline = buildIndexTimeline(indexMemberships);
         const ownershipTrend = buildOwnershipTrend(company.market, resolvedHolders, company.market.insiderTransactions ?? []);
-        const boardInterlocks = buildBoardInterlocks(upper, intel.executives ?? [], company.market.companyOfficers ?? []);
+        const boardInterlocks = buildBoardInterlocks(upper, intel.executives ?? [], company.market.companyOfficers ?? [], aliasDirectory);
         const graphWithIndices = mergeGraphs(
           intel.graph ?? { nodes: [], edges: [] },
           buildIndexMembershipGraph(upper, indexMemberships),
@@ -619,9 +630,9 @@ export class MarketDataService {
             notes: [...new Set([...(intel.coverage?.notes ?? []), ...(company.warnings ?? [])])].slice(0, 8),
           },
           indices: indexMemberships,
-          suppliers: normalizeMapRelations(intel.supplyChain?.suppliers ?? []),
-          customers: normalizeMapCustomers(intel),
-          competitors: normalizeCompetitors(intel.competitors ?? []),
+          suppliers: normalizeMapRelations(intel.supplyChain?.suppliers ?? [], aliasDirectory),
+          customers: normalizeMapCustomers(intel, aliasDirectory),
+          competitors: normalizeCompetitors(intel.competitors ?? [], aliasDirectory),
           holders: resolvedHolders,
           board: (
             company.market.companyOfficers?.length
@@ -642,7 +653,7 @@ export class MarketDataService {
           ownershipTrend,
           corporate: {
             tree: intel.corporate?.tree ?? [],
-            relations: normalizeMapRelations(intel.corporate?.relations ?? []),
+            relations: normalizeMapRelations(intel.corporate?.relations ?? [], aliasDirectory),
           },
           graph: graphWithIndices,
           geography: intel.geography ?? { revenueMix: [], manufacturing: [], supplyRegions: [] },
@@ -1687,7 +1698,7 @@ function mergeGraphs(primary = { nodes: [], edges: [] }, secondary = { nodes: []
   };
 }
 
-function buildDerivedRelationshipIntel(symbol, company) {
+function buildDerivedRelationshipIntel(symbol, company, aliasDirectory = null) {
   const market = company?.market ?? {};
   const secSignals = company?.sec?.relationshipSignals ?? null;
   const issuerName = market.shortName ?? company?.sec?.title ?? symbol;
@@ -1804,7 +1815,7 @@ function buildDerivedRelationshipIntel(symbol, company) {
     if (!holder?.holder) {
       continue;
     }
-    const holderSymbol = inferTickerFromText(holder.holder) ?? undefined;
+    const holderSymbol = inferTickerFromText(holder.holder, aliasDirectory) ?? undefined;
     const id = `holder:${templateKey(holder.holder)}`;
     addNode({ id, label: holder.holder, kind: "investment", symbol: holderSymbol });
     addEdge({
@@ -1888,7 +1899,7 @@ function buildDerivedRelationshipIntel(symbol, company) {
     if (!insider?.name) {
       continue;
     }
-    const insiderSymbol = inferTickerFromText(insider.name) ?? undefined;
+    const insiderSymbol = inferTickerFromText(insider.name, aliasDirectory) ?? undefined;
     const id = `insider:${templateKey(insider.name)}`;
     const note = insiderHoldingNote(insider);
     addNode({ id, label: insider.name, kind: "investment", symbol: insiderSymbol });
@@ -2262,34 +2273,34 @@ function emptyCompanyMapIntel(symbol) {
   };
 }
 
-function normalizeMapRelations(items = []) {
+function normalizeMapRelations(items = [], aliasDirectory = null) {
   return items.map((item) => ({
     target: item.target ?? item.name ?? "n/a",
     relation: item.relation ?? item.level ?? "related",
     label: item.label ?? item.commentary ?? item.description ?? "",
     domain: item.domain ?? "ecosystem",
-    symbol: item.symbol ?? inferTickerFromText(item.target ?? item.name ?? ""),
+    symbol: item.symbol ?? inferTickerFromText(item.target ?? item.name ?? "", aliasDirectory),
   }));
 }
 
-function normalizeMapCustomers(intel) {
+function normalizeMapCustomers(intel, aliasDirectory = null) {
   const concentrationRows = (intel.customerConcentration ?? []).map((item) => ({
     target: item.name ?? "Customer / end market",
     relation: item.level ?? "customer mix",
     label: item.commentary ?? item.description ?? "",
     domain: "customer",
-    symbol: inferTickerFromText(item.name ?? ""),
+    symbol: inferTickerFromText(item.name ?? "", aliasDirectory),
   }));
 
   return dedupeRelations([
     ...concentrationRows,
-    ...normalizeMapRelations(intel.supplyChain?.customers ?? []),
+    ...normalizeMapRelations(intel.supplyChain?.customers ?? [], aliasDirectory),
   ]);
 }
 
-function normalizeCompetitors(items = []) {
+function normalizeCompetitors(items = [], aliasDirectory = null) {
   return items.map((item) => ({
-    symbol: item.symbol ?? inferTickerFromText(item.companyName ?? ""),
+    symbol: item.symbol ?? inferTickerFromText(item.companyName ?? "", aliasDirectory),
     companyName: item.companyName ?? item.symbol ?? "n/a",
     price: item.price ?? null,
     changePercent: item.changePercent ?? null,
@@ -2320,7 +2331,30 @@ function dedupeRelations(items = []) {
   });
 }
 
-function inferTickerFromText(value) {
+function toAliasLookup(entries = []) {
+  const lookup = new Map();
+  for (const entry of entries ?? []) {
+    const key = String(entry?.key ?? "").trim();
+    if (!key || lookup.has(key)) {
+      continue;
+    }
+    lookup.set(key, entry);
+  }
+  return lookup;
+}
+
+function resolveAliasDirectorySymbol(normalized, aliasDirectory) {
+  if (!normalized || !(aliasDirectory instanceof Map)) {
+    return null;
+  }
+  const match = aliasDirectory.get(normalized);
+  if (!match) {
+    return null;
+  }
+  return typeof match === "string" ? match : match.symbol ?? null;
+}
+
+function inferTickerFromText(value, aliasDirectory = null) {
   const raw = String(value ?? "").trim();
   if (!raw) {
     return null;
@@ -2336,14 +2370,15 @@ function inferTickerFromText(value) {
     return parenMatch[1].replace(/\./g, "-");
   }
 
-  const normalized = direct
-    .replace(/&/g, " AND ")
-    .replace(/[^A-Z0-9]+/g, " ")
-    .replace(/\b(CORPORATION|CORP|INCORPORATED|INC|COMPANY|CO|HOLDINGS|HOLDING|GROUP|LTD|LIMITED|PLC|SA|NV)\b/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const normalized = normalizeAliasKey(
+    direct.replace(/\b(CORPORATION|CORP|INCORPORATED|INC|COMPANY|CO|HOLDINGS|HOLDING|GROUP|LTD|LIMITED|PLC|SA|NV)\b/g, " "),
+  );
 
-  return KNOWN_PUBLIC_TICKER_ALIASES.get(normalized) ?? null;
+  return (
+    KNOWN_PUBLIC_TICKER_ALIASES.get(normalized)
+    ?? resolveAliasDirectorySymbol(normalized, aliasDirectory)
+    ?? null
+  );
 }
 
 const KNOWN_PUBLIC_TICKER_ALIASES = new Map([
@@ -3583,7 +3618,7 @@ function buildOwnershipTrend(market = {}, holders = [], insiderTransactions = []
   ];
 }
 
-function buildBoardInterlocks(symbol, executives = [], officers = []) {
+function buildBoardInterlocks(symbol, executives = [], officers = [], aliasDirectory = null) {
   const interlocks = new Map();
   const nodes = [{ id: symbol, label: symbol, kind: "issuer", symbol }];
   const edges = [];
@@ -3615,7 +3650,7 @@ function buildBoardInterlocks(symbol, executives = [], officers = []) {
       }
       const cleanName = String(companyName).trim();
       const nodeId = `interlock:${templateKey(cleanName)}`;
-      addNode(nodeId, cleanName, "investment", inferTickerFromText(cleanName) ?? undefined);
+      addNode(nodeId, cleanName, "investment", inferTickerFromText(cleanName, aliasDirectory) ?? undefined);
       addEdge(symbol, nodeId, executive.role ?? "executive", "corporate", `${executive.name} career link`);
       interlocks.set(cleanName, (interlocks.get(cleanName) ?? 0) + 1);
     }
@@ -3627,7 +3662,7 @@ function buildBoardInterlocks(symbol, executives = [], officers = []) {
     summary: [...interlocks.entries()]
       .sort((left, right) => right[1] - left[1])
       .slice(0, 10)
-      .map(([name, count]) => ({ name, count, symbol: inferTickerFromText(name) ?? null })),
+      .map(([name, count]) => ({ name, count, symbol: inferTickerFromText(name, aliasDirectory) ?? null })),
   };
 }
 

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { parseConstituentTable } from "../src/providers/indices.mjs";
+import { buildPublicCompanyAliasDirectory, parseConstituentTable } from "../src/providers/indices.mjs";
 
 test("parseConstituentTable extracts symbol and company rows from generic public tables", () => {
   const rows = parseConstituentTable(`
@@ -50,4 +50,23 @@ test("parseConstituentTable returns rows when a constituent table is large enoug
   assert.equal(rows.length, 20);
   assert.equal(rows[0].symbol, "SYM0");
   assert.equal(rows[0].name, "Company 0");
+});
+
+test("buildPublicCompanyAliasDirectory creates tradable alias variants from public constituent names", () => {
+  const aliases = buildPublicCompanyAliasDirectory([
+    {
+      source: { label: "Test universe" },
+      constituents: [
+        { symbol: "KEYS", name: "Keysight Technologies, Inc.", sector: "Technology" },
+        { symbol: "BRK-B", name: "Berkshire Hathaway Inc. Class B", sector: "Financial Services" },
+        { symbol: "UPS", name: "United Parcel Service, Inc. Class B", sector: "Industrials" },
+      ],
+    },
+  ]);
+
+  const lookup = new Map(aliases.map((entry) => [entry.key, entry.symbol]));
+
+  assert.equal(lookup.get("KEYSIGHT TECHNOLOGIES"), "KEYS");
+  assert.equal(lookup.get("BERKSHIRE HATHAWAY"), "BRK-B");
+  assert.equal(lookup.get("UNITED PARCEL SERVICE"), "UPS");
 });

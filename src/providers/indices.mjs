@@ -55,6 +55,45 @@ export async function getMajorIndexMemberships(symbol) {
   return memberships;
 }
 
+export async function getPublicCompanyAliasDirectory() {
+  const universes = await Promise.all([
+    getSp500Universe().catch(() => null),
+    getNasdaq100Universe().catch(() => null),
+    getDow30Universe().catch(() => null),
+  ]);
+
+  return buildPublicCompanyAliasDirectory(universes.filter(Boolean));
+}
+
+export function buildPublicCompanyAliasDirectory(universes = []) {
+  const aliases = new Map();
+
+  for (const universe of universes) {
+    const source = universe?.source?.label ?? "Public constituent universe";
+    for (const constituent of universe?.constituents ?? []) {
+      const symbol = normalizeSymbol(constituent?.symbol);
+      const name = String(constituent?.name ?? "").trim();
+      if (!symbol || !name) {
+        continue;
+      }
+
+      for (const key of buildAliasVariants(name)) {
+        if (!key || aliases.has(key)) {
+          continue;
+        }
+        aliases.set(key, {
+          symbol,
+          name,
+          sector: constituent?.sector ?? null,
+          source,
+        });
+      }
+    }
+  }
+
+  return [...aliases.entries()].map(([key, value]) => ({ key, ...value }));
+}
+
 async function getNasdaq100Universe() {
   const warnings = [];
 
@@ -213,4 +252,59 @@ function decodeHtml(value) {
     .replace(/&quot;/g, "\"")
     .replace(/&#39;/g, "'")
     .replace(/&#160;|&nbsp;/g, " ");
+}
+
+function buildAliasVariants(name) {
+  const keys = new Set();
+  const raw = String(name ?? "").trim();
+  if (!raw) {
+    return [];
+  }
+
+  const strippedParens = raw.replace(/\([^)]*\)/g, " ");
+  const strippedClass = stripShareClassTerms(strippedParens);
+  const strippedCorporate = stripCorporateSuffixTerms(strippedClass);
+
+  for (const variant of [
+    raw,
+    strippedParens,
+    strippedClass,
+    strippedCorporate,
+    strippedCorporate.replace(/\bTHE\b/gi, " "),
+  ]) {
+    const key = normalizeAliasKey(variant);
+    if (key) {
+      keys.add(key);
+    }
+  }
+
+  return [...keys];
+}
+
+function stripShareClassTerms(value) {
+  return String(value ?? "")
+    .replace(/\b(CLASS|CL)\s+[A-Z]\b/gi, " ")
+    .replace(/\bSERIES\s+[A-Z]\b/gi, " ")
+    .replace(/\b(ADR|ADS)\b/gi, " ")
+    .replace(/\bCOMMON STOCK\b/gi, " ")
+    .replace(/\bORDINARY SHARES?\b/gi, " ")
+    .replace(/\bDEPOSITARY SHARES?\b/gi, " ");
+}
+
+function stripCorporateSuffixTerms(value) {
+  return String(value ?? "")
+    .replace(/\b(THE|INCORPORATED|INC|CORPORATION|CORP|COMPANY|CO|HOLDINGS|HOLDING|GROUP|LIMITED|LTD|PLC|SA|N V|NV)\b/gi, " ")
+    .replace(/\bINTL\b/gi, " INTERNATIONAL ")
+    .replace(/\bTECH\b/gi, " TECHNOLOGY ");
+}
+
+export function normalizeAliasKey(value) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/&/g, " AND ")
+    .replace(/\+/g, " AND ")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
