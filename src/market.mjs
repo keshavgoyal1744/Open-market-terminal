@@ -106,6 +106,7 @@ export class MarketDataService {
           marketResult.status === "fulfilled"
             ? marketResult.value
             : emptyMarketOverview(upper, sec.title, marketResult.reason);
+        const listingMeta = await this.getPublicListingMetadata(upper).catch(() => null);
         const derivedSharesOutstanding = numeric(sec.facts?.sharesOutstanding?.value);
         const derivedMarketCap =
           numeric(marketBase.marketCap)
@@ -117,9 +118,11 @@ export class MarketDataService {
           );
         const market = {
           ...marketBase,
-          shortName: marketBase.shortName ?? quote?.shortName ?? sec.title ?? upper,
+          shortName: marketBase.shortName ?? quote?.shortName ?? listingMeta?.name ?? sec.title ?? upper,
           type: marketBase.type ?? quote?.type ?? null,
           exchange: marketBase.exchange ?? quote?.exchange ?? null,
+          sector: marketBase.sector ?? listingMeta?.sector ?? null,
+          industry: marketBase.industry ?? listingMeta?.industry ?? listingMeta?.sector ?? null,
           marketCap: derivedMarketCap,
           trailingPe: marketBase.trailingPe ?? quote?.trailingPe ?? null,
           fiftyTwoWeekHigh: marketBase.fiftyTwoWeekHigh ?? quote?.yearHigh ?? null,
@@ -144,6 +147,32 @@ export class MarketDataService {
         };
       },
       { ttlMs: config.companyTtlMs, staleMs: config.companyTtlMs * 4 },
+    );
+  }
+
+  async getPublicListingMetadata(symbol) {
+    const upper = String(symbol ?? "").trim().toUpperCase();
+    if (!upper) {
+      return null;
+    }
+
+    return this.cache.getOrSet(
+      `listing-meta:${upper}`,
+      async () => {
+        const sp500 = await getSp500Universe().catch(() => null);
+        const constituent = (sp500?.constituents ?? []).find((item) => item.symbol === upper);
+        if (!constituent) {
+          return null;
+        }
+        return {
+          symbol: upper,
+          name: constituent.name ?? upper,
+          sector: constituent.sector ?? null,
+          industry: constituent.sector ?? null,
+          source: sp500?.source?.label ?? "S&P 500 public universe",
+        };
+      },
+      { ttlMs: config.companyTtlMs, staleMs: config.companyTtlMs * 6 },
     );
   }
 
@@ -2893,6 +2922,33 @@ function sectorTemplateForMarket(market) {
   }
 
   if (sector.includes("consumer")) {
+    if (industryLower.includes("beverage") || industryLower.includes("packaged") || industryLower.includes("food")) {
+      return {
+        ...defaults,
+        peerSymbols: ["KO", "PEP", "PG", "MDLZ", "KHC", "GIS"],
+        suppliers: [
+          relation("Walmart", "retail customer", "customer", "Large retail distribution and shelf exposure", 3, "WMT"),
+          relation("Costco", "club customer", "customer", "Large-format retail throughput", 2, "COST"),
+          relation("Target", "retail customer", "customer", "Broadline retail shelf and promotion exposure", 2, "TGT"),
+          relation("Global packaging / ingredient suppliers", "input base", "supply-chain", "Packaging, sweetener, and agricultural input sensitivity", 2),
+        ],
+        customers: [
+          relation("Consumers", "end demand", "customer", "Brand strength, pricing, and household demand", 3),
+          relation("Retail channels", "distribution", "customer", "Shelf space and merchandising execution", 2),
+        ],
+        ecosystem: [
+          relation("Consumer staples basket", "sector basket", "ecosystem", "Pricing power and volume trade-off across staples peers", 3),
+        ],
+        customerConcentration: [
+          concentration("Retail channel exposure", "Moderate", "Large grocery, club, and big-box channels can influence sell-through and promo cadence."),
+        ],
+        eventChains: [
+          impact("Staples demand or input-cost shift", ["Pricing / volume mix changes", "Staples peers rerate", "Retail channels and ingredient baskets react"]),
+        ],
+        coverageNote: "Consumer-defensive fallback maps emphasize big retail channels, ingredient exposure, and pricing-power dynamics.",
+      };
+    }
+
     if (industryLower.includes("internet") || industryLower.includes("direct marketing") || industryLower.includes("retail")) {
       return {
         ...defaults,
@@ -2962,6 +3018,81 @@ function sectorTemplateForMarket(market) {
         impact("Ad or subscriber trends shift", ["Revenue mix changes", "Platform / media peers rerate", "Content and distribution names move"]),
       ],
       coverageNote: `Communication-services fallback maps focus on advertisers, subscribers, and platform distribution.`,
+    };
+  }
+
+  if (sector.includes("utilities")) {
+    return {
+      ...defaults,
+      peerSymbols: ["NEE", "DUK", "SO", "AEP", "EXC", "SRE"],
+      suppliers: [
+        relation("Fuel / generation inputs", "supply base", "supply-chain", "Natural gas, nuclear, or power-generation input sensitivity", 3),
+        relation("Grid / transmission buildout", "capital program", "supply-chain", "Transmission, maintenance, and equipment capex", 2),
+      ],
+      customers: [
+        relation("Residential load", "customer base", "customer", "Household power and rate-base demand", 2),
+        relation("Commercial / industrial load", "customer base", "customer", "Industrial load growth and data-center demand", 3),
+      ],
+      ecosystem: [
+        relation("Rate-case / regulator path", "policy node", "ecosystem", "Allowed-return and rate-case sensitivity", 3),
+      ],
+      customerConcentration: [
+        concentration("Regulated load growth", "High", "Rate cases, allowed returns, and data-center load growth dominate many utility setups."),
+      ],
+      eventChains: [
+        impact("Load-growth or rate-case shift", ["Rate-base outlook changes", "Utility peers rerate", "Generation and equipment baskets react"]),
+      ],
+      coverageNote: "Utilities fallback maps emphasize regulated load growth, capital programs, and rate-case sensitivity.",
+    };
+  }
+
+  if (sector.includes("real estate")) {
+    return {
+      ...defaults,
+      peerSymbols: ["PLD", "AMT", "EQIX", "WELL", "O", "SPG"],
+      suppliers: [
+        relation("Construction / maintenance vendors", "property services", "supply-chain", "Buildout, maintenance, and redevelopment spend", 2),
+        relation("Debt / funding markets", "capital source", "supply-chain", "Funding-cost and refinancing sensitivity", 3),
+      ],
+      customers: [
+        relation("Tenants", "lease base", "customer", "Occupancy, rent spreads, and tenant quality", 3),
+        relation("Data-center / tower tenants", "infrastructure customer", "customer", "Hyperscaler and wireless carrier demand", 2),
+      ],
+      ecosystem: [
+        relation("Rate-sensitive REIT basket", "macro node", "ecosystem", "Funding-cost and cap-rate sensitivity", 3),
+      ],
+      customerConcentration: [
+        concentration("Tenant concentration", "Moderate", "Occupancy, renewal spreads, and large tenants are core REIT sensitivities."),
+      ],
+      eventChains: [
+        impact("Rates or occupancy shift", ["Cap rates and rents reprice", "REIT peers rerate", "Funding-sensitive baskets react"]),
+      ],
+      coverageNote: "Real-estate fallback maps emphasize tenants, funding markets, and occupancy / rate sensitivity.",
+    };
+  }
+
+  if (sector.includes("materials") || sector.includes("basic materials")) {
+    return {
+      ...defaults,
+      peerSymbols: ["LIN", "APD", "FCX", "NEM", "ALB", "DD"],
+      suppliers: [
+        relation("Mining / feedstock inputs", "raw-material base", "supply-chain", "Ore, chemicals, and feedstock sensitivity", 3),
+        relation("Industrial equipment vendors", "equipment base", "supply-chain", "Processing and extraction equipment dependence", 2),
+      ],
+      customers: [
+        relation("Industrial manufacturers", "end demand", "customer", "Construction, chemicals, and manufacturing demand", 3),
+        relation("Energy transition buyers", "theme demand", "customer", "Battery, electrification, and infrastructure demand", 2),
+      ],
+      ecosystem: [
+        relation("Commodity / chemical curve", "price node", "ecosystem", "Realized-price and spread sensitivity", 3),
+      ],
+      customerConcentration: [
+        concentration("Commodity-linked demand", "High", "Benchmark prices and industrial demand often matter more than single named buyers."),
+      ],
+      eventChains: [
+        impact("Commodity or industrial-demand shift", ["Realized-price outlook changes", "Materials peers rerate", "Industrial and energy-transition baskets react"]),
+      ],
+      coverageNote: "Materials fallback maps connect issuers to raw inputs, industrial buyers, and commodity-price sensitivity.",
     };
   }
 

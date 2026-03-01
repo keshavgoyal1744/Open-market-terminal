@@ -1268,6 +1268,7 @@ function bindGlobalActions() {
     const graphTrigger = event.target instanceof Element ? event.target.closest("[data-graph-symbol]") : null;
     if (graphTrigger?.dataset.graphSymbol) {
       await selectDetailSymbol(graphTrigger.dataset.graphSymbol, { jump: false, page: "map" });
+      toggleCompanyMapExplorer(true, state.companyMapExplorerFocus);
       return;
     }
     const symbolTrigger = event.target instanceof Element ? event.target.closest("[data-company-map-symbol]") : null;
@@ -1275,6 +1276,7 @@ function bindGlobalActions() {
       return;
     }
     await selectDetailSymbol(symbolTrigger.dataset.companyMapSymbol, { jump: false, page: "map" });
+    toggleCompanyMapExplorer(true, state.companyMapExplorerFocus);
   });
 
   document.addEventListener("keydown", async (event) => {
