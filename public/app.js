@@ -8058,6 +8058,13 @@ function normalizeWorkbenchWarning(message) {
   if (text.includes("Unauthorized")) {
     return "An upstream public market-data endpoint denied this request. Showing fallback coverage.";
   }
+  if (
+    /503\b|service unavailable|bad gateway|gateway timeout|timed out|timeout|<!doctype html>|<html\b|<title>\s*yahoo/i.test(
+      text,
+    )
+  ) {
+    return "The current public listed-options source is temporarily unavailable. Quote, chart, and filings coverage remain live.";
+  }
   if (text === "fetch failed") {
     return "An upstream public data feed is temporarily unavailable.";
   }

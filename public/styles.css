@@ -3118,6 +3118,30 @@ button:hover {
   min-height: 220px;
 }
 
+#companyMapOwnershipTrend {
+  min-height: 196px;
+}
+
+#companyMapOwnershipTrend .interactive-chart {
+  gap: 6px;
+}
+
+#companyMapOwnershipTrend .interactive-chart-heading {
+  gap: 6px;
+}
+
+#companyMapOwnershipTrend .interactive-chart-title {
+  line-height: 1.1;
+}
+
+#companyMapOwnershipTrend .interactive-chart-subtitle {
+  margin-top: 2px;
+}
+
+#companyMapOwnershipTrend .interactive-chart-frame {
+  min-height: 154px;
+}
+
 .company-map-link.has-symbol {
   cursor: pointer;
 }

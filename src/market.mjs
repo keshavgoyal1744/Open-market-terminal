@@ -977,34 +977,44 @@ export class MarketDataService {
         const tileMap = new Map((heatmap.tiles ?? []).map((item) => [item.symbol, item]));
         const sectorPeerMap = buildSectorPeerMap(heatmap.tiles ?? []);
 
-        const candidateDetails = await Promise.all(
-          selectedSymbols.map(async (symbol) => {
-            const tile = tileMap.get(symbol);
-            const sectorPeers = (sectorPeerMap.get(normalizeSectorKey(tile?.sector)) ?? [])
-              .filter((peer) => peer !== symbol)
-              .slice(0, 6);
+        const candidateDetails = allowHosted
+          ? await Promise.all(
+              selectedSymbols.map(async (symbol) => {
+                const tile = tileMap.get(symbol);
+                const sectorPeers = (sectorPeerMap.get(normalizeSectorKey(tile?.sector)) ?? [])
+                  .filter((peer) => peer !== symbol)
+                  .slice(0, 6);
 
-            const [company, earnings, history] = await Promise.all([
-              this.getCompany(symbol).catch((error) => ({
-                symbol,
-                sec: emptySecSnapshot(symbol, error),
-                market: emptyMarketOverview(symbol, symbol, error),
-                warnings: [error.message],
-              })),
-              this.getEarningsIntel(symbol, sectorPeers).catch(() => emptyEarningsIntel(symbol)),
-              this.getHistory(symbol, "1mo", "1d").catch(() => []),
-            ]);
+                const [company, earnings, history] = await Promise.all([
+                  this.getCompany(symbol).catch((error) => ({
+                    symbol,
+                    sec: emptySecSnapshot(symbol, error),
+                    market: emptyMarketOverview(symbol, symbol, error),
+                    warnings: [error.message],
+                  })),
+                  this.getEarningsIntel(symbol, sectorPeers).catch(() => emptyEarningsIntel(symbol)),
+                  this.getHistory(symbol, "1mo", "1d").catch(() => []),
+                ]);
 
-            return buildAiIdeaEvidence({
-              symbol,
-              tile,
-              company,
-              earnings,
-              history,
-              sectorSummary: (heatmap.sectors ?? []).find((entry) => normalizeSectorKey(entry.sector) === normalizeSectorKey(tile?.sector)),
-            });
-          }),
-        );
+                return buildAiIdeaEvidence({
+                  symbol,
+                  tile,
+                  company,
+                  earnings,
+                  history,
+                  sectorSummary: (heatmap.sectors ?? []).find((entry) => normalizeSectorKey(entry.sector) === normalizeSectorKey(tile?.sector)),
+                });
+              }),
+            )
+          : selectedSymbols
+              .map((symbol) =>
+                buildLightweightAiIdeaEvidence({
+                  symbol,
+                  tile: tileMap.get(symbol),
+                  sectorSummary: (heatmap.sectors ?? []).find((entry) => normalizeSectorKey(entry.sector) === normalizeSectorKey(tileMap.get(symbol)?.sector)),
+                }),
+              )
+              .filter(Boolean);
 
         const detailMap = new Map(candidateDetails.map((item) => [item.symbol, item]));
         const bullishCandidates = bullishSeeds.map((item) => detailMap.get(item.symbol)).filter(Boolean);
@@ -3351,7 +3361,11 @@ function normalizeFlowWarning(warning) {
   if (!message) {
     return null;
   }
-  if (/invalid crumb|unauthorized|unable to access this feature|operation was aborted due to timeout|timed out|timeout/i.test(message)) {
+  if (
+    /invalid crumb|unauthorized|unable to access this feature|operation was aborted due to timeout|timed out|timeout|service unavailable|bad gateway|gateway timeout|<!doctype html>|<html\b|<title>\s*yahoo/i.test(
+      message,
+    )
+  ) {
     return null;
   }
   return message;
@@ -4135,6 +4149,38 @@ function buildAiIdeaEvidence({ symbol, tile, company, earnings, history, sectorS
       : null,
     summary: truncateText(company?.market?.businessSummary ?? "", 180),
     warnings: [...(company?.warnings ?? [])].slice(0, 2),
+  };
+}
+
+function buildLightweightAiIdeaEvidence({ symbol, tile, sectorSummary }) {
+  if (!symbol) {
+    return null;
+  }
+
+  return {
+    symbol,
+    name: tile?.name ?? symbol,
+    sector: tile?.sector ?? "Unclassified",
+    industry: null,
+    price: tile?.price ?? null,
+    dayChangePercent: tile?.changePercent ?? null,
+    oneMonthChange: null,
+    sectorAverageMove: numeric(sectorSummary?.averageMove),
+    sectorWeight: numeric(sectorSummary?.weight),
+    marketCap: tile?.marketCap ?? null,
+    volume: tile?.volume ?? null,
+    weight: tile?.weight ?? null,
+    analystRating: null,
+    trailingPe: null,
+    forwardPe: null,
+    shortRatio: null,
+    earningsWindow: {
+      start: null,
+      end: null,
+    },
+    latestFiling: null,
+    summary: null,
+    warnings: [],
   };
 }
 
