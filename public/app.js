@@ -7727,9 +7727,10 @@ function layoutGraphLane(nodes, spec) {
     const offset = column * perColumn;
     const count = Math.min(perColumn, list.length - offset);
     const progress = count === 1 ? 0.5 : (index - offset) / (count - 1);
-    const direction = spec.orientation === "vertical-right" ? -1 : 1;
-    const centerOffset = column - (columnCount - 1) / 2;
-    const x = spec.xFrom + centerOffset * 164 * direction;
+    const columnSpacing = 132;
+    const x = spec.orientation === "vertical-right"
+      ? spec.xFrom - (column * columnSpacing)
+      : spec.xFrom + (column * columnSpacing);
     const y = spec.yFrom === spec.yTo || spec.yTo == null
       ? spec.y
       : spec.yFrom + progress * (spec.yTo - spec.yFrom);
