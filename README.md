@@ -50,6 +50,11 @@ The opening screen for the session.
 - watchlist monitor
 - flow monitor
 - rates and macro snapshot
+<img width="1436" height="732" alt="image" src="https://github.com/user-attachments/assets/e20202f4-b403-4c63-a92d-391bdeb2a780" />
+<img width="1429" height="697" alt="image" src="https://github.com/user-attachments/assets/80255a62-a150-4d50-b0f8-f9fd2eebdab7" />
+<img width="1429" height="962" alt="image" src="https://github.com/user-attachments/assets/33ea63db-1675-4f1e-a024-c25e5ed333e1" />
+<img width="1432" height="535" alt="image" src="https://github.com/user-attachments/assets/c1a4839a-f733-41e1-a3ea-34b82e647e11" />
+
 
 ### Quote Monitor
 
@@ -64,6 +69,12 @@ Single-name monitor for a live symbol.
 - peers
 - holders
 
+<img width="1422" height="765" alt="image" src="https://github.com/user-attachments/assets/5653d432-b310-49a5-9445-9b4c8f8b424c" />
+<img width="1435" height="930" alt="image" src="https://github.com/user-attachments/assets/c30268de-bbee-4683-a834-ad8d15b51499" />
+
+
+
+
 ### Research Lab
 
 Deep single-name analysis workspace.
@@ -73,6 +84,13 @@ Deep single-name analysis workspace.
 - relationship console
 - screening and compare
 - watchlist SEC events
+
+<img width="1417" height="777" alt="image" src="https://github.com/user-attachments/assets/e991cc37-dacd-4490-b736-72cb2441736e" />
+<img width="1246" height="954" alt="image" src="https://github.com/user-attachments/assets/1d42e0e1-903c-4490-b7d4-133628469f30" />
+<img width="1242" height="497" alt="image" src="https://github.com/user-attachments/assets/33a907b1-640b-4311-bec6-f64ed1204040" />
+
+
+
 
 ### Company Map
 
@@ -90,6 +108,9 @@ Relationship-first view of one company.
 - geographic exposure
 - side-by-side company comparison
 - full-screen relationship explorer
+
+
+
 
 ### Sector Explorer
 
