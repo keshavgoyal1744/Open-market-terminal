@@ -3362,7 +3362,7 @@ function normalizeFlowWarning(warning) {
     return null;
   }
   if (
-    /invalid crumb|unauthorized|unable to access this feature|operation was aborted due to timeout|timed out|timeout|service unavailable|bad gateway|gateway timeout|<!doctype html>|<html\b|<title>\s*yahoo/i.test(
+    /invalid crumb|unauthorized|unable to access this feature|operation was aborted due to timeout|timed out|timeout|service unavailable|bad gateway|gateway timeout|terminated|did not expose a parseable payload|<!doctype html>|<html\b|<title>\s*yahoo/i.test(
       message,
     )
   ) {
