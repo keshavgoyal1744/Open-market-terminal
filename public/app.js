@@ -6811,7 +6811,6 @@ function renderAiLabPanel(payload) {
   ].filter(Boolean).join(" · ");
   document.querySelector("#aiLabSnapshotMeta").textContent = [
     payload.snapshot?.mode === "shared-daily" ? "Shared daily snapshot" : "Snapshot",
-    payload.snapshot?.timeLabel ?? "",
     payload.snapshot?.date ?? "",
   ].filter(Boolean).join(" · ");
   document.querySelector("#aiLabMarketView").innerHTML = renderAiMarketView(payload.marketView ?? {});

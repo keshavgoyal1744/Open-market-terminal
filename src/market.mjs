@@ -985,8 +985,6 @@ export class MarketDataService {
           }
         } else if (allowHosted) {
           warnings.push("Hosted AI keys not configured. Showing deterministic ranked output.");
-        } else {
-          warnings.push("Hosted AI generation is reserved for the scheduled daily run. Showing deterministic snapshot output.");
         }
 
         const normalized = hostedResult?.parsed
@@ -1496,7 +1494,12 @@ export class MarketDataService {
               shortRatio: company?.market?.shortRatio ?? null,
               sharesShort: company?.market?.sharesShort ?? null,
               analystRating: company?.market?.analystRating ?? null,
-              warnings: [...new Set([...(company?.warnings ?? []), optionsWarning].filter(Boolean))].slice(0, 3),
+              warnings: [
+                ...new Set([
+                  ...((company?.warnings ?? []).map((warning) => normalizeFlowWarning(warning))),
+                  optionsWarning,
+                ].filter(Boolean)),
+              ].slice(0, 3),
             };
           }),
         );
@@ -3301,7 +3304,7 @@ function normalizeFlowWarning(warning) {
   if (!message) {
     return null;
   }
-  if (/invalid crumb|unauthorized|unable to access this feature/i.test(message)) {
+  if (/invalid crumb|unauthorized|unable to access this feature|operation was aborted due to timeout|timed out|timeout/i.test(message)) {
     return null;
   }
   return message;

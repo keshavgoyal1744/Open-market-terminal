@@ -1928,6 +1928,7 @@ button:hover {
 }
 
 #dashboardGrid[data-page="overview"] {
+  --overview-top-panel-height: 468px;
   grid-auto-flow: row dense;
   align-items: start;
 }
@@ -1941,19 +1942,19 @@ button:hover {
 
 #dashboardGrid[data-page="overview"] #section-market-pulse {
   grid-column: span 3;
-  min-height: 430px;
+  min-height: var(--overview-top-panel-height);
   align-self: start;
 }
 
 #dashboardGrid[data-page="overview"] #section-macro {
   grid-column: span 3;
-  min-height: 430px;
+  min-height: var(--overview-top-panel-height);
   align-self: start;
 }
 
 #dashboardGrid[data-page="overview"] #section-macro .macro-grid {
   grid-template-columns: 1fr;
-  grid-template-rows: minmax(0, 1.35fr) minmax(0, 0.95fr);
+  grid-template-rows: minmax(0, 1.45fr) minmax(0, 1fr);
   gap: 8px;
   min-height: 100%;
 }
@@ -1964,12 +1965,12 @@ button:hover {
 }
 
 #dashboardGrid[data-page="overview"] #section-macro #yieldCurveChart {
-  min-height: 220px;
+  min-height: 272px;
 }
 
 #dashboardGrid[data-page="overview"] #section-market-events {
   grid-column: span 6;
-  min-height: 430px;
+  min-height: var(--overview-top-panel-height);
   align-self: start;
 }
 
@@ -2003,7 +2004,7 @@ button:hover {
 }
 
 #dashboardGrid[data-page="overview"] #section-market-events .calendar-list {
-  max-height: 286px;
+  max-height: 344px;
 }
 
 #dashboardGrid[data-page="calendar"] #section-calendar {
